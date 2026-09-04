@@ -3499,10 +3499,13 @@ function datesInRange(start,end){
   return out;
 }
 function leaveBalance(empNo, year){
-  const apps=(S.leaveApplications||[]).filter(a=>a.empNo===empNo && a.year===year && a.status==='approved');
+  const all=(S.leaveApplications||[]).filter(a=>a.empNo===empNo && a.year===year);
+  const apps=all.filter(a=>a.status==='approved');
+  const pendingApps=all.filter(a=>a.status==='pending');
   return (S.leaveTypes||[]).map(lt=>{
     const taken=apps.filter(a=>a.type===lt.code).reduce((s,a)=>s+(Number(a.days)||0),0);
-    return {type:lt.code, name:lt.name, color:lt.color, entitlement:lt.defaultDays, taken, balance:Math.max(0,lt.defaultDays-taken)};
+    const pending=pendingApps.filter(a=>a.type===lt.code).reduce((s,a)=>s+(Number(a.days)||0),0);
+    return {type:lt.code, name:lt.name, color:lt.color, entitlement:lt.defaultDays, taken, pending, balance:Math.max(0,lt.defaultDays-taken)};
   });
 }
 /* map of date -> array of {empNo,name,type,color} for calendar highlighting, one employee or all */
@@ -5662,6 +5665,9 @@ function render(){
   if(qrEl && window.QRCode){ qrEl.innerHTML='';
     try{ new QRCode(qrEl, {text:location.origin+location.pathname.replace(/index\.html$/,'')+'leave-portal.html', width:132, height:132, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){}
   }
+  if(UI.view==='people' && (UI.filters.people||{}).ptab==='leave' && Date.now()-LAST_LEAVE_SYNC>8000){
+    LAST_LEAVE_SYNC=Date.now(); syncPortalLeave(true);
+  }
 }
 
 /* ---------------- events ---------------- */
@@ -6878,6 +6884,7 @@ function openEmpCalendar(){
     +T([{h:'Type', f:b=>'<span style="color:'+esc(b.color)+'">●</span> '+esc(b.name)},
         {h:'Entitlement', c:'num', f:b=>nf(b.entitlement)},
         {h:'Taken', c:'num', f:b=>nf(b.taken)},
+        {h:'Pending', c:'num', f:b=>b.pending? '<span class="tag t-warn">'+nf(b.pending)+'</span>':'—'},
         {h:'Balance', c:'num', f:b=>'<b>'+nf(b.balance)+'</b>'}], bal)+'</div>'
     +'<div style="margin-top:16px"><h3 style="font-size:13px;margin-bottom:8px">History — '+c.year+'</h3>'
     +T([{h:'Type', f:a=>esc(leaveType(a.type).name)},{h:'Dates', f:a=>'<span class="mono">'+esc(a.start)+(a.end!==a.start?' → '+esc(a.end):'')+'</span>'},
@@ -6959,11 +6966,12 @@ ACT['leave-set-password'] = a=>{
       }).catch(()=>toast('Could not reach the portal database — check the Supabase setup','bad'));
     }});
 };
-ACT['leave-sync'] = ()=>{
-  if(!window.HEM_AUTH) return toast('Portal connection not available on this page','bad');
-  toast('Checking the portal for new requests…','ok');
+let LAST_LEAVE_SYNC=0;
+function syncPortalLeave(silent){
+  if(!window.HEM_AUTH){ if(!silent) toast('Portal connection not available on this page','bad'); return; }
+  if(!silent) toast('Checking the portal for new requests…','ok');
   window.HEM_AUTH.from('hem_leave_applications').select('*').eq('status','pending').then(({data,error})=>{
-    if(error){ toast('Could not reach the portal database — check the Supabase setup','bad'); return; }
+    if(error){ if(!silent) toast('Could not reach the portal database — check the Supabase setup','bad'); return; }
     const existing=new Set((S.leaveApplications||[]).map(x=>x.id));
     let added=0;
     (data||[]).forEach(r=>{
@@ -6974,9 +6982,11 @@ ACT['leave-sync'] = ()=>{
       added++;
     });
     if(added){ logAudit('Leave requests synced from portal', '', added+' new pending request(s)'); save(); render(); }
-    toast(added? added+' new request(s) pulled in from the portal':'No new requests waiting','ok');
-  }).catch(()=>toast('Could not reach the portal database — check the Supabase setup','bad'));
-};
+    if(!silent) toast(added? added+' new request(s) pulled in from the portal':'No new requests waiting','ok');
+    else if(added) toast(added+' new leave request(s) just came in from the portal','ok');
+  }).catch(()=>{ if(!silent) toast('Could not reach the portal database — check the Supabase setup','bad'); });
+}
+ACT['leave-sync'] = ()=> syncPortalLeave(false);
 /* pushes an approval/rejection decided in the ERP back to the portal record, so the
    employee sees the outcome next time they check their phone — only relevant for
    applications that originated on the portal in the first place */

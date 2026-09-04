@@ -190,9 +190,10 @@ async function refreshBalanceAndHistory(){
 
   $('balanceList').innerHTML = LEAVE_TYPES.map(t=>{
     const taken = approved.filter(a=>a.type===t.code).reduce((s,a)=>s+(Number(a.days)||0),0);
+    const pending = apps.filter(a=>a.status==='pending' && a.type===t.code).reduce((s,a)=>s+(Number(a.days)||0),0);
     const bal = Math.max(0, (t.default_days||0)-taken);
     return '<div class="balrow"><span><span class="dot" style="background:'+esc(t.color)+'"></span>'+esc(t.name)+'</span>'
-      +'<span class="balnum">'+taken+' taken · <b>'+bal+'</b> left</span></div>';
+      +'<span class="balnum">'+taken+' taken'+(pending?' · <span style="color:var(--warn)">'+pending+' pending</span>':'')+' · <b>'+bal+'</b> left</span></div>';
   }).join('');
 
   const hist = apps.slice(0,15);
