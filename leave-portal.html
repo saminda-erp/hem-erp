@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>HE Manufacturing — Leave Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --wine:#522B39; --wine-dk:#3c1f29; --wine-soft:#f4eeee; --brass:#9C7434;
+    --ink:#231a1c; --ink2:#5c4b51; --paper:#faf8f6; --card:#ffffff;
+    --line:#e7dfdb; --muted:#8a7b76; --on-wine:#f7f0ee;
+    --ok:#2f6b46; --ok-bg:#e4f0e7; --bad:#a3312c; --bad-bg:#fbe4e2; --warn:#a86a10; --warn-bg:#fbeed9;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;font-size:15px;line-height:1.5}
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .wrap{max-width:480px;margin:0 auto;padding:20px 16px 60px}
+  .topbar{display:flex;align-items:center;gap:10px;padding:16px;background:var(--wine);color:var(--on-wine)}
+  .crest{width:32px;height:32px;border-radius:8px;background:var(--brass);display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-weight:600;color:var(--wine-dk);font-size:13px;flex:none}
+  .topbar .name{font-family:'Fraunces',serif;font-size:15px;font-weight:600;line-height:1.2}
+  .topbar .sub{font-size:11px;color:rgba(247,240,238,.65)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
+  label{display:block;font-size:12.5px;color:var(--ink2);margin-bottom:5px;font-weight:500}
+  input,select,textarea{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);
+    font-family:'Archivo',sans-serif;font-size:15px;background:#fff;color:var(--ink);margin-bottom:14px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--wine);outline-offset:1px}
+  button{font-family:'Archivo',sans-serif;font-weight:600;font-size:14.5px;border:none;border-radius:var(--r);
+    padding:12px 16px;cursor:pointer;width:100%}
+  .btn-primary{background:var(--wine);color:var(--on-wine)}
+  .btn-primary:disabled{opacity:.5}
+  .btn-ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
+  .err{background:var(--bad-bg);color:var(--bad);border-radius:var(--r);padding:10px 12px;font-size:13px;margin-bottom:14px}
+  .ok{background:var(--ok-bg);color:var(--ok);border-radius:var(--r);padding:10px 12px;font-size:13px;margin-bottom:14px}
+  .balrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f1ecea;font-size:13.5px}
+  .balrow:last-child{border-bottom:none}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:7px}
+  .balnum{font-family:'IBM Plex Mono',monospace}
+  .balnum b{font-size:15px}
+  .hist{padding:8px 0;border-bottom:1px solid #f1ecea;font-size:13px}
+  .hist:last-child{border-bottom:none}
+  .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .tag.pending{background:var(--warn-bg);color:var(--warn)}
+  .tag.approved{background:var(--ok-bg);color:var(--ok)}
+  .tag.rejected{background:var(--bad-bg);color:var(--bad)}
+  .muted{color:var(--muted);font-size:12.5px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="wrap" style="padding-top:60px">
+  <div style="text-align:center;margin-bottom:22px">
+    <div class="crest" style="width:52px;height:52px;font-size:19px;margin:0 auto 12px">HE</div>
+    <h1 style="font-size:20px">HE Manufacturing</h1>
+    <div class="muted">Employee Leave Portal</div>
+  </div>
+  <div class="card">
+    <div id="loginErr" class="err" hidden></div>
+    <form id="loginForm">
+      <label>Employee Number</label>
+      <input type="text" id="empNo" autocomplete="username" placeholder="e.g. 00093" required>
+      <label>Password</label>
+      <input type="password" id="empPass" autocomplete="current-password" required>
+      <button type="submit" class="btn-primary" id="loginBtn">Sign in</button>
+    </form>
+  </div>
+  <div class="muted" style="text-align:center">Don't have a password yet? Ask HR to set one for you in the main system.</div>
+</div>
+
+<div id="appScreen" hidden>
+  <div class="topbar">
+    <div class="crest">HE</div>
+    <div style="flex:1">
+      <div class="name" id="empName">—</div>
+      <div class="sub" id="empMeta">—</div>
+    </div>
+    <button class="btn-ghost" id="logoutBtn" style="width:auto;padding:8px 12px;font-size:12.5px;background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25)">Sign out</button>
+  </div>
+  <div class="wrap">
+    <div id="submitMsg"></div>
+
+    <div class="card">
+      <h3 style="font-size:14px;margin-bottom:10px">Your leave balance — <span id="balYear"></span></h3>
+      <div id="balanceList"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:14px;margin-bottom:12px">Apply for leave</h3>
+      <form id="applyForm">
+        <label>Leave type</label>
+        <select id="leaveType" required></select>
+        <div class="row2">
+          <div><label>Start date</label><input type="date" id="startDate" required></div>
+          <div><label>End date</label><input type="date" id="endDate" required></div>
+        </div>
+        <label>Reason (optional)</label>
+        <textarea id="reason" rows="2"></textarea>
+        <button type="submit" class="btn-primary" id="applyBtn">Submit application</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:14px;margin-bottom:10px">Your applications</h3>
+      <div id="historyList"><div class="muted">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://znxtvkpnwzrzevljdsgx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_3Q-qF58hDO6Q5Tr8Wr8X4A_WTBVR8z5';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let ME = null; // {emp_no, name, department}
+let LEAVE_TYPES = [];
+
+const $ = id => document.getElementById(id);
+const esc = v => String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today = () => new Date().toISOString().slice(0,10);
+function daysInRange(a,b){
+  const out=[]; let d=new Date(a), last=new Date(b);
+  while(d<=last){ out.push(1); d=new Date(d.getTime()+864e5); }
+  return out.length;
+}
+
+function showLogin(msg){
+  $('loginScreen').hidden=false; $('appScreen').hidden=true;
+  if(msg){ $('loginErr').textContent=msg; $('loginErr').hidden=false; } else { $('loginErr').hidden=true; }
+}
+function showApp(){ $('loginScreen').hidden=true; $('appScreen').hidden=false; }
+
+$('loginForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  $('loginErr').hidden=true;
+  const empNo=$('empNo').value.trim(), pass=$('empPass').value;
+  $('loginBtn').disabled=true; $('loginBtn').textContent='Signing in…';
+  try{
+    const { data, error } = await sb.rpc('login_employee', { p_emp_no: empNo, p_password: pass });
+    $('loginBtn').disabled=false; $('loginBtn').textContent='Sign in';
+    if(error){ showLogin('Could not reach the leave system. Try again in a moment.'); console.error(error); return; }
+    if(!data || !data.length){ showLogin('Incorrect employee number or password.'); return; }
+    ME = data[0];
+    try{ localStorage.setItem('hem_leave_empno', empNo); }catch(e){}
+    await afterLogin();
+  }catch(err){
+    $('loginBtn').disabled=false; $('loginBtn').textContent='Sign in';
+    showLogin('Could not reach the leave system. Check your connection and try again.');
+    console.error(err);
+  }
+});
+
+$('logoutBtn').addEventListener('click', function(){
+  ME=null; try{ localStorage.removeItem('hem_leave_empno'); }catch(e){}
+  $('empPass').value='';
+  showLogin();
+});
+
+async function afterLogin(){
+  showApp();
+  $('empName').textContent = ME.name || ME.emp_no;
+  $('empMeta').textContent = 'Emp No. '+ME.emp_no + (ME.department? ' · '+ME.department : '');
+  $('balYear').textContent = new Date().getFullYear();
+  await loadLeaveTypes();
+  await refreshBalanceAndHistory();
+}
+
+async function loadLeaveTypes(){
+  const { data, error } = await sb.from('hem_leave_types').select('*').order('code');
+  if(error){ console.error(error); return; }
+  LEAVE_TYPES = data||[];
+  $('leaveType').innerHTML = LEAVE_TYPES.map(t=>'<option value="'+esc(t.code)+'">'+esc(t.name)+'</option>').join('');
+}
+
+async function refreshBalanceAndHistory(){
+  const year = new Date().getFullYear();
+  const { data, error } = await sb.from('hem_leave_applications')
+    .select('*').eq('emp_no', ME.emp_no).eq('year', year).order('start_date', {ascending:false});
+  if(error){ console.error(error); $('balanceList').innerHTML='<div class="err">Could not load your leave data.</div>'; return; }
+  const apps = data||[];
+  const approved = apps.filter(a=>a.status==='approved');
+
+  $('balanceList').innerHTML = LEAVE_TYPES.map(t=>{
+    const taken = approved.filter(a=>a.type===t.code).reduce((s,a)=>s+(Number(a.days)||0),0);
+    const bal = Math.max(0, (t.default_days||0)-taken);
+    return '<div class="balrow"><span><span class="dot" style="background:'+esc(t.color)+'"></span>'+esc(t.name)+'</span>'
+      +'<span class="balnum">'+taken+' taken · <b>'+bal+'</b> left</span></div>';
+  }).join('');
+
+  const hist = apps.slice(0,15);
+  $('historyList').innerHTML = hist.length ? hist.map(a=>{
+    const lt = LEAVE_TYPES.find(t=>t.code===a.type);
+    return '<div class="hist"><div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<b>'+esc(lt?lt.name:a.type)+'</b><span class="tag '+esc(a.status)+'">'+esc(a.status)+'</span></div>'
+      +'<div class="muted mono">'+esc(a.start_date)+(a.end_date!==a.start_date?' → '+esc(a.end_date):'')+' · '+esc(a.days)+' day(s)</div>'
+      +(a.status==='rejected'&&a.reject_reason? '<div class="muted">Reason: '+esc(a.reject_reason)+'</div>':'')
+      +'</div>';
+  }).join('') : '<div class="muted">No applications yet.</div>';
+}
+
+$('applyForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const type=$('leaveType').value, start=$('startDate').value, end=$('endDate').value, reason=$('reason').value.trim();
+  $('submitMsg').innerHTML='';
+  if(!start||!end){ $('submitMsg').innerHTML='<div class="err">Pick a start and end date.</div>'; return; }
+  if(end<start){ $('submitMsg').innerHTML='<div class="err">End date must be on or after the start date.</div>'; return; }
+  const days = daysInRange(start,end);
+  const id = 'LV-P-'+Date.now();
+  $('applyBtn').disabled=true; $('applyBtn').textContent='Submitting…';
+  try{
+    const { error } = await sb.from('hem_leave_applications').insert({
+      id, emp_no: ME.emp_no, type, start_date: start, end_date: end, days,
+      year: Number(start.slice(0,4)), status: 'pending', reason
+    });
+    $('applyBtn').disabled=false; $('applyBtn').textContent='Submit application';
+    if(error){ $('submitMsg').innerHTML='<div class="err">Could not submit — please try again.</div>'; console.error(error); return; }
+    $('submitMsg').innerHTML='<div class="ok">Application submitted — '+days+' day(s), awaiting approval.</div>';
+    $('applyForm').reset();
+    await refreshBalanceAndHistory();
+  }catch(err){
+    $('applyBtn').disabled=false; $('applyBtn').textContent='Submit application';
+    $('submitMsg').innerHTML='<div class="err">Could not reach the leave system. Check your connection.</div>';
+    console.error(err);
+  }
+});
+
+// prefill last-used employee number for convenience (never the password)
+try{ const last=localStorage.getItem('hem_leave_empno'); if(last) $('empNo').value=last; }catch(e){}
+$('startDate').value=today(); $('endDate').value=today();
+showLogin();
+</script>
+</body>
+</html>
