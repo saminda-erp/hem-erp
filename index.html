@@ -130,6 +130,18 @@ textarea{resize:vertical;min-height:64px}
 .calcell.empty{background:transparent}
 .calcell.hasleave{font-weight:700}
 .calhead{text-align:center;font-family:var(--disp);font-weight:600;font-size:14px;margin-bottom:8px}
+.gsearch{position:relative;flex:1;max-width:420px;margin:0 16px}
+.gsearch input{width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--line);border-radius:8px;
+  font-family:inherit;font-size:13px;background:var(--surface)}
+.gsearch input:focus{outline:2px solid var(--wine);outline-offset:1px}
+.gsearch-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:60vh;overflow:auto;z-index:50}
+.gsearch-results .gsr-group{padding:6px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.gsearch-results .gsr-item{display:block;width:100%;text-align:left;padding:8px 12px;border:0;background:none;cursor:pointer;font-family:inherit}
+.gsearch-results .gsr-item:hover{background:var(--wine-soft)}
+.gsearch-results .gsr-item b{font-size:13px}
+.gsearch-results .gsr-item .sub{font-size:11.5px;color:var(--muted)}
+.gsearch-results .gsr-empty{padding:14px;text-align:center;color:var(--muted);font-size:12.5px}
 
 /* department cards (dashboard) */
 .deptgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
@@ -482,6 +494,10 @@ legend{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(
         <h1 id="tb-title">Plant Floor</h1>
         <div class="sub" id="tb-sub"></div>
       </div>
+      <div class="gsearch" id="gsearch">
+        <input type="text" id="gsearchInput" placeholder="Search anything — PO, product, batch, customer, employee, machine…" autocomplete="off">
+        <div id="gsearchResults" class="gsearch-results" hidden></div>
+      </div>
       <div class="topacts" id="tb-acts"></div>
     </header>
     <div id="view"></div>
@@ -532,6 +548,19 @@ users:[],
    Contacts and agreements live directly on each customer record instead of their own
    collection, since they only ever make sense attached to one customer. */
 customerFeedback:[],
+
+/* Machinery / Production Resource Master — separate from the QA Equipment/Calibration
+   register (equipment[] above), which stays untouched. This is for production capacity
+   planning: what can make a product, how fast, and with how much labour. A machine can
+   optionally reference an equipment[] id for its calibration/qualification status, but the
+   two lists are independently maintained. Deliberately empty; nothing invented. */
+machines:[],
+
+/* Product-specific machine output — overrides the machine's general capacity for one
+   product, since the same line rarely runs every SKU at the same speed. Looked up by
+   product+machine; if no row exists, Planning falls back to the machine's general
+   standardOutputPerDay and flags it as such. Deliberately empty. */
+productMachineOutput:[],
 
 /* Employees — imported from the 2026 staff leave report (28 selected in that export; 24 had
    leave activity to import). Department left blank for HR to assign. */
@@ -1422,7 +1451,7 @@ function pruneImages(){
 function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); }catch(e){} }
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
-const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback'];
+const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput'];
 function reconcile(a,b){
   if(!a) return b; if(!b) return a;
   const out = clone(a);
@@ -1593,6 +1622,79 @@ function derivedBomFromFormula(code){
     packaging:[], notes:'Derived from formula '+f.id+' v'+f.version+' — not a full BOM. No packaging data exists yet.'};
 }
 /* what a Customer PO's material requirement calculation should use for this product right now */
+/* ============================================================
+   MACHINERY / PRODUCTION RESOURCE MASTER — separate from the QA Equipment/Calibration
+   register above. This is for Planning: capacity, labour, and machine booking.
+   ============================================================ */
+const MACHINE_CATEGORIES = [
+  {code:'mixing', name:'Liquid Mixing Tanks'},
+  {code:'filling', name:'Liquid Filling Machines'},
+  {code:'soap', name:'Soap Machinery'},
+  {code:'powder', name:'Powder Machinery'},
+  {code:'packing', name:'Packing Machinery'},
+  {code:'other', name:'Other Production Machinery'}
+];
+function machineCatName(code){ return (MACHINE_CATEGORIES.find(c=>c.code===code)||{}).name || code; }
+function machine(id){ return byId('machines', id); }
+function machinesByCategory(cat){ return (S.machines||[]).filter(m=>!cat||m.category===cat); }
+/* Approved machines for a product, split by process, read off the product record itself
+   (product.machines = [{machineId, process}]) so it stays with the Product Master per spec. */
+function approvedMachinesFor(code, process){
+  const p=byId('products',code,'code'); if(!p) return [];
+  return (p.machines||[]).filter(x=>!process||x.process===process).map(x=>machine(x.machineId)).filter(Boolean);
+}
+/* Product-specific output for a product+machine pair, falling back to the machine's general
+   standard output with an explicit flag so Planning can show "USING STANDARD MACHINE CAPACITY". */
+function machineOutputFor(code, machineId){
+  const row=(S.productMachineOutput||[]).find(x=>x.product===code && x.machine===machineId);
+  const m=machine(machineId); if(!m) return null;
+  if(row) return {perHour:Number(row.outputPerHour)||0, perDay:Number(row.outputPerDay)||0,
+    batchSize:Number(row.batchSize)||0, operators:row.operators||m.operators, setupTime:row.setupTime||m.setupTime,
+    changeoverTime:row.changeoverTime||m.changeoverTime, specific:true};
+  return {perHour:Number(m.outputPerHour)||0, perDay:Number(m.outputPerDay)||0, batchSize:0,
+    operators:m.operators, setupTime:m.setupTime, changeoverTime:m.changeoverTime, specific:false};
+}
+/* Bookings — derived from batches that carry a machine + planned dates, never stored twice.
+   A batch counts as booking a machine on every date from plannedStart to plannedCompletion. */
+function machineBookings(machineId){
+  return (S.batches||[]).filter(b=>(b.mixingMachine===machineId||b.fillingMachine===machineId) && b.plannedStart);
+}
+function machineAvailabilityOn(machineId, dateStr){
+  const m=machine(machineId); if(!m) return 'unknown';
+  if(m.status==='breakdown') return 'breakdown';
+  if(m.status==='maintenance'||m.status==='Under Maintenance') return 'maintenance';
+  if(m.status==='inactive') return 'inactive';
+  const booked=machineBookings(machineId).some(b=>{
+    const s=b.plannedStart, e=b.plannedCompletion||b.plannedStart;
+    return dateStr>=s && dateStr<=e && b.status!=='cancelled';
+  });
+  return booked? 'booked' : 'available';
+}
+function earliestAvailableDate(machineId, fromDate){
+  let d=new Date(fromDate||today());
+  for(let i=0;i<120;i++){
+    const ds=d.toISOString().slice(0,10);
+    if(machineAvailabilityOn(machineId, ds)==='available') return ds;
+    d=new Date(d.getTime()+864e5);
+  }
+  return null;
+}
+/* days = ceil(qty / dailyOutput), Estimated Production Days per spec section 13 */
+function estimateProductionDays(code, machineId, qty){
+  const out=machineOutputFor(code, machineId); if(!out || !out.perDay) return null;
+  return {days: Math.ceil((Number(qty)||0)/out.perDay), out};
+}
+function machineUtilization(machineId, fromDate, toDate){
+  const m=machine(machineId); if(!m) return {availableHrs:0, plannedHrs:0, pct:0};
+  const days=Math.max(1, Math.round((new Date(toDate)-new Date(fromDate))/864e5)+1);
+  const availableHrs=(Number(m.workingHoursPerDay)||8)*(Number(m.shifts)||1)*days;
+  const plannedHrs=machineBookings(machineId).filter(b=>b.plannedStart>=fromDate && b.plannedStart<=toDate && b.status!=='cancelled')
+    .reduce((s,b)=>s+((Number(m.workingHoursPerDay)||8)), 0); // one booked day ≈ one working day occupied
+  const pct=availableHrs? Math.round(plannedHrs/availableHrs*100) : 0;
+  return {availableHrs, plannedHrs, pct};
+}
+function utilBand(pct){ return pct>=90?'over':pct>=70?'near':'ok'; }
+
 function bomStatusFor(code){
   const p = byId('products',code,'code');
   if(!p) return {state:'unrecognized', bom:null, drafts:[]};
@@ -2118,6 +2220,39 @@ const NAV = [
  ]}
 ];
 
+/* ============================================================
+   GLOBAL SEARCH — searches across every major collection at once so anything can be found
+   from one box, regardless of which department it actually lives in.
+   ============================================================ */
+function globalSearch(q){
+  q=String(q||'').trim(); if(q.length<2) return [];
+  const out=[];
+  (S.pos||[]).forEach(p=>{ if(match(p.po,q)||match(customerName(p.customer),q)) out.push({group:'Customer PO', label:p.po, sub:customerName(p.customer), act:'po-open', arg:p.id}); });
+  (S.products||[]).forEach(p=>{ if(match(p.code,q)||match(p.name,q)) out.push({group:'Product', label:p.name, sub:p.code, act:'prod-open', arg:p.code}); });
+  (S.materials||[]).forEach(m=>{ if(match(m.code,q)||match(m.name,q)) out.push({group:'Material', label:m.name, sub:m.code, act:'mat-open', arg:m.code}); });
+  (S.customers||[]).forEach(c=>{ if(match(c.code,q)||match(c.name,q)) out.push({group:'Customer', label:c.name, sub:c.code, act:'cust-detail', arg:c.code}); });
+  (S.suppliers||[]).forEach(s=>{ if(match(s.code,q)||match(s.name,q)) out.push({group:'Supplier', label:s.name, sub:s.code, act:'sup-open', arg:s.code}); });
+  (S.batches||[]).forEach(b=>{ if(match(b.id,q)||match(product(b.product).name,q)) out.push({group:'Batch', label:b.id, sub:product(b.product).name, act:'batch-open', arg:b.id}); });
+  (S.employees||[]).forEach(e=>{ if(match(e.empNo,q)||match(e.name,q)) out.push({group:'Employee', label:e.name, sub:e.empNo, act:'emp-calendar', arg:e.empNo}); });
+  (S.machines||[]).forEach(m=>{ if(match(m.id,q)||match(m.name,q)) out.push({group:'Machine', label:m.name, sub:m.id, act:'machine-view', arg:m.id}); });
+  (S.shipments||[]).forEach(s=>{ if(match(s.id,q)||match(customerName(s.customer),q)) out.push({group:'Shipment', label:s.id, sub:customerName(s.customer), act:'shp-open', arg:s.id}); });
+  (S.spos||[]).forEach(s=>{ if(match(s.id,q)||match(s.supplier,q)) out.push({group:'Supplier PO', label:s.id, sub:s.supplier, act:'spo-open', arg:s.id}); });
+  (S.coas||[]).forEach(c=>{ if(match(c.id,q)||match(c.batch,q)) out.push({group:'COA', label:c.id, sub:'batch '+c.batch, act:'coa-open', arg:c.id}); });
+  return out.slice(0,30);
+}
+function renderGsearchResults(q){
+  const el=document.getElementById('gsearchResults'); if(!el) return;
+  if(q.trim().length<2){ el.hidden=true; el.innerHTML=''; return; }
+  const results=globalSearch(q);
+  if(!results.length){ el.hidden=false; el.innerHTML='<div class="gsr-empty">No matches for "'+esc(q)+'"</div>'; return; }
+  const groups={};
+  results.forEach(r=>{ (groups[r.group]=groups[r.group]||[]).push(r); });
+  el.innerHTML=Object.keys(groups).map(g=>'<div class="gsr-group">'+esc(g)+'</div>'
+    +groups[g].map(r=>'<button class="gsr-item" data-act="'+r.act+'" data-arg="'+esc(r.arg)+'" data-gsr="1" type="button">'
+      +'<b>'+esc(r.label)+'</b>'+(r.sub?'<div class="sub">'+esc(r.sub)+'</div>':'')+'</button>').join('')).join('');
+  el.hidden=false;
+}
+
 function navCounts(){
   const q = (S.grns||[]).filter(g=>g.status==='quarantine').length;
   const openDev = (S.deviations||[]).filter(d=>d.status==='open').length;
@@ -2499,6 +2634,18 @@ function V_planning(){
       {h:'To make', c:'num', f:r=>nf(r.toMake)+' cs<div class="sub">'+nf(r.units)+' pcs</div>'},
       {h:'Bulk needed', c:'num', f:r=>{const p=product(r.code); const f=formula(p.formula)||{density:1};
         const kg = r.units*(p.fill||0)/1000*(f.density||1); return nf(kg,0)+' kg<div class="sub">'+esc(p.formula||'no formula')+'</div>';}},
+      {h:'Mixing machine(s)', f:r=>{const ms=approvedMachinesFor(r.code,'mixing'); return ms.length? ms.map(m=>esc(m.id)).join(', ') : '<span class="tag t-mute">none linked</span>';}},
+      {h:'Filling machine(s)', f:r=>{const ms=approvedMachinesFor(r.code,'filling'); return ms.length? ms.map(m=>esc(m.id)).join(', ') : '<span class="tag t-mute">none linked</span>';}},
+      {h:'Daily capacity / labour', f:r=>{const ms=approvedMachinesFor(r.code,'filling').concat(approvedMachinesFor(r.code,'mixing'));
+        if(!ms.length) return '—';
+        const best=ms[0]; const out=machineOutputFor(r.code,best.id);
+        return (out&&out.perDay? nf(out.perDay)+'/day':'—')+(out&&!out.specific?'<div class="sub">using standard machine capacity</div>':'')
+          +'<div class="sub">'+nf((Number(out&&out.operators)||0))+' labour</div>';}},
+      {h:'Est. production days', f:r=>{const ms=approvedMachinesFor(r.code,'filling').concat(approvedMachinesFor(r.code,'mixing'));
+        if(!ms.length) return '—'; const est=estimateProductionDays(r.code, ms[0].id, r.units);
+        return est&&est.days? nf(est.days,1)+' day(s)':'—';}},
+      {h:'Earliest machine date', f:r=>{const ms=approvedMachinesFor(r.code,'filling').concat(approvedMachinesFor(r.code,'mixing'));
+        if(!ms.length) return '—'; const d=earliestAvailableDate(ms[0].id, today()); return d? '<span class="mono">'+esc(d)+'</span>':'—';}},
       {h:'Covered by', f:r=>{const bs=(S.batches||[]).filter(b=>b.product===r.code&&b.status!=='released'); return bs.length? bs.map(b=>'<span class="mono">'+esc(b.id)+'</span> '+tag(b.status)).join('<br>') : '<span class="tag t-warn">not planned</span>';}},
       {h:'Ship by', c:'num', f:r=>'<span class="mono">'+esc(r.earliest||'—')+'</span>'},
       {h:'', f:r=>btn('Create batch','plan-from',r.code)}
@@ -2508,10 +2655,12 @@ function V_planning(){
       {h:'Product', f:b=>esc(product(b.product).name)+'<div class="sub mono">'+esc(b.product)+'</div>'},
       {h:'Formula', f:b=>'<span class="mono">'+esc(b.formula)+'</span><div class="sub">v'+esc((formula(b.formula)||{}).version||'')+'</div>'},
       {h:'Planned', c:'num', f:b=>nf(b.plannedKg)+' kg<div class="sub">'+nf(b.plannedUnits)+' pcs</div>'},
-      {h:'Start', c:'num', f:b=>'<span class="mono">'+esc(b.plannedStart||'—')+'</span>'},
+      {h:'Machine(s)', f:b=>{const mm=b.mixingMachine?machine(b.mixingMachine):null, fm=b.fillingMachine?machine(b.fillingMachine):null;
+        return (mm?'Mix: '+esc(mm.id):'')+(mm&&fm?'<br>':'')+(fm?'Fill: '+esc(fm.id):'')||'<span class="tag t-mute">not assigned</span>';}},
+      {h:'Start / complete', c:'num', f:b=>'<span class="mono">'+esc(b.plannedStart||'—')+'</span>'+(b.plannedCompletion?'<div class="sub mono">→ '+esc(b.plannedCompletion)+'</div>':'')},
       {h:'For orders', f:b=>(b.pos||[]).map(p=>'<span class="mono" style="font-size:12px">'+esc((byId('pos',p)||{}).po||p)+'</span>').join(', ')||'—'},
       {h:'Status', f:b=>tag(b.status)},
-      {h:'', f:b=>btn('BMR','batch-open',b.id)}
+      {h:'', f:b=>btn('BMR','batch-open',b.id)+btn('Assign machine','batch-machine',b.id,'btn sm')}
     ], sortBy(planned,'plannedStart'), {empty:'Nothing scheduled.'}),
     btn('New batch','batch-new',null,'btn primary'))
   + sect('Material availability against the plan', T([
@@ -3708,8 +3857,8 @@ function V_audit(){
 /* ============================ MASTERS ============================ */
 function V_masters(){
   const tab=F('tab','products'), q=F('q');
-  const tabLabels={products:'Products',materials:'Materials',boms:'BOM / Batch Sheets',coapresets:'COA Presets',customers:'Customers',suppliers:'Suppliers'};
-  const tabs=['products','materials','boms','coapresets','customers','suppliers'].map(t=>
+  const tabLabels={products:'Products',materials:'Materials',boms:'BOM / Batch Sheets',machinery:'Machinery',coapresets:'COA Presets',customers:'Customers',suppliers:'Suppliers'};
+  const tabs=['products','materials','boms','machinery','coapresets','customers','suppliers'].map(t=>
     '<button class="chip'+(tab===t?' on':'')+'" data-chip="tab" data-val="'+t+'" type="button">'+tabLabels[t]+'</button>').join('');
   let body='';
   if(tab==='products'){
@@ -3727,7 +3876,7 @@ function V_masters(){
       {h:'NPRA notification', f:p=>{const d=daysFromToday(p.npraExp);
         return '<span class="mono">'+esc(p.npra)+'</span><div class="sub"><span class="tag '+(d<0?'t-bad':d<60?'t-warn':'t-ok')+'">'+esc(p.npraExp)+'</span></div>';}},
       {h:'FDA listing', f:p=>'<span class="mono">'+esc(p.fdaListing||'—')+'</span>'},
-      {h:'', f:p=>btn('Edit','prod-open',p.code)}
+      {h:'', f:p=>btn('Edit','prod-open',p.code)+btn('Machinery','prod-machines',p.code,'btn sm')}
     ], (S.products||[]).filter(p=>match(p.code,q)||match(p.name,q)), {empty:'No products.'});
   } else if(tab==='materials'){
     body=T([
@@ -3755,6 +3904,40 @@ function V_masters(){
                     : r.latest? btn(r.latest.status==='draft'?'Edit draft':'View','bom-open',r.latest.id)+btn('New','bom-new',r.p.code)
                     : btn('Create BOM','bom-new',r.p.code))}
       ], rows, {empty:'No products yet.'});
+  } else if(tab==='machinery'){
+    const catF=F('mcat'), stF=F('mstatus');
+    const rows=(S.machines||[]).filter(m=>(!catF||m.category===catF)&&(!stF||m.status===stF)&&(match(m.id,q)||match(m.name,q)));
+    body='<div class="banner info">Production capacity planning — separate from the QA Equipment/Calibration register (Records → Training &amp; Equipment). A machine can optionally link to an Equipment ID for its calibration status without merging the two registers.</div>'
+    + filterBar([selCtl('mcat', MACHINE_CATEGORIES.map(c=>({v:c.code,t:c.name})), catF, 'Any category'),
+        selCtl('mstatus', ['Available','Under Maintenance','Breakdown','Reserved','Inactive'], stF, 'Any status')])
+    + T([
+        {h:'Machine ID', f:m=>'<b class="mono">'+esc(m.id)+'</b>'},
+        {h:'Machine', f:m=>'<b>'+esc(m.name)+'</b><div class="sub">'+esc(m.location||'')+'</div>'},
+        {h:'Category', f:m=>esc(machineCatName(m.category))},
+        {h:'Capacity', f:m=>m.capacity? nf(m.capacity)+' '+esc(m.capacityUom||''):'—'},
+        {h:'Daily output', c:'num', f:m=>m.outputPerDay? nf(m.outputPerDay)+'/day':'—'},
+        {h:'Labour', c:'num', f:m=>nf((Number(m.operators)||0)+(Number(m.supervisor)||0))},
+        {h:'Status', f:m=>{const cls=m.status==='Available'?'t-ok':m.status==='Breakdown'?'t-bad':m.status==='Under Maintenance'?'t-warn':'t-mute';
+          return '<span class="tag '+cls+'">'+esc(m.status||'—')+'</span>';}},
+        {h:'Products', c:'num', f:m=>nf((S.products||[]).filter(p=>(p.machines||[]).some(x=>x.machineId===m.id)).length)},
+        {h:'', f:m=>btn('View','machine-view',m.id)+btn('Edit','machine-open',m.id)+btn('Deactivate','machine-deactivate',m.id,'btn sm danger')}
+      ], sortBy(rows,'id'), {empty:'No machinery on file yet — add the first one.'})
+    + sect('Production schedule — assigned batches', T([
+        {h:'Date', f:b=>'<span class="mono">'+esc(b.plannedStart||'—')+'</span>'+(b.plannedCompletion&&b.plannedCompletion!==b.plannedStart?'<div class="sub mono">→ '+esc(b.plannedCompletion)+'</div>':'')},
+        {h:'Machine', f:b=>[b.mixingMachine,b.fillingMachine].filter(Boolean).join(', ')||'—'},
+        {h:'PO', f:b=>(b.pos||[]).map(p=>(byId('pos',p)||{}).po||p).join(', ')||'—'},
+        {h:'Product', f:b=>esc(product(b.product).name)},
+        {h:'Planned qty', c:'num', f:b=>nf(b.plannedUnits)+' pcs'},
+        {h:'Status', f:b=>tag(b.status)}
+      ], sortBy((S.batches||[]).filter(b=>(b.mixingMachine||b.fillingMachine)&&b.status!=='released'&&b.status!=='cancelled'),'plannedStart'),
+      {empty:'No batches with a machine assigned yet — assign one from Planning → Scheduled batches.'}))
+    + sect('Machine utilisation — next 30 days', T([
+        {h:'Machine', f:m=>'<b class="mono">'+esc(m.id)+'</b><div class="sub">'+esc(m.name)+'</div>'},
+        {h:'Available hrs', c:'num', f:m=>{const u=machineUtilization(m.id, today(), new Date(Date.now()+30*864e5).toISOString().slice(0,10)); return nf(u.availableHrs);}},
+        {h:'Planned hrs', c:'num', f:m=>{const u=machineUtilization(m.id, today(), new Date(Date.now()+30*864e5).toISOString().slice(0,10)); return nf(u.plannedHrs);}},
+        {h:'Utilisation', f:m=>{const u=machineUtilization(m.id, today(), new Date(Date.now()+30*864e5).toISOString().slice(0,10));
+          const band=utilBand(u.pct); return '<span class="tag '+(band==='over'?'t-bad':band==='near'?'t-warn':'t-ok')+'">'+u.pct+'%</span>';}}
+      ], (S.machines||[]).filter(m=>m.status!=='Inactive'), {empty:'No active machinery yet.'}));
   } else if(tab==='coapresets'){
     const rows = (S.products||[]).filter(p=>match(p.code,q)||match(p.name,q)).map(p=>({p, latest:coaPresetsFor(p.code)[0]||null, st:coaPresetStatusFor(p.code)}));
     body='<div class="banner info">The approved Parameter/Specification set for each product — entered once here, then pulled in automatically every time QC opens the release test panel for a batch of that product. Only the Result needs typing at batch time.</div>'
@@ -3790,8 +3973,8 @@ function V_masters(){
       {h:'', f:s=>btn('Edit','sup-open',s.code)}
     ], (S.suppliers||[]).filter(s=>match(s.name,q)||match(s.code,q)), {empty:'No suppliers.'});
   }
-  const newAct={products:'prod-new',materials:'mat-new',boms:'bom-new',coapresets:'preset-new',customers:'cust-new',suppliers:'sup-new'}[tab];
-  const newLabel = tab==='boms'? 'Create BOM manually' : tab==='coapresets'? 'Set up COA Preset' : 'Add '+tab.replace(/s$/,'');
+  const newAct={products:'prod-new',materials:'mat-new',boms:'bom-new',machinery:'machine-new',coapresets:'preset-new',customers:'cust-new',suppliers:'sup-new'}[tab];
+  const newLabel = tab==='boms'? 'Create BOM manually' : tab==='coapresets'? 'Set up COA Preset' : tab==='machinery'? 'Add machine' : 'Add '+tab.replace(/s$/,'');
   return filterBar([tabs, searchCtl('q',q,'Search '+tab), btn(newLabel,newAct,null,'btn primary')])+body;
 }
 
@@ -5800,6 +5983,23 @@ function boot(){
   cleanupVoidedPOs();
   renderNav(); render();
   try{
+    const gsInput=document.getElementById('gsearchInput'), gsResults=document.getElementById('gsearchResults');
+    if(gsInput && gsResults){
+      gsInput.addEventListener('input', ()=>renderGsearchResults(gsInput.value));
+      gsInput.addEventListener('focus', ()=>{ if(gsInput.value.trim().length>=2) renderGsearchResults(gsInput.value); });
+      gsInput.addEventListener('keydown', e=>{ if(e.key==='Escape'){ gsResults.hidden=true; gsInput.blur(); } });
+      gsResults.addEventListener('click', e=>{
+        const el=e.target.closest('[data-gsr]'); if(!el) return;
+        gsResults.hidden=true; gsInput.value=''; gsInput.blur();
+        const act=el.dataset.act, arg=el.dataset.arg;
+        if(ACT[act]) ACT[act](arg);
+      });
+      document.addEventListener('click', e=>{
+        if(!document.getElementById('gsearch').contains(e.target)) gsResults.hidden=true;
+      });
+    }
+  }catch(e){}
+  try{
     const qp=new URLSearchParams(location.search);
     if(qp.get('go')==='leaveapply'){
       go('people'); UI.filters.people=UI.filters.people||{}; UI.filters.people.ptab='leave';
@@ -7350,6 +7550,171 @@ ACT['leave-pdf-import']=()=>{
 ACT['leave-pdf-import-confirm']=()=>{
   if(PENDING_EMP_IMPORT && PENDING_EMP_IMPORT.length) ACT['emp-import-confirm']();
   if(PENDING_LEAVE_IMPORT && PENDING_LEAVE_IMPORT.length) ACT['leave-import-confirm']();
+};
+
+/* ============================================================
+   MACHINERY MASTER EDITOR — one flat form covering general fields plus the category-specific
+   sections from the spec (mixing tank, filling machine, soap). Sections not relevant to a
+   given machine are simply left blank rather than hidden, so switching category later never
+   loses data and the form stays simple to maintain.
+   ============================================================ */
+let PENDING_MACHINE=null;
+function mf(m,k,type){ return '<input type="'+(type||'text')+'" data-h="'+k+'" value="'+esc(m[k]==null?'':m[k])+'">'; }
+function mSel(m,k,opts){ return '<select data-h="'+k+'"><option value="">—</option>'+opts.map(o=>'<option value="'+esc(o)+'"'+(m[k]===o?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select>'; }
+function openMachineEditor(){
+  const m=PENDING_MACHINE; if(!m) return;
+  const fld=(label,inner)=>'<div class="field"><label>'+esc(label)+'</label>'+inner+'</div>';
+  const body=
+    '<fieldset><legend>General</legend><div class="fgrid">'
+    +fld('Machine ID'+(m._isNew?' (permanent once saved)':''), mf(m,'id'))
+    +fld('Machine name', mf(m,'name'))
+    +fld('Category', '<select data-h="category">'+MACHINE_CATEGORIES.map(c=>'<option value="'+c.code+'"'+(m.category===c.code?' selected':'')+'>'+esc(c.name)+'</option>').join('')+'</select>')
+    +fld('Process type', mf(m,'processType'))
+    +fld('Location / production area', mf(m,'location'))
+    +fld('Manufacturing type', mf(m,'mfgType'))
+    +fld('Make / model', mf(m,'makeModel'))
+    +fld('Status', mSel(m,'status',['Available','Under Maintenance','Breakdown','Reserved','Inactive']))
+    +fld('Linked Equipment ID (calibration status)', mf(m,'linkedEquipmentId'))
+    +'</div></fieldset>'
+    +'<fieldset><legend>Capacity &amp; output</legend><div class="fgrid">'
+    +fld('Machine capacity', mf(m,'capacity','number'))+fld('Capacity UOM', mf(m,'capacityUom'))
+    +fld('Standard output / hour', mf(m,'outputPerHour','number'))+fld('Standard output / day', mf(m,'outputPerDay','number'))
+    +fld('Standard working hours / day', mf(m,'workingHoursPerDay','number'))+fld('Number of shifts', mf(m,'shifts','number'))
+    +fld('Minimum run quantity', mf(m,'minRun','number'))+fld('Maximum run quantity', mf(m,'maxRun','number'))
+    +fld('Setup time (min)', mf(m,'setupTime','number'))+fld('Changeover time (min)', mf(m,'changeoverTime','number'))
+    +fld('Cleaning time (min)', mf(m,'cleaningTime','number'))
+    +'</div></fieldset>'
+    +'<fieldset><legend>Required labour</legend><div class="fgrid">'
+    +fld('Required operators', mf(m,'operators','number'))+fld('Required supervisor (if any)', mf(m,'supervisor','number'))
+    +'</div></fieldset>'
+    +'<fieldset><legend>Liquid mixing tank details — leave blank if not applicable</legend><div class="fgrid">'
+    +fld('Tank capacity (L)', mf(m,'tankCapacityL','number'))+fld('Usable capacity (L / kg)', mf(m,'usableCapacity','number'))
+    +fld('Minimum working volume', mf(m,'minWorkingVolume','number'))+fld('Maximum working volume', mf(m,'maxWorkingVolume','number'))
+    +fld('Heating available', mSel(m,'heating',['Yes','No']))+fld('Cooling available', mSel(m,'cooling',['Yes','No']))
+    +fld('Homogenizer', mSel(m,'homogenizer',['Yes','No']))+fld('Agitator type', mf(m,'agitatorType'))
+    +fld('Standard mixing time (min)', mf(m,'mixingTime','number'))
+    +'</div></fieldset>'
+    +'<fieldset><legend>Liquid filling machine details — leave blank if not applicable</legend><div class="fgrid">'
+    +fld('Filling type', mf(m,'fillingType'))+fld('Number of filling heads', mf(m,'fillingHeads','number'))
+    +fld('Suitable container types', mf(m,'containerTypes'))+fld('Minimum fill size', mf(m,'minFillSize','number'))
+    +fld('Maximum fill size', mf(m,'maxFillSize','number'))+fld('Standard units / minute', mf(m,'unitsPerMin','number'))
+    +'</div></fieldset>'
+    +'<fieldset><legend>Soap machinery details — leave blank if not applicable</legend><div class="fgrid">'
+    +fld('Capacity kg/hour', mf(m,'soapKgPerHour','number'))+fld('Capacity bars/hour', mf(m,'soapBarsPerHour','number'))
+    +fld('Bar weight range', mf(m,'barWeightRange'))
+    +'</div></fieldset>'
+    +'<div class="field full"><label>Notes</label><textarea data-h="notes" rows="2">'+esc(m.notes||'')+'</textarea></div>';
+  modal((m._isNew?'Add':'Edit')+' machine'+(m.name?' — '+esc(m.name):''), body, btn('Save machine','machine-save',null,'btn primary'), true);
+}
+ACT['machine-new']=()=>{ PENDING_MACHINE={id:'', name:'', category:'mixing', status:'Available', operators:0, supervisor:0, _isNew:true}; openMachineEditor(); };
+ACT['machine-open']=a=>{ const m=machine(a); if(!m) return; PENDING_MACHINE=clone(m); openMachineEditor(); };
+ACT['machine-save']=()=>{
+  const m=PENDING_MACHINE; if(!m) return;
+  document.querySelectorAll('#modal-root [data-h]').forEach(el=>{ m[el.dataset.h]=el.value; });
+  if(!String(m.id||'').trim()) return toast('Machine ID is required','bad');
+  if(!String(m.name||'').trim()) return toast('Machine name is required','bad');
+  const isNew=m._isNew; delete m._isNew;
+  if(isNew && machine(m.id)) return toast('That Machine ID already exists','bad');
+  const idx=(S.machines||[]).findIndex(x=>x.id===m.id);
+  if(idx>-1) S.machines[idx]=m; else S.machines.push(m);
+  logAudit(isNew?'Machine added':'Machine updated', m.id, m.name);
+  save(); toast('Saved','ok'); closeModal(); render();
+};
+ACT['machine-deactivate']=a=>{ const m=machine(a); if(!m) return;
+  formModal({title:'Deactivate '+m.name,
+    intro:'This marks the machine Inactive — it stays on file with its full history, just excluded from Planning\'s capacity calculations.',
+    fields:[], saveLabel:'Deactivate',
+    onSave:()=>{ m.status='Inactive'; logAudit('Machine deactivated', m.id, m.name); save(); toast('Deactivated','ok'); closeModal(); render(); }});
+};
+ACT['machine-view']=a=>{ const m=machine(a); if(!m) return;
+  const linkedEq=m.linkedEquipmentId? byId('equipment', m.linkedEquipmentId) : null;
+  const products=(S.products||[]).filter(p=>(p.machines||[]).some(x=>x.machineId===m.id));
+  const body='<dl class="dl" style="grid-template-columns:auto 1fr auto 1fr">'
+   +'<dt>Category</dt><dd>'+esc(machineCatName(m.category))+'</dd><dt>Status</dt><dd>'+tag(m.status)+'</dd>'
+   +'<dt>Location</dt><dd>'+esc(m.location||'—')+'</dd><dt>Make/model</dt><dd>'+esc(m.makeModel||'—')+'</dd>'
+   +'<dt>Capacity</dt><dd>'+(m.capacity?nf(m.capacity)+' '+esc(m.capacityUom||''):'—')+'</dd>'
+   +'<dt>Output/day</dt><dd>'+(m.outputPerDay?nf(m.outputPerDay):'—')+'</dd>'
+   +'<dt>Labour</dt><dd>'+nf((Number(m.operators)||0)+(Number(m.supervisor)||0))+'</dd>'
+   +'<dt>Linked equipment</dt><dd>'+(linkedEq? esc(linkedEq.id)+' — '+esc(linkedEq.name) : '—')+'</dd></dl>'
+   + sect('Approved for products', T([{h:'Product', f:p=>esc(p.name)+' ('+esc(p.code)+')'}], products, {empty:'Not yet linked to any product.'}));
+  modal(m.name+' ('+esc(m.id)+')', body, btn('Edit','machine-open',m.id), true);
+};
+
+/* ---- Product → Machinery linking, per spec section 6/7/11 ---- */
+ACT['prod-machines']=a=>{ const p=byId('products',a,'code'); if(!p) return;
+  const list=p.machines||[];
+  const body=T([
+      {h:'Machine', f:x=>{const mm=machine(x.machineId); return mm? '<b>'+esc(mm.name)+'</b><div class="sub mono">'+esc(mm.id)+'</div>':'<span class="tag t-bad">missing</span>';}},
+      {h:'Process', f:x=>esc(x.process||'—')},
+      {h:'Output for this product', f:x=>{const out=machineOutputFor(p.code,x.machineId); if(!out) return '—';
+        return out.specific? nf(out.perDay)+'/day': '<span class="tag t-mute">using standard machine capacity</span>';}},
+      {h:'', f:x=>btn('Set product output','prod-machine-output',p.code+'::'+x.machineId,'btn sm')+btn('Remove','prod-machine-del',p.code+'::'+x.machineId,'btn sm danger')}
+    ], list, {empty:'No approved machinery linked yet.'});
+  modal('Production routing / machinery — '+esc(p.name), body, btn('Add approved machine','prod-machine-add',p.code,'btn primary'), true);
+};
+ACT['prod-machine-add']=a=>{ const p=byId('products',a,'code'); if(!p) return;
+  formModal({title:'Add approved machine — '+p.name,
+    fields:[{k:'machineId',label:'Machine',type:'select',opts:(S.machines||[]).map(m=>({v:m.id,t:m.id+' — '+m.name})),req:true},
+      {k:'process',label:'Process',type:'select',opts:['mixing','filling','packing','other'],blank:false}],
+    saveLabel:'Add',
+    onSave:v=>{ if(!v.machineId) return toast('Pick a machine','bad');
+      p.machines=p.machines||[];
+      if(p.machines.some(x=>x.machineId===v.machineId && x.process===v.process)) return toast('Already linked','bad');
+      p.machines.push({machineId:v.machineId, process:v.process});
+      logAudit('Machine approved for product', p.code, v.machineId+' — '+v.process);
+      save(); toast('Added','ok'); closeModal(); ACT['prod-machines'](p.code);
+    }});
+};
+ACT['prod-machine-del']=a=>{ const [code,mid]=a.split('::'); const p=byId('products',code,'code'); if(!p) return;
+  p.machines=(p.machines||[]).filter(x=>x.machineId!==mid);
+  logAudit('Machine removed from product', p.code, mid); save(); toast('Removed','ok'); ACT['prod-machines'](code);
+};
+ACT['prod-machine-output']=a=>{ const [code,mid]=a.split('::'); const p=byId('products',code,'code'); const m=machine(mid); if(!p||!m) return;
+  const existing=(S.productMachineOutput||[]).find(x=>x.product===code&&x.machine===mid)||{};
+  formModal({title:'Product-specific output — '+p.name+' on '+m.name, values:existing,
+    fields:[{k:'outputPerHour',label:'Standard output / hour',type:'number'},{k:'outputPerDay',label:'Standard output / day',type:'number'},
+      {k:'batchSize',label:'Standard batch size',type:'number'},{k:'operators',label:'Required operators',type:'number'},
+      {k:'setupTime',label:'Setup time (min)',type:'number'},{k:'changeoverTime',label:'Changeover time (min)',type:'number'},
+      {k:'notes',label:'Notes',type:'textarea',full:true}],
+    saveLabel:'Save',
+    onSave:v=>{
+      const idx=(S.productMachineOutput||[]).findIndex(x=>x.product===code&&x.machine===mid);
+      const rec=Object.assign({product:code, machine:mid}, v);
+      if(idx>-1) S.productMachineOutput[idx]=rec; else S.productMachineOutput.push(rec);
+      logAudit('Product-specific machine output set', code, mid);
+      save(); toast('Saved','ok'); closeModal(); ACT['prod-machines'](code);
+    }});
+};
+
+/* ---- Assign machine + planned dates to a batch, with booking-conflict detection (spec
+   section 15: a machine cannot be treated as available if it already has confirmed work on
+   the same date). Extends the existing batch record; does not replace any existing field. ---- */
+ACT['batch-machine']=a=>{ const b=byId('batches',a); if(!b) return;
+  const mixOpts=approvedMachinesFor(b.product,'mixing'), fillOpts=approvedMachinesFor(b.product,'filling');
+  formModal({title:'Assign machine — '+b.id, values:{mixingMachine:b.mixingMachine||'', fillingMachine:b.fillingMachine||'',
+      plannedStart:b.plannedStart||today(), plannedCompletion:b.plannedCompletion||b.plannedStart||today()},
+    fields:[
+      {k:'mixingMachine',label:'Mixing machine',type:'select',opts:mixOpts.map(m=>({v:m.id,t:m.id+' — '+m.name}))},
+      {k:'fillingMachine',label:'Filling machine',type:'select',opts:fillOpts.map(m=>({v:m.id,t:m.id+' — '+m.name}))},
+      {k:'plannedStart',label:'Planned start',type:'date',req:true},
+      {k:'plannedCompletion',label:'Planned completion',type:'date',req:true}
+    ],
+    saveLabel:'Save',
+    onSave:v=>{
+      if(v.plannedCompletion<v.plannedStart) return toast('Completion date must be on or after the start date','bad');
+      const conflicts=[];
+      [['mixingMachine',v.mixingMachine],['fillingMachine',v.fillingMachine]].forEach(([field,mid])=>{
+        if(!mid) return;
+        const clash=(S.batches||[]).find(x=>x.id!==b.id && (x.mixingMachine===mid||x.fillingMachine===mid) && x.status!=='cancelled'
+          && x.plannedStart && !(v.plannedCompletion<x.plannedStart || v.plannedStart>(x.plannedCompletion||x.plannedStart)));
+        if(clash) conflicts.push(mid+' is already booked by '+clash.id+' ('+clash.plannedStart+(clash.plannedCompletion?' → '+clash.plannedCompletion:'')+')');
+      });
+      if(conflicts.length) return toast('Booking conflict — '+conflicts.join('; '),'bad');
+      b.mixingMachine=v.mixingMachine||''; b.fillingMachine=v.fillingMachine||'';
+      b.plannedStart=v.plannedStart; b.plannedCompletion=v.plannedCompletion;
+      logAudit('Machine assigned to batch', b.id, (v.mixingMachine||'')+' '+(v.fillingMachine||'')+' — '+v.plannedStart+' → '+v.plannedCompletion);
+      save(); toast('Assigned','ok'); closeModal(); render();
+    }});
 };
 
 function pendingToPo(p){
