@@ -3499,10 +3499,13 @@ function datesInRange(start,end){
   return out;
 }
 function leaveBalance(empNo, year){
-  const apps=(S.leaveApplications||[]).filter(a=>a.empNo===empNo && a.year===year && a.status==='approved');
+  const all=(S.leaveApplications||[]).filter(a=>a.empNo===empNo && a.year===year);
+  const apps=all.filter(a=>a.status==='approved');
+  const pendingApps=all.filter(a=>a.status==='pending');
   return (S.leaveTypes||[]).map(lt=>{
     const taken=apps.filter(a=>a.type===lt.code).reduce((s,a)=>s+(Number(a.days)||0),0);
-    return {type:lt.code, name:lt.name, color:lt.color, entitlement:lt.defaultDays, taken, balance:Math.max(0,lt.defaultDays-taken)};
+    const pending=pendingApps.filter(a=>a.type===lt.code).reduce((s,a)=>s+(Number(a.days)||0),0);
+    return {type:lt.code, name:lt.name, color:lt.color, entitlement:lt.defaultDays, taken, pending, balance:Math.max(0,lt.defaultDays-taken)};
   });
 }
 /* map of date -> array of {empNo,name,type,color} for calendar highlighting, one employee or all */
@@ -3579,7 +3582,8 @@ function leaveTabHtml(){
   ]);
 
   h += filterBar([selCtl('lyear', years.map(y=>({v:String(y),t:String(y)})), String(year), 'Year'),
-    btn('Apply leave','leave-apply',null,'btn primary'), btn('Annual leave report','leave-report',String(year))]);
+    btn('Apply leave','leave-apply',null,'btn primary'), btn('Annual leave report','leave-report',String(year)),
+    btn('Add employee','emp-new'), btn('Batch import employees','emp-import'), btn('Batch import leave records','leave-import')]);
 
   if(pending.length) h += sect('Pending approval', T([
       {h:'Employee', f:a=>'<b>'+esc(employee(a.empNo).name)+'</b><div class="sub mono">'+esc(a.empNo)+'</div>'},
@@ -3605,7 +3609,8 @@ function leaveTabHtml(){
   h += sect('Scan to apply leave', '<div class="card" style="text-align:center;max-width:280px">'
     +'<div id="leaveQr" style="display:flex;justify-content:center;margin-bottom:10px"></div>'
     +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">This opens the separate Employee Leave Portal — its own page, with its own employee number + password login (not the main ERP login). Set a password for someone under Employees above before they can sign in there.</div>'
-    +btn('Check for new requests from the portal','leave-sync',null,'btn')+'</div>');
+    +btn('Check for new requests from the portal','leave-sync',null,'btn')
+    +btn('Resync everything to the portal','leave-resync-all',null,'btn')+'</div>');
   return h;
 }
 
@@ -5662,6 +5667,9 @@ function render(){
   if(qrEl && window.QRCode){ qrEl.innerHTML='';
     try{ new QRCode(qrEl, {text:location.origin+location.pathname.replace(/index\.html$/,'')+'leave-portal.html', width:132, height:132, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){}
   }
+  if(UI.view==='people' && (UI.filters.people||{}).ptab==='leave' && Date.now()-LAST_LEAVE_SYNC>8000){
+    LAST_LEAVE_SYNC=Date.now(); syncPortalLeave(true);
+  }
 }
 
 /* ---------------- events ---------------- */
@@ -6878,6 +6886,7 @@ function openEmpCalendar(){
     +T([{h:'Type', f:b=>'<span style="color:'+esc(b.color)+'">●</span> '+esc(b.name)},
         {h:'Entitlement', c:'num', f:b=>nf(b.entitlement)},
         {h:'Taken', c:'num', f:b=>nf(b.taken)},
+        {h:'Pending', c:'num', f:b=>b.pending? '<span class="tag t-warn">'+nf(b.pending)+'</span>':'—'},
         {h:'Balance', c:'num', f:b=>'<b>'+nf(b.balance)+'</b>'}], bal)+'</div>'
     +'<div style="margin-top:16px"><h3 style="font-size:13px;margin-bottom:8px">History — '+c.year+'</h3>'
     +T([{h:'Type', f:a=>esc(leaveType(a.type).name)},{h:'Dates', f:a=>'<span class="mono">'+esc(a.start)+(a.end!==a.start?' → '+esc(a.end):'')+'</span>'},
@@ -6959,11 +6968,12 @@ ACT['leave-set-password'] = a=>{
       }).catch(()=>toast('Could not reach the portal database — check the Supabase setup','bad'));
     }});
 };
-ACT['leave-sync'] = ()=>{
-  if(!window.HEM_AUTH) return toast('Portal connection not available on this page','bad');
-  toast('Checking the portal for new requests…','ok');
+let LAST_LEAVE_SYNC=0;
+function syncPortalLeave(silent){
+  if(!window.HEM_AUTH){ if(!silent) toast('Portal connection not available on this page','bad'); return; }
+  if(!silent) toast('Checking the portal for new requests…','ok');
   window.HEM_AUTH.from('hem_leave_applications').select('*').eq('status','pending').then(({data,error})=>{
-    if(error){ toast('Could not reach the portal database — check the Supabase setup','bad'); return; }
+    if(error){ if(!silent) toast('Could not reach the portal database — check the Supabase setup','bad'); return; }
     const existing=new Set((S.leaveApplications||[]).map(x=>x.id));
     let added=0;
     (data||[]).forEach(r=>{
@@ -6974,9 +6984,11 @@ ACT['leave-sync'] = ()=>{
       added++;
     });
     if(added){ logAudit('Leave requests synced from portal', '', added+' new pending request(s)'); save(); render(); }
-    toast(added? added+' new request(s) pulled in from the portal':'No new requests waiting','ok');
-  }).catch(()=>toast('Could not reach the portal database — check the Supabase setup','bad'));
-};
+    if(!silent) toast(added? added+' new request(s) pulled in from the portal':'No new requests waiting','ok');
+    else if(added) toast(added+' new leave request(s) just came in from the portal','ok');
+  }).catch(()=>{ if(!silent) toast('Could not reach the portal database — check the Supabase setup','bad'); });
+}
+ACT['leave-sync'] = ()=> syncPortalLeave(false);
 /* pushes an approval/rejection decided in the ERP back to the portal record, so the
    employee sees the outcome next time they check their phone — only relevant for
    applications that originated on the portal in the first place */
@@ -6986,6 +6998,174 @@ function pushLeaveStatusToPortal(l){
     status:l.status, approved_by:l.approvedBy||'', approved_at:new Date().toISOString(), reject_reason:l.rejectReason||''
   }).eq('id', l.id).then(({error})=>{ if(error) toast('Recorded here, but could not update the portal record','warn'); });
 }
+/* bulk push — used by Add employee, batch imports, and the Resync-everything button. Pass
+   null for empNos/ids to push everything on file, or an array to push just what changed. */
+function pushEmployeesToPortal(empNos){
+  if(!window.HEM_AUTH) return;
+  const list=(S.employees||[]).filter(e=>!empNos||empNos.includes(e.empNo))
+    .map(e=>({emp_no:e.empNo, name:e.name, department:e.department||'', status:e.status||'active'}));
+  if(!list.length) return;
+  window.HEM_AUTH.from('hem_employees').upsert(list, {onConflict:'emp_no'}).then(({error})=>{
+    if(error) toast('Saved here, but the portal sync failed — '+error.message,'warn');
+    else toast(list.length+' employee(s) synced to the portal','ok');
+  });
+}
+function pushLeaveAppsToPortal(ids){
+  if(!window.HEM_AUTH) return;
+  const list=(S.leaveApplications||[]).filter(a=>!ids||ids.includes(a.id))
+    .map(a=>({id:a.id, emp_no:a.empNo, type:a.type, start_date:a.start, end_date:a.end, days:a.days, year:a.year,
+      status:a.status, reason:a.reason||'', approved_by:a.approvedBy||'', reject_reason:a.rejectReason||''}));
+  if(!list.length) return;
+  window.HEM_AUTH.from('hem_leave_applications').upsert(list, {onConflict:'id'}).then(({error})=>{
+    if(error) toast('Saved here, but the portal sync failed — '+error.message,'warn');
+    else toast(list.length+' leave record(s) synced to the portal','ok');
+  });
+}
+ACT['leave-resync-all']=()=>{
+  formModal({title:'Resync everything to the portal',
+    intro:'Pushes every employee ('+nf((S.employees||[]).length)+') and every leave record ('+nf((S.leaveApplications||[]).length)+') from this system into the portal database, so the balance an employee sees on their phone always matches this system exactly. Safe to run any time — existing portal records are updated, never duplicated.',
+    fields:[{k:'confirm',label:'Type SYNC to confirm',full:true}], saveLabel:'Resync now',
+    onSave:v=>{
+      if(v.confirm!=='SYNC') return toast('Type SYNC to confirm','bad');
+      if(!window.HEM_AUTH) return toast('Portal connection not available on this page','bad');
+      closeModal();
+      pushEmployeesToPortal(null);
+      pushLeaveAppsToPortal(null);
+      logAudit('Full resync to portal', '', nf((S.employees||[]).length)+' employees, '+nf((S.leaveApplications||[]).length)+' leave records');
+      save();
+    }});
+};
+
+/* ---- add a single employee, pushed to the portal on save ---- */
+ACT['emp-new']=()=>{
+  formModal({title:'Add employee',
+    fields:[{k:'empNo',label:'Employee number',req:true,full:true},{k:'name',label:'Name',req:true,full:true},
+      {k:'department',label:'Department',full:true}],
+    saveLabel:'Add employee',
+    onSave:v=>{
+      if(!v.empNo||!v.name) return toast('Employee number and name are required','bad');
+      if((S.employees||[]).find(e=>e.empNo===v.empNo)) return toast('That employee number already exists','bad');
+      S.employees.push({id:'EMP-'+v.empNo, empNo:v.empNo, name:v.name, department:v.department||'', status:'active'});
+      logAudit('Employee added', v.empNo, v.name);
+      save(); toast('Added — set a portal password when ready','ok'); closeModal(); render();
+      pushEmployeesToPortal([v.empNo]);
+    }});
+};
+
+/* ---- batch import employees, pasted from the SQL/HR export ---- */
+function parseEmployeeCsv(text){
+  const rows=[];
+  (text||'').split('\n').map(l=>l.trim()).filter(Boolean).forEach(line=>{
+    const parts=line.split(/\t|,/).map(p=>p.trim());
+    if(parts.length<2) return;
+    const [empNo,name,department]=parts;
+    if(!empNo||!name) return;
+    if(/^emp/i.test(empNo) && /name/i.test(name)) return; // skip an obvious header row
+    rows.push({empNo, name, department:department||''});
+  });
+  return rows;
+}
+let PENDING_EMP_IMPORT=null;
+ACT['emp-import']=()=>{
+  formModal({title:'Batch import employees', wide:true,
+    intro:'Paste rows exported from your HR/SQL system — one employee per line, comma or tab separated: <span class="mono">Employee No, Name, Department</span> (department optional). A header row is detected and skipped automatically. Nothing is saved until you review and confirm on the next screen.',
+    fields:[{k:'csv',label:'Paste employee data',type:'textarea',full:true}],
+    saveLabel:'Preview import',
+    onSave:v=>{
+      const rows=parseEmployeeCsv(v.csv);
+      if(!rows.length) return toast('No valid rows found — check the format','bad');
+      PENDING_EMP_IMPORT=rows;
+      closeModal();
+      const existing=new Map((S.employees||[]).map(e=>[e.empNo,e]));
+      const body=T([
+        {h:'Emp No.', f:r=>'<span class="mono">'+esc(r.empNo)+'</span>'},
+        {h:'Name', f:r=>esc(r.name)},
+        {h:'Department', f:r=>esc(r.department||'—')},
+        {h:'Action', f:r=>existing.has(r.empNo)? '<span class="tag t-warn">will update existing</span>':'<span class="tag t-ok">new employee</span>'}
+      ], rows);
+      modal('Confirm import — '+rows.length+' employee(s)', body, btn('Confirm import','emp-import-confirm',null,'btn primary'), true);
+    }});
+};
+ACT['emp-import-confirm']=()=>{
+  const rows=PENDING_EMP_IMPORT; if(!rows) return;
+  let added=0, updated=0;
+  rows.forEach(r=>{
+    const ex=(S.employees||[]).find(e=>e.empNo===r.empNo);
+    if(ex){ ex.name=r.name; if(r.department) ex.department=r.department; updated++; }
+    else{ S.employees.push({id:'EMP-'+r.empNo, empNo:r.empNo, name:r.name, department:r.department||'', status:'active'}); added++; }
+  });
+  logAudit('Employees batch imported', '', added+' added, '+updated+' updated');
+  save(); toast(added+' added, '+updated+' updated','ok'); closeModal(); render();
+  pushEmployeesToPortal(rows.map(r=>r.empNo));
+  PENDING_EMP_IMPORT=null;
+};
+
+/* ---- batch import historical leave records, matching the earlier SQL export format ---- */
+const LEAVE_TYPE_ALIASES=[[/hospital/i,'hospitalization'],[/annual/i,'annual'],[/medical|^\s*mc\s*$/i,'medical'],
+  [/emergency/i,'emergency'],[/unpaid/i,'unpaid'],[/time\s*off/i,'timeoff']];
+function matchLeaveTypeCode(raw){
+  const r=String(raw||'').trim();
+  for(const pair of LEAVE_TYPE_ALIASES) if(pair[0].test(r)) return pair[1];
+  const exact=(S.leaveTypes||[]).find(t=>t.code===r.toLowerCase()||t.name.toLowerCase()===r.toLowerCase());
+  return exact? exact.code : null;
+}
+function parseLeaveDateFlexible(raw){
+  const s=String(raw||'').trim();
+  let m=/^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  return null;
+}
+function parseLeaveCsv(text){
+  const rows=[], issues=[];
+  (text||'').split('\n').map(l=>l.trim()).filter(Boolean).forEach((line,i)=>{
+    const parts=line.split(/\t|,/).map(p=>p.trim());
+    if(parts.length<3) return;
+    const [empNo,dateRaw,typeRaw,daysRaw]=parts;
+    if(/^emp/i.test(empNo) && /date/i.test(dateRaw)) return; // header
+    const date=parseLeaveDateFlexible(dateRaw), type=matchLeaveTypeCode(typeRaw);
+    if(!empNo||!date||!type){ issues.push({line:i+1, raw:line, reason:!date?'unrecognised date':!type?'unrecognised leave type':'missing employee number'}); return; }
+    rows.push({empNo, date, type, days:Number(daysRaw)||1});
+  });
+  return {rows, issues};
+}
+let PENDING_LEAVE_IMPORT=null;
+ACT['leave-import']=()=>{
+  formModal({title:'Batch import leave records', wide:true,
+    intro:'Paste rows from your SQL/HR leave export — one leave day per line, comma or tab separated: <span class="mono">Employee No, Date, Leave Type, Days</span> (Days optional, defaults to 1). Dates can be DD/MM/YYYY or YYYY-MM-DD. Leave Type just needs a recognisable word in it — "Annual Leave", "MC", "Medical", "Hospitalization Leave" all match. These are recorded as already-approved, since they represent leave already taken.',
+    fields:[{k:'csv',label:'Paste leave data',type:'textarea',full:true}],
+    saveLabel:'Preview import',
+    onSave:v=>{
+      const {rows,issues}=parseLeaveCsv(v.csv);
+      if(!rows.length) return toast('No valid rows recognised — check the format','bad');
+      PENDING_LEAVE_IMPORT=rows;
+      closeModal();
+      const body=(issues.length? '<div class="banner warn">'+issues.length+' line(s) could not be read and will be skipped: '+esc(issues.slice(0,5).map(x=>'line '+x.line+' ('+x.reason+')').join('; '))+(issues.length>5?' …':'')+'</div>':'')
+        + T([{h:'Emp No.', f:r=>'<span class="mono">'+esc(r.empNo)+'</span><div class="sub">'+esc(employee(r.empNo).name)+'</div>'},
+             {h:'Date', f:r=>'<span class="mono">'+esc(r.date)+'</span>'},
+             {h:'Type', f:r=>esc(leaveType(r.type).name)},
+             {h:'Days', c:'num', f:r=>nf(r.days)}], rows.slice(0,300));
+      modal('Confirm import — '+rows.length+' record(s)'+(rows.length>300?' (showing first 300)':''), body, btn('Confirm import','leave-import-confirm',null,'btn primary'), true);
+    }});
+};
+ACT['leave-import-confirm']=()=>{
+  const rows=PENDING_LEAVE_IMPORT; if(!rows) return;
+  const existingIds=new Set((S.leaveApplications||[]).map(a=>a.id));
+  let added=0, skipped=0; const newIds=[];
+  rows.forEach(r=>{
+    const id='LV-IMP-'+r.empNo+'-'+r.date+'-'+r.type;
+    if(existingIds.has(id)){ skipped++; return; }
+    S.leaveApplications.push({id, empNo:r.empNo, type:r.type, start:r.date, end:r.date, days:r.days,
+      year:Number(r.date.slice(0,4)), status:'approved', reason:'', appliedAt:r.date, appliedBy:'import',
+      approvedBy:'ADMIN', approvedAt:r.date, source:'imported'});
+    existingIds.add(id); newIds.push(id); added++;
+  });
+  logAudit('Leave records batch imported', '', added+' added, '+skipped+' already on file');
+  save(); toast(added+' record(s) added'+(skipped?', '+skipped+' already on file':''),'ok'); closeModal(); render();
+  pushLeaveAppsToPortal(newIds);
+  PENDING_LEAVE_IMPORT=null;
+};
 
 function pendingToPo(p){
   return {po:String(p.po).trim(), customer:p.customer||'', poDate:p.poDate||today(),
