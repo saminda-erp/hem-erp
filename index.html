@@ -527,6 +527,12 @@ coaPresets:[],
    set of departments; this never creates or removes an actual login. */
 users:[],
 
+/* Customer feedback — compliments, complaints and survey results logged against a customer,
+   supporting ISO 9001 cl. 9.1.2 (customer satisfaction monitoring). Deliberately empty.
+   Contacts and agreements live directly on each customer record instead of their own
+   collection, since they only ever make sense attached to one customer. */
+customerFeedback:[],
+
 /* Employees — imported from the 2026 staff leave report (28 selected in that export; 24 had
    leave activity to import). Department left blank for HR to assign. */
 employees:[
@@ -1416,7 +1422,7 @@ function pruneImages(){
 function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); }catch(e){} }
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
-const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications'];
+const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback'];
 function reconcile(a,b){
   if(!a) return b; if(!b) return a;
   const out = clone(a);
@@ -3770,7 +3776,7 @@ function V_masters(){
       {h:'Terms', f:c=>esc(c.terms)},
       {h:'Contact', f:c=>esc(c.contact)},
       {h:'Notes', f:c=>'<span class="sub">'+esc(c.notes||'')+'</span>'},
-      {h:'', f:c=>btn('Edit','cust-open',c.code)}
+      {h:'', f:c=>btn('Register','cust-detail',c.code,'btn sm primary')+btn('Edit','cust-open',c.code)}
     ], (S.customers||[]).filter(c=>match(c.name,q)||match(c.code,q)), {empty:'No customers.'});
   } else {
     body=T([
@@ -4895,6 +4901,82 @@ const ACT = {
  'cust-new': ()=> formModal({title:'New customer', fields:[{k:'code',label:'Code',req:true},{k:'name',label:'Name',req:true,full:true},
      {k:'country',label:'Country'},{k:'terms',label:'Payment terms'},{k:'contact',label:'Contact'},{k:'notes',label:'Notes',type:'textarea',full:true}],
      onSave:v=>{ if(!v.code||!v.name) return toast('Code and name are required','bad'); S.customers.push(v); save(); toast('Added','ok'); }}),
+
+ /* ============================================================
+    CUSTOMER REGISTER — company info (above), people we deal with, agreements/NDAs on
+    file (reusing the same PDF-to-filed-pages mechanism as a PO copy), and a feedback log
+    supporting ISO 9001 cl. 9.1.2 (customer satisfaction) and cl. 8.2 (customer communication).
+    ============================================================ */
+ 'cust-detail': a=>{ const c=byId('customers',a,'code'); if(!c) return;
+   modal('Customer register — '+esc(c.name)+' ('+esc(c.code)+')', custDetailHtml(c), btn('Edit company details','cust-open',c.code), true);
+ },
+ 'cust-contact-add': a=>{ const c=byId('customers',a,'code'); if(!c) return;
+   formModal({title:'Add contact — '+c.name,
+     fields:[{k:'name',label:'Name',req:true,full:true},{k:'role',label:'Role / title'},
+       {k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'}],
+     saveLabel:'Add contact',
+     onSave:v=>{ if(!String(v.name||'').trim()) return toast('Name is required','bad');
+       c.contacts=c.contacts||[]; c.contacts.push({id:'CT-'+Date.now(), name:v.name.trim(), role:v.role||'', email:v.email||'', phone:v.phone||''});
+       logAudit('Customer contact added', c.code, v.name); save(); toast('Added','ok'); closeModal(); ACT['cust-detail'](c.code);
+     }});
+ },
+ 'cust-contact-del': a=>{ const [code,id]=a.split('::'); const c=byId('customers',code,'code'); if(!c) return;
+   c.contacts=(c.contacts||[]).filter(p=>p.id!==id);
+   logAudit('Customer contact removed', c.code, ''); save(); toast('Removed','ok'); ACT['cust-detail'](code);
+ },
+ 'cust-agreement-upload': a=>{
+   formModal({title:'Upload agreement',
+     values:{type:'NDA'},
+     fields:[{k:'name',label:'Document name',req:true,full:true,ph:'e.g. Mutual NDA 2026'},
+       {k:'type',label:'Type',type:'select',opts:['NDA','Supply agreement','Quality agreement','Other'],blank:false},
+       {k:'expiryDate',label:'Expiry date (if any)',type:'date'}],
+     saveLabel:'Choose file & upload',
+     onSave:v=>{
+       if(!String(v.name||'').trim()) return toast('Document name is required','bad');
+       closeModal();
+       const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,image/*';
+       inp.onchange=async e=>{
+         const f=e.target.files[0]; if(!f) return;
+         toast('Filing the document…');
+         try{
+           const c=byId('customers',a,'code'); if(!c) return;
+           const pages = /\.pdf$/i.test(f.name)? await pdfToPageImages(f) : [await imageToPageImage(f)];
+           const copy=storePages(pages, f.name);
+           c.agreements=c.agreements||[];
+           c.agreements.push({id:'AG-'+Date.now(), name:v.name.trim(), type:v.type, expiryDate:v.expiryDate||'',
+             copy, uploadedAt:today(), uploadedBy:UI.user||'SS'});
+           logAudit('Customer agreement uploaded', c.code, v.name);
+           save(); toast('Filed','ok'); ACT['cust-detail'](c.code);
+         }catch(err){ toast('Could not file that document: '+err.message,'bad'); }
+       };
+       inp.click();
+     }});
+ },
+ 'cust-feedback-add': a=>{
+   formModal({title:'Log customer feedback',
+     values:{date:today(), type:'compliment', status:'open'},
+     fields:[{k:'date',label:'Date',type:'date',req:true},
+       {k:'type',label:'Type',type:'select',opts:[{v:'compliment',t:'Compliment'},{v:'complaint',t:'Complaint'},{v:'survey',t:'Survey result'},{v:'other',t:'Other'}],blank:false},
+       {k:'description',label:'Description',type:'textarea',full:true,req:true},
+       {k:'rating',label:'Satisfaction rating (1–5, optional)',type:'number'},
+       {k:'response',label:'Our response',type:'textarea',full:true},
+       {k:'status',label:'Status',type:'select',opts:[{v:'open',t:'Open'},{v:'closed',t:'Closed'}],blank:false}],
+     saveLabel:'Log feedback',
+     onSave:v=>{
+       if(!String(v.description||'').trim()) return toast('A description is required','bad');
+       S.customerFeedback.push({id:'FB-'+Date.now(), customer:a, date:v.date||today(), type:v.type, description:v.description.trim(),
+         rating:v.rating?Number(v.rating):null, response:v.response||'', status:v.status||'open', by:UI.user||'SS'});
+       logAudit('Customer feedback logged', a, v.type+' — '+v.description.slice(0,60));
+       save(); toast('Logged','ok'); closeModal(); ACT['cust-detail'](a);
+     }});
+ },
+ 'cust-agreement-view': a=>{ const [code,id]=a.split('::'); AG_VIEWER={code,id,page:0}; drawAgreementViewer(); },
+ 'cust-agreement-page': a=>{ if(AG_VIEWER){ AG_VIEWER.page=+a; drawAgreementViewer(); } },
+ 'cust-agreement-del': a=>{ const [code,id]=a.split('::'); const c=byId('customers',code,'code'); if(!c) return;
+   c.agreements=(c.agreements||[]).filter(x=>x.id!==id);
+   logAudit('Customer agreement removed', c.code, ''); save(); toast('Removed','ok'); ACT['cust-detail'](code);
+ },
+
  'sup-open': a=>{ const s=byId('suppliers',a,'code'); if(!s) return;
    formModal({title:'Supplier '+s.code, values:s, fields:[{k:'name',label:'Name',full:true},{k:'country',label:'Country'},
      {k:'scope',label:'Scope of supply',full:true},{k:'approved',label:'Approved on',type:'date'},
@@ -5738,6 +5820,42 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
    ============================================================ */
 let PENDING = null;      // the PO being reviewed before it is saved
 let VIEWER  = null;      // {poId, page, rev}
+let AG_VIEWER = null;    // {code, id, page} — customer agreement/NDA viewer
+function drawAgreementViewer(){
+  const v=AG_VIEWER; if(!v) return;
+  const c=byId('customers',v.code,'code'); if(!c) return;
+  const ag=(c.agreements||[]).find(x=>x.id===v.id); if(!ag) return;
+  const uri=IMAGES[ag.copy.pages[v.page]];
+  modal(ag.name, '<div class="stage">'+(uri?'<img src="'+uri+'" alt="'+esc(ag.name)+', page '+(v.page+1)+'">':'<div style="color:#bbb;padding:30px">That page is no longer stored.</div>')+'</div>'
+    +(ag.copy.pages.length>1? '<div class="pagestrip">'+ag.copy.pages.map((_,i)=>'<button class="'+(i===v.page?'on':'')+'" data-act="cust-agreement-page" data-arg="'+i+'" type="button">'+(i+1)+'</button>').join('')+'</div>':'')
+    +'<div class="sub" style="text-align:center;margin-top:9px;color:var(--muted)">'+esc(ag.type)+' · uploaded '+esc(ag.uploadedAt)+' by '+esc(ag.uploadedBy)+(ag.expiryDate?' · expires '+esc(ag.expiryDate):'')+'</div>',
+    '', true);
+}
+function custDetailHtml(c){
+  const contacts=c.contacts||[], agreements=c.agreements||[];
+  const feedback=sortBy((S.customerFeedback||[]).filter(f=>f.customer===c.code),'date').reverse();
+  return '<dl class="dl" style="grid-template-columns:auto 1fr auto 1fr;margin-bottom:16px">'
+   +'<dt>Country</dt><dd>'+esc(c.country||'—')+'</dd><dt>Payment terms</dt><dd>'+esc(c.terms||'—')+'</dd>'
+   +'<dt>Notes</dt><dd style="grid-column:span 3">'+esc(c.notes||'—')+'</dd></dl>'
+   + sect('People we deal with', T([
+       {h:'Name', f:p=>esc(p.name)},{h:'Role', f:p=>esc(p.role||'—')},
+       {h:'Email', f:p=>p.email?'<a href="mailto:'+esc(p.email)+'" class="mono" style="font-size:12.5px">'+esc(p.email)+'</a>':'—'},
+       {h:'Phone', f:p=>esc(p.phone||'—')},
+       {h:'', f:p=>btn('Remove','cust-contact-del',c.code+'::'+p.id,'btn sm danger')}
+     ], contacts, {empty:'No contacts on file yet.'}), btn('Add contact','cust-contact-add',c.code,'btn sm primary'))
+   + sect('Agreements & documents — NDA, supply, quality', T([
+       {h:'Document', f:a2=>'<b>'+esc(a2.name)+'</b>'},{h:'Type', f:a2=>tag(a2.type)},
+       {h:'Uploaded', f:a2=>'<span class="mono">'+esc(a2.uploadedAt)+'</span><div class="sub">'+esc(a2.uploadedBy)+'</div>'},
+       {h:'Expiry', f:a2=>a2.expiryDate?'<span class="mono">'+esc(a2.expiryDate)+'</span>':'—'},
+       {h:'', f:a2=>btn('View','cust-agreement-view',c.code+'::'+a2.id)+btn('Remove','cust-agreement-del',c.code+'::'+a2.id,'btn sm danger')}
+     ], agreements, {empty:'No agreements filed yet.'}), btn('Upload agreement','cust-agreement-upload',c.code,'btn sm primary'))
+   + sect('Customer feedback — ISO 9001 cl. 9.1.2 customer satisfaction / cl. 8.2 customer communication', T([
+       {h:'Date', f:f=>'<span class="mono">'+esc(f.date)+'</span>'},{h:'Type', f:f=>tag(f.type)},
+       {h:'Description', f:f=>esc(f.description)},
+       {h:'Rating', f:f=>f.rating?'★'.repeat(f.rating)+'☆'.repeat(5-f.rating):'—'},
+       {h:'Status', f:f=>tag(f.status)},{h:'By', f:f=>esc(f.by)}
+     ], feedback, {empty:'No feedback logged yet.'}), btn('Log feedback','cust-feedback-add',c.code,'btn sm primary'));
+}
 
 /* ---------- image capture ---------- */
 function downscaleToJpeg(srcCanvasOrImg, w){
@@ -6230,7 +6348,10 @@ function hf(k,label,v,type){
 function hfSel(k,label,v,raw){
   const opts=(S.customers||[]).map(c=>'<option value="'+esc(c.code)+'"'+(v===c.code?' selected':'')+'>'+esc(c.name)+'</option>').join('');
   return '<div class="field"><label>'+esc(label)+'</label><select data-h="'+k+'"><option value="">—</option>'+opts+'</select>'
-    +(raw&&!v? '<div class="hint">The document says "'+esc(raw)+'" — pick the matching customer.</div>':'')+'</div>';
+    +(raw&&!v? '<div class="hint">The document says "'+esc(raw)+'" — pick the matching customer, or type it below.</div>':'')
+    +'</div>'
+    +'<div class="field"><label>Not in the list? Type the customer name</label>'
+    +'<input data-h="customerManual" value="" placeholder="'+(raw?esc(raw):'Only needed if the dropdown above is blank')+'"></div>';
 }
 function readReview(){
   const p=PENDING;
@@ -7252,7 +7373,14 @@ function validatePending(){
   if(!String(p.po||'').trim()) return toast('A PO number is required','bad');
   const prior=(S.pos||[]).find(x=>String(x.po).toLowerCase()===String(p.po).toLowerCase());
   if(!p.customer && prior) p.customer=prior.customer;   // a revision inherits the customer on file
-  if(!p.customer) return toast('Pick the customer','bad');
+  if(!p.customer && String(p.customerManual||'').trim()){
+    const cm=matchCustomer(p.customerManual.trim());
+    p.customer=cm.code; p.customerRaw=p.customerManual.trim();
+    if(cm.created){ S.customers.push({code:cm.code, name:cm.name, country:'', terms:p.terms||'', contact:'', notes:'Added while completing a PO.'});
+      logAudit('Customer created', cm.code, cm.name+' — added while completing PO '+(p.po||'')); }
+  }
+  delete p.customerManual;
+  if(!p.customer) return toast('Pick the customer, or type its name in the box below the dropdown','bad');
   if(!(p.lines||[]).some(l=>l.code)) return toast('At least one line with a product code is required','bad');
   return true;
 }
