@@ -3583,7 +3583,8 @@ function leaveTabHtml(){
 
   h += filterBar([selCtl('lyear', years.map(y=>({v:String(y),t:String(y)})), String(year), 'Year'),
     btn('Apply leave','leave-apply',null,'btn primary'), btn('Annual leave report','leave-report',String(year)),
-    btn('Add employee','emp-new'), btn('Batch import employees','emp-import'), btn('Batch import leave records','leave-import')]);
+    btn('Add employee','emp-new'), btn('Batch import employees','emp-import'), btn('Batch import leave records','leave-import'),
+    btn('Upload leave report (PDF)','leave-pdf-import','','btn primary')]);
 
   if(pending.length) h += sect('Pending approval', T([
       {h:'Employee', f:a=>'<b>'+esc(employee(a.empNo).name)+'</b><div class="sub mono">'+esc(a.empNo)+'</div>'},
@@ -7101,7 +7102,7 @@ ACT['emp-import-confirm']=()=>{
 };
 
 /* ---- batch import historical leave records, matching the earlier SQL export format ---- */
-const LEAVE_TYPE_ALIASES=[[/hospital/i,'hospitalization'],[/annual/i,'annual'],[/medical|^\s*mc\s*$/i,'medical'],
+const LEAVE_TYPE_ALIASES=[[/hosp[oi]tal/i,'hospitalization'],[/annual/i,'annual'],[/medical|^\s*mc\s*$/i,'medical'],
   [/emergency/i,'emergency'],[/unpaid/i,'unpaid'],[/time\s*off/i,'timeoff']];
 function matchLeaveTypeCode(raw){
   const r=String(raw||'').trim();
@@ -7165,6 +7166,69 @@ ACT['leave-import-confirm']=()=>{
   save(); toast(added+' record(s) added'+(skipped?', '+skipped+' already on file':''),'ok'); closeModal(); render();
   pushLeaveAppsToPortal(newIds);
   PENDING_LEAVE_IMPORT=null;
+};
+
+/* ---- PDF upload for a leave report — reuses the same pdfToRows() text extraction the
+   Customer PO screen uses. Works from character position within the flat text rather than
+   reconstructed lines, since a leave-type cell that wraps onto two lines in the source PDF
+   (this report does that for "Hospitalization Leave") would otherwise split a single record
+   across two lines and break a line-based parser. ---- */
+function parseLeaveReportText(text){
+  const empRe=/\b(\d{5}|[FP]-?\d{4})\s+([A-Z][A-Z\s\/'.\-]{2,60}?)(?=\s+(?:\d{1,2}\/\d{1,2}\/\d{4}|\d{5}\b|[FP]-?\d{4}\b|Total\s+Day))/g;
+  const employees=[]; let m;
+  while((m=empRe.exec(text))){
+    const name=m[2].trim().replace(/\s+/g,' ');
+    if(name.length<3) continue;
+    employees.push({empNo:m[1], name, index:m.index});
+  }
+  const detailRe=/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+([A-Za-z][A-Za-z\s]{2,60}?)\s+(\d+\.\d{2})\b/g;
+  const records=[];
+  while((m=detailRe.exec(text))){
+    const idx=m.index;
+    let owner=null;
+    for(const e of employees){ if(e.index<=idx) owner=e; else break; }
+    if(!owner) continue;
+    const type=matchLeaveTypeCode(m[4]);
+    if(!type) continue;
+    const date=m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+    records.push({empNo:owner.empNo, date, type, days:Number(m[5])||1});
+  }
+  // de-duplicate employees by empNo (the header can legitimately appear once; this guards
+  // against the same number being picked up twice if the layout repeats it)
+  const seen=new Set(), uniqEmp=[];
+  employees.forEach(e=>{ if(seen.has(e.empNo)) return; seen.add(e.empNo); uniqEmp.push({empNo:e.empNo, name:e.name}); });
+  return {employees:uniqEmp, records};
+}
+ACT['leave-pdf-import']=()=>{
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,application/pdf';
+  inp.addEventListener('change', async ()=>{
+    const file=inp.files[0]; if(!file) return;
+    toast('Reading '+file.name+'…','ok');
+    try{
+      const {text, hasText}=await pdfToRows(file);
+      if(!hasText){ toast('This PDF has no readable text layer — try Batch import (paste) instead.','bad'); return; }
+      const {employees, records}=parseLeaveReportText(text);
+      if(!employees.length && !records.length){ toast('Could not recognise any employees or leave records in this PDF.','bad'); return; }
+      const existingEmp=new Map((S.employees||[]).map(e=>[e.empNo,e]));
+      const existingIds=new Set((S.leaveApplications||[]).map(a=>a.id));
+      const newRecCount=records.filter(r=>!existingIds.has('LV-IMP-'+r.empNo+'-'+r.date+'-'+r.type)).length;
+      PENDING_EMP_IMPORT=employees; PENDING_LEAVE_IMPORT=records;
+      const body='<div class="banner info">Extracted from <b>'+esc(file.name)+'</b>: '+employees.length+' employee(s), '+records.length+' leave record(s) ('+newRecCount+' new — the rest already on file and will be skipped). Check this carefully before confirming.</div>'
+        +'<h3 style="font-size:13px;margin:14px 0 8px">Employees</h3>'
+        +T([{h:'Emp No.',f:e=>'<span class="mono">'+esc(e.empNo)+'</span>'},{h:'Name',f:e=>esc(e.name)},
+            {h:'Status',f:e=>existingEmp.has(e.empNo)?'<span class="tag t-mute">already on file</span>':'<span class="tag t-ok">new</span>'}], employees, {empty:'None recognised.'})
+        +'<h3 style="font-size:13px;margin:14px 0 8px">Leave records'+(records.length>300?' (first 300 of '+records.length+' shown)':'')+'</h3>'
+        +T([{h:'Emp No.',f:r=>'<span class="mono">'+esc(r.empNo)+'</span><div class="sub">'+esc((employees.find(e=>e.empNo===r.empNo)||{}).name||'')+'</div>'},
+            {h:'Date',f:r=>'<span class="mono">'+esc(r.date)+'</span>'},{h:'Type',f:r=>esc(leaveType(r.type).name)},
+            {h:'Days',c:'num',f:r=>nf(r.days)}], records.slice(0,300), {empty:'None recognised.'});
+      modal('Confirm PDF import — '+esc(file.name), body, btn('Confirm import','leave-pdf-import-confirm',null,'btn primary'), true);
+    }catch(e){ console.error(e); toast('Could not read that PDF — '+e.message,'bad'); }
+  });
+  inp.click();
+};
+ACT['leave-pdf-import-confirm']=()=>{
+  if(PENDING_EMP_IMPORT && PENDING_EMP_IMPORT.length) ACT['emp-import-confirm']();
+  if(PENDING_LEAVE_IMPORT && PENDING_LEAVE_IMPORT.length) ACT['leave-import-confirm']();
 };
 
 function pendingToPo(p){
