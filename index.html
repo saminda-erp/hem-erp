@@ -3903,14 +3903,16 @@ function V_audit(){
 /* ============================ MASTERS ============================ */
 function V_masters(){
   const tab=F('tab','products'), q=F('q');
-  const tabLabels={products:'Products',materials:'Materials',boms:'BOM / Batch Sheets',machinery:'Machinery',coapresets:'COA Presets',customers:'Customers',suppliers:'Suppliers'};
+  const tabLabels={products:'Product Register',materials:'Materials',boms:'BOM / Batch Sheets',machinery:'Machinery',coapresets:'COA Presets',customers:'Customers',suppliers:'Suppliers'};
   const tabs=['products','materials','boms','machinery','coapresets','customers','suppliers'].map(t=>
     '<button class="chip'+(tab===t?' on':'')+'" data-chip="tab" data-val="'+t+'" type="button">'+tabLabels[t]+'</button>').join('');
   let body='';
   if(tab==='products'){
-    body=T([
+    body='<div class="banner info">The single source of truth for every product code — created automatically the moment an unrecognised code first appears on a Customer PO (Customer PO Register → the order will show "Create Product Master from PO"), or added here by hand. A product code already registered is never re-created; open it and edit it instead. Item No. and Description mirror what the customer\'s own PO calls it, so a line can always be traced back to its source document.</div>'
+    + T([
+      {h:'Item no.', f:p=>'<span class="mono">'+esc(p.itemNo||'—')+'</span>'},
+      {h:'Description', f:p=>esc(p.name)},
       {h:'Code', f:p=>'<b class="mono">'+esc(p.code)+'</b>'},
-      {h:'Product', f:p=>esc(p.name)},
       {h:'Formula', f:p=>link(p.formula,'rnd-open',p.formula)},
       {h:'BOM', f:p=>{const st=bomStatusFor(p.code);
         return st.state==='approved'? '<span class="tag t-ok">rev '+st.bom.revision+'</span>'
@@ -3922,8 +3924,9 @@ function V_masters(){
       {h:'NPRA notification', f:p=>{const d=daysFromToday(p.npraExp);
         return '<span class="mono">'+esc(p.npra)+'</span><div class="sub"><span class="tag '+(d<0?'t-bad':d<60?'t-warn':'t-ok')+'">'+esc(p.npraExp)+'</span></div>';}},
       {h:'FDA listing', f:p=>'<span class="mono">'+esc(p.fdaListing||'—')+'</span>'},
+      {h:'Source', f:p=>'<span class="sub">'+esc(p.source||'—')+(p.createdAt?'<br>'+esc(p.createdAt):'')+'</span>'},
       {h:'', f:p=>btn('Edit','prod-open',p.code)+btn('Machinery','prod-machines',p.code,'btn sm')}
-    ], (S.products||[]).filter(p=>match(p.code,q)||match(p.name,q)), {empty:'No products.'});
+    ], (S.products||[]).filter(p=>match(p.code,q)||match(p.name,q)||match(p.itemNo,q)), {empty:'No products yet — one is created automatically the first time it appears on a Customer PO, or add one with "+ New product" above.'});
   } else if(tab==='materials'){
     body=T([
       {h:'Code', f:m=>'<b class="mono">'+esc(m.code)+'</b>'},
@@ -4210,6 +4213,29 @@ function bmrHtml(b){
      ], ip, {emptyTitle:'No checks yet', empty:'Record in-process checks from the IPQC screen.'}));
 }
 
+/* Dimensions, formulation and other technical information on the COA — pulled automatically
+   from the Product Master and its linked Formula (both already selected via the batch, so
+   nothing here is retyped), per the requirement that a COA carry more than just the release
+   test panel. Renders nothing for a field that was never entered, rather than a blank row. */
+function coaTechInfoHtml(p,f){
+  const rows=[];
+  if(p.fill) rows.push(['Fill volume', nf(p.fill)+' '+esc(p.fillUom||'')]);
+  if(p.packSize) rows.push(['Pack configuration', nf(p.packSize)+' per '+esc(p.uom||'case')]);
+  if(p.netFillWeight) rows.push(['Net fill weight', nf(p.netFillWeight,3)+' kg']);
+  if(p.density) rows.push(['Density', nf(p.density,3)+' kg/L']);
+  if(p.cartonL&&p.cartonW&&p.cartonH) rows.push(['Carton dimensions (L×W×H)', nf(p.cartonL)+' × '+nf(p.cartonW)+' × '+nf(p.cartonH)+' mm']);
+  else if(p.cartonDims) rows.push(['Carton dimensions', esc(p.cartonDims)]);
+  if(p.shelfLife) rows.push(['Shelf life', nf(p.shelfLife)+' months']);
+  if(f.appearance) rows.push(['Appearance (formula spec)', esc(f.appearance)]);
+  if(f.ph) rows.push(['pH range (formula spec)', esc(f.ph)]);
+  if(f.viscosity) rows.push(['Viscosity (formula spec)', esc(f.viscosity)]);
+  if(f.batchSizeKg) rows.push(['Standard batch size', nf(f.batchSizeKg)+' kg']);
+  if(p.technicalInfo) rows.push(['Technical / formulation notes', esc(p.technicalInfo).replace(/\n/g,'<br>')]);
+  if(!rows.length) return '';
+  const col=r=>r.map(([k,v])=>'<dt>'+esc(k)+'</dt><dd>'+v+'</dd>').join('');
+  return '<div style="margin-bottom:16px"><b style="font-family:var(--disp);font-size:13px">Product dimensions &amp; formulation</b>'
+    +'<dl class="dl" style="grid-template-columns:auto 1fr auto 1fr;margin-top:6px">'+col(rows)+'</dl></div>';
+}
 function coaHtml(c){
   const b=byId('batches',c.batch)||{}, p=product(c.product), f=formula(b.formula)||{};
   const tests=batchQc(c.batch);
@@ -4228,6 +4254,7 @@ function coaHtml(c){
    +'<dt>Customer</dt><dd>'+esc(customerName(c.issuedTo))+'</dd><dt>Issued</dt><dd class="mono">'+esc(c.issuedAt)+'</dd>'
    +'<dt>Formula ref</dt><dd class="mono">'+esc(b.formula||'—')+' v'+esc(f.version||'')+'</dd>'
    +'<dt>NPRA notif.</dt><dd class="mono">'+esc(p.npra||'—')+'</dd></dl>'
+   + coaTechInfoHtml(p,f)
    + T([{h:'Test', f:t=>'<b>'+esc(t.test)+'</b>'}, {h:'Method', f:t=>'<span style="font-size:12px">'+esc(t.method)+'</span>'},
         {h:'Specification', f:t=>esc(t.spec)}, {h:'Result', c:'num', f:t=>'<b class="mono">'+esc(t.result)+'</b>'},
         {h:'', f:t=>tag(t.verdict)}], tests, {empty:'No release tests recorded for this batch.'})
@@ -4944,7 +4971,8 @@ const ACT = {
  'prod-open': a=>{ const p=byId('products',a,'code'); if(!p) return;
    formModal({title:'Product '+p.code, wide:true, values:p, groups:[
     {legend:'Order', fields:[
-     {k:'name',label:'Product name',full:true},{k:'customer',label:'Customer',type:'select',opts:optCustomers()},
+     {k:'itemNo',label:'Item no. (customer\'s own PO/item reference)'},
+     {k:'name',label:'Product name / description',full:true},{k:'customer',label:'Customer',type:'select',opts:optCustomers()},
      {k:'formula',label:'Formula',type:'select',opts:optFormulas()},
      {k:'fill',label:'Fill volume',type:'number'},{k:'fillUom',label:'Fill unit'},
      {k:'packSize',label:'Units per case',type:'number'},{k:'uom',label:'Case code'},
@@ -4962,6 +4990,8 @@ const ACT = {
      {k:'cartonDims',label:'Carton dimensions (L×W×H cm)'},
      {k:'cbmPerCase',label:'CBM per case',type:'number',step:'0.0001'},
      {k:'packagingBom',label:'Packaging BOM reference',hint:'Filled in automatically once a BOM is approved for this product'},
+     {k:'technicalInfo',label:'Technical / formulation notes (prints on the COA)',type:'textarea',full:true,
+      hint:'Appearance, dimensions, or any other technical detail not already covered by the linked Formula — shown automatically on every COA for this product.'},
      {k:'notes',label:'Notes',type:'textarea',full:true}]},
     {legend:'Packing / shipping master', fields:[
      {k:'caseNetWeight',label:'Net weight per case (kg)',type:'number',step:'0.001'},
@@ -4975,7 +5005,8 @@ const ACT = {
  },
  'prod-new': ()=> formModal({title:'New product', wide:true, values:{packSize:40, fillUom:'ml', shelfLife:30},
    groups:[
-    {legend:'Order', fields:[{k:'code',label:'Product code',req:true},{k:'name',label:'Product name',req:true,full:true},
+    {legend:'Order', fields:[{k:'itemNo',label:'Item no. (customer\'s own PO/item reference)'},
+     {k:'code',label:'Product code',req:true},{k:'name',label:'Product name / description',req:true,full:true},
      {k:'customer',label:'Customer',type:'select',opts:optCustomers()},{k:'formula',label:'Formula',type:'select',opts:optFormulas()},
      {k:'fill',label:'Fill volume',type:'number'},{k:'fillUom',label:'Fill unit'},{k:'packSize',label:'Units per case',type:'number'},
      {k:'uom',label:'Case code'},{k:'shelfLife',label:'Shelf life (months)',type:'number'},
@@ -4985,7 +5016,8 @@ const ACT = {
      {k:'mfgType',label:'Manufacturing type',type:'select',opts:[{v:'Liquid',t:'Liquid'},{v:'Soap',t:'Soap'},{v:'Powder',t:'Powder'},{v:'Other',t:'Other'}]},
      {k:'variant',label:'Variant / fragrance'},
      {k:'netFillWeight',label:'Net fill weight (kg)',type:'number',step:'0.001',hint:'If left blank, calculated from fill volume × density'},
-     {k:'density',label:'Density (kg/L)',type:'number',step:'0.001'}]},
+     {k:'density',label:'Density (kg/L)',type:'number',step:'0.001'},
+     {k:'technicalInfo',label:'Technical / formulation notes (prints on the COA)',type:'textarea',full:true}]},
     {legend:'Packing / shipping master', fields:[
      {k:'caseNetWeight',label:'Net weight per case (kg)',type:'number',step:'0.001'},
      {k:'caseGrossWeight',label:'Gross weight per case (kg)',type:'number',step:'0.001'},
@@ -4994,24 +5026,30 @@ const ACT = {
      {k:'casesPerPallet',label:'Cases per pallet',type:'number'},{k:'palletWeight',label:'Standard pallet weight (kg)',type:'number'}]}
    ],
    onSave:v=>{ if(!v.code||!v.name) return toast('Code and name are required','bad');
-     S.products.push(Object.assign({status:'active'},v)); logAudit('Product created', v.code, v.name); save(); toast('Added','ok'); }}),
+     if(byId('products',v.code,'code')) return toast('That product code already exists — repeat products are not re-registered, open the existing one and edit it instead','bad');
+     if(v.itemNo){ const dup=(S.products||[]).find(x=>x.itemNo && x.itemNo===v.itemNo && x.customer===v.customer);
+       if(dup) toast('Note: item no. '+v.itemNo+' is already registered against '+dup.code+' for this customer — check this is not a duplicate','bad'); }
+     S.products.push(Object.assign({status:'active', source:'Manual entry', createdAt:today()},v));
+     logAudit('Product created', v.code, v.name); save(); toast('Added','ok'); }}),
  /* "Create Product Master from PO" — pre-fills what the order already told us; the rest is
     left for the person to complete, nothing about it is guessed */
  'prod-from-po': a=>{ const [poId,code]=a.split('::'); const po=byId('pos',poId); if(!po) return;
    const line=(po.lines||[]).find(l=>l.code===code); if(!line) return;
    formModal({title:'Create product '+code+' from '+esc(po.po), wide:true,
-     values:{code, name:line.desc||code, customer:po.customer, uom:line.uom||'', packSize:line.packSize||40},
+     values:{code, itemNo:line.itemNo||'', name:line.desc||code, customer:po.customer, uom:line.uom||'', packSize:line.packSize||40},
      groups:[{legend:'From the order — check these', fields:[
-       {k:'code',label:'Product code',req:true},{k:'name',label:'Product name',req:true,full:true},
+       {k:'itemNo',label:'Item no. (customer\'s own PO/item reference)'},
+       {k:'code',label:'Product code',req:true},{k:'name',label:'Product name / description',req:true,full:true},
        {k:'customer',label:'Customer',type:'select',opts:optCustomers()},
        {k:'packSize',label:'Units per case',type:'number'},{k:'uom',label:'Case code'}]},
       {legend:'Still needed', fields:[
        {k:'formula',label:'Formula',type:'select',opts:optFormulas()},
        {k:'fill',label:'Fill volume',type:'number'},{k:'fillUom',label:'Fill unit'},
-       {k:'shelfLife',label:'Shelf life (months)',type:'number'}]}],
+       {k:'shelfLife',label:'Shelf life (months)',type:'number'},
+       {k:'technicalInfo',label:'Technical / formulation notes (prints on the COA)',type:'textarea',full:true}]}],
      onSave:v=>{ if(!v.code||!v.name) return toast('Code and name are required','bad');
-       if(byId('products',v.code,'code')) return toast('That product code already exists','bad');
-       S.products.push(Object.assign({status:'active'},v));
+       if(byId('products',v.code,'code')) return toast('That product code already exists — repeat products are not re-registered, open the existing one and edit it instead','bad');
+       S.products.push(Object.assign({status:'active', source:'PO '+po.po, createdAt:today()},v));
        logAudit('Product created from PO', v.code, v.name+' — from '+po.po);
        save(); toast('Product created — the requirement preview will pick it up now','ok'); closeModal(); render(); }});
  },
@@ -5033,17 +5071,19 @@ const ACT = {
    const line=po&&(po.lines||[]).find(l=>l.code===code);
    const existing=byId('products',code,'code');
    formModal({title:(existing?'Complete product setup — ':'New product — ')+code, wide:true,
-     values: existing || {code, name:(line&&line.desc)||code, customer:po&&po.customer, packSize:(line&&line.packSize)||40, fillUom:'ml', shelfLife:30, status:'active'},
+     values: existing || {code, itemNo:(line&&line.itemNo)||'', name:(line&&line.desc)||code, customer:po&&po.customer, packSize:(line&&line.packSize)||40, fillUom:'ml', shelfLife:30, status:'active'},
      intro:'From '+(po?esc(po.po):'')+'. Saving becomes the permanent Product Master and Packing Master for <b>'+esc(code)+'</b> — every future PO with this code will use it automatically.',
      groups:[
       {legend:'Product', fields:[
-        {k:'code',label:'Product code',req:true},{k:'name',label:'Product name',req:true,full:true},
+        {k:'itemNo',label:'Item no. (customer\'s own PO/item reference)'},
+        {k:'code',label:'Product code',req:true},{k:'name',label:'Product name / description',req:true,full:true},
         {k:'customer',label:'Customer',type:'select',opts:optCustomers()},
         {k:'category',label:'Product category'},
         {k:'mfgType',label:'Manufacturing type',type:'select',opts:[{v:'Liquid',t:'Liquid'},{v:'Soap',t:'Soap'},{v:'Powder',t:'Powder'},{v:'Other',t:'Other'}]},
         {k:'variant',label:'Variant / fragrance'},
         {k:'fill',label:'Fill volume',type:'number'},{k:'fillUom',label:'Fill unit'},
-        {k:'netFillWeight',label:'Net fill weight (kg)',type:'number',step:'0.001'},{k:'density',label:'Density (kg/L)',type:'number',step:'0.001'}]},
+        {k:'netFillWeight',label:'Net fill weight (kg)',type:'number',step:'0.001'},{k:'density',label:'Density (kg/L)',type:'number',step:'0.001'},
+        {k:'technicalInfo',label:'Technical / formulation notes (prints on the COA)',type:'textarea',full:true}]},
       {legend:'Packing / shipping master', fields:[
         {k:'packSize',label:'Units per case',type:'number',req:true},
         {k:'caseNetWeight',label:'Net weight per case (kg)',type:'number',step:'0.001',req:true},
@@ -5055,8 +5095,8 @@ const ACT = {
      extraFoot: btn('Also set up the BOM','bom-new',code)+btn('Also set up COA Preset','preset-new',code),
      onSave:v=>{
        if(!v.code||!v.name) return toast('Code and name are required','bad');
-       if(!existing && byId('products',v.code,'code')) return toast('That product code already exists','bad');
-       if(existing) Object.assign(existing,v); else S.products.push(Object.assign({status:'active'},v));
+       if(!existing && byId('products',v.code,'code')) return toast('That product code already exists — repeat products are not re-registered, open the existing one and edit it instead','bad');
+       if(existing) Object.assign(existing,v); else S.products.push(Object.assign({status:'active', source:'PO '+(po?po.po:''), createdAt:today()},v));
        logAudit(existing?'Product setup completed':'Product created from PO', v.code, v.name+(po?' — from '+po.po:''));
        save(); toast('Saved — '+v.code+' is now set up permanently','ok'); closeModal(); render();
      }});
@@ -5513,12 +5553,13 @@ ACT['po-import-commit'] = ()=>{
       S.customers.push({code:o.customer, name:o.newCustomer.name, country:'', terms:o.terms||'', contact:'', notes:'Added by import from the PO Register.'});
     o.lines.forEach(l=>{
       if(l.code && !byId('products',l.code,'code')){
-        S.products.push({code:l.code, name:l.desc||l.code, customer:o.customer, formula:'', packSize:0, uom:'',
-          fill:0, fillUom:'ml', shelfLife:24, npra:'', npraExp:'', fdaListing:'', status:'active'});
+        S.products.push({code:l.code, itemNo:l.itemNo||'', name:l.desc||l.code, customer:o.customer, formula:'', packSize:0, uom:'',
+          fill:0, fillUom:'ml', shelfLife:24, npra:'', npraExp:'', fdaListing:'', status:'active',
+          source:'PO '+o.po, createdAt:today()});
         stubs++;
       }
     });
-    const lines=o.lines.map(l=>({code:l.code, desc:l.desc||'', cases:l.cases, price:l.price,
+    const lines=o.lines.map(l=>({code:l.code, desc:l.desc||'', itemNo:l.itemNo||'', cases:l.cases, price:l.price,
       total:l.total||+(l.cases*l.price).toFixed(2), uom:l.uom||'', packSize:l.packSize||0, note:l.note||''}));
     if(o.existing){
       Object.assign(o.existing, {customer:o.customer||o.existing.customer, poDate:o.poDate, shipBy:o.shipBy,
@@ -6016,6 +6057,27 @@ document.addEventListener('change', e=>{
   UI.filters[UI.view]=UI.filters[UI.view]||{}; UI.filters[UI.view][f]=e.target.value; render();
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+/* Product Register auto-fill on the PO line editor — when a Product Code the person types or
+   picks from the datalist matches an existing record, its description/UOM/pack size are
+   filled in automatically (only into fields still blank, so a manually-typed description is
+   never overwritten), so the same product never has to be redescribed by hand on every PO. */
+document.addEventListener('change', e=>{
+  const el=e.target;
+  if(!(el.dataset && el.dataset.l!=null && el.dataset.k==='code')) return;
+  if(!el.closest('#modal-root') || !PENDING) return;
+  readReview();
+  const i=+el.dataset.l, line=PENDING.lines[i]; if(!line) return;
+  const resolved=resolveLineCode(String(line.code||'').trim());
+  const p=resolved && byId('products',resolved,'code');
+  if(p){
+    if(resolved!==line.code) line.code=resolved; /* a known alias — normalise to our own code */
+    if(!line.desc) line.desc=p.name;
+    if(!line.uom) line.uom=p.uom||'';
+    if(!line.packSize) line.packSize=p.packSize||0;
+    if(!line.itemNo && p.itemNo) line.itemNo=p.itemNo;
+  }
+  openReview();
+});
 
 /* ---------------- boot ---------------- */
 window.HEM_ON_LOGIN = function(email){
@@ -6478,7 +6540,7 @@ ACT['po-read-paste'] = ()=>{
 };
 ACT['po-manual'] = ()=>{
   PENDING={po:'', customer:'', poDate:today(), shipBy:'', terms:'', shipTo:'', customerNote:'', notes:'',
-    source:'Manual entry', lines:[{code:'',desc:'',cases:0,price:0,total:0,uom:'',note:'',packSize:0}]};
+    source:'Manual entry', lines:[{code:'',desc:'',itemNo:'',cases:0,price:0,total:0,uom:'',note:'',packSize:0}]};
   openReview();
 };
 
@@ -6530,7 +6592,7 @@ async function handleFiles(files){
 
   PENDING = extracted || {po:'', customer:'', poDate:today(), shipBy:'', terms:'', shipTo:'',
     customerNote:'', notes:'', source:(files[0]&&files[0].name)||'Upload',
-    lines:[{code:'',desc:'',cases:0,price:0,total:0,uom:'',note:'',packSize:0}]};
+    lines:[{code:'',desc:'',itemNo:'',cases:0,price:0,total:0,uom:'',note:'',packSize:0}]};
   if(copy) PENDING.copy=copy;
   PENDING.warn=warn;
   openReview();
@@ -6540,8 +6602,11 @@ async function handleFiles(files){
 function lineRow(l,i){
   const f=(k,cls,type)=>'<input class="'+(cls||'')+'" type="'+(type||'text')+'" data-l="'+i+'" data-k="'+k+'" value="'+esc(l[k]==null?'':l[k])+'">';
   const bad = l.qtyFixed;
+  const known = l.code && byId('products',l.code,'code');
   return '<tr'+(bad?' class="fixrow"':'')+'>'
-   +'<td>'+f('code','wmed')+'</td>'
+   +'<td>'+f('itemNo','wnarrow')+'</td>'
+   +'<td><input class="wmed" type="text" list="hemProductCodes" data-l="'+i+'" data-k="code" value="'+esc(l.code||'')+'">'
+     +(known?'<div class="sub" style="color:var(--ok)">✓ in Product Register — description/pack will fill in</div>':l.code?'<div class="sub" style="color:var(--bad)">new — will be registered on save</div>':'')+'</td>'
    +'<td>'+f('desc')+'</td>'
    +'<td class="num">'+f('cases','wnarrow','number')+(bad?'<div class="sub">was '+nf(l.qtyWas)+'</div>':'')+'</td>'
    +'<td>'+f('uom','wnarrow')+'</td>'
@@ -6606,10 +6671,12 @@ function openReview(){
    +'<div class="field full"><label>Our internal notes</label><textarea data-h="notes" rows="2">'+esc(p.notes||'')+'</textarea></div>'
    +'</div></fieldset>'
    +'<fieldset><legend>Lines</legend>'
-   +'<div class="tw"><table class="lgrid"><thead><tr><th>Product code</th><th>Description</th><th class="num">Cases</th>'
+   +'<datalist id="hemProductCodes">'+(S.products||[]).map(pr=>'<option value="'+esc(pr.code)+'">'+esc(pr.name)+'</option>').join('')+'</datalist>'
+   +'<div class="hint" style="margin-bottom:8px">Type or pick a Product Code already in the Product Register (Masters → Product Register) and its description, pack size and case code fill in automatically. A code not on file is registered as a new product when this order is saved.</div>'
+   +'<div class="tw"><table class="lgrid"><thead><tr><th>Item no.</th><th>Product code</th><th>Description</th><th class="num">Cases</th>'
    +'<th>UOM</th><th class="num">Pack</th><th class="num">Price/cs</th><th class="num">Line total</th><th>Special note</th><th></th></tr></thead>'
    +'<tbody>'+(p.lines||[]).map(lineRow).join('')+'</tbody>'
-   +'<tfoot><tr><td colspan="2"><b>'+(p.lines||[]).length+' lines</b></td><td class="num"><b>'+nf(totalCases)+'</b></td>'
+   +'<tfoot><tr><td colspan="3"><b>'+(p.lines||[]).length+' lines</b></td><td class="num"><b>'+nf(totalCases)+'</b></td>'
    +'<td colspan="3"></td><td class="num"><b>'+money(totalValue)+'</b></td><td colspan="2"></td></tr></tfoot></table></div>'
    +'<div class="pillrow" style="margin-top:10px">'+btn('Add a line','line-add')+btn('Re-check the arithmetic','line-recheck')+'</div>'
    +'</fieldset>';
@@ -6640,7 +6707,7 @@ function readReview(){
   });
   return p;
 }
-ACT['line-add']    = ()=>{ readReview(); PENDING.lines.push({code:'',desc:'',cases:0,price:0,total:0,uom:'',note:'',packSize:0}); openReview(); };
+ACT['line-add']    = ()=>{ readReview(); PENDING.lines.push({code:'',desc:'',itemNo:'',cases:0,price:0,total:0,uom:'',note:'',packSize:0}); openReview(); };
 ACT['line-del']    = a=>{ readReview(); PENDING.lines.splice(+a,1); openReview(); };
 ACT['line-recheck']= ()=>{ readReview();
   PENDING.lines.forEach(l=>{ delete l.qtyFixed; delete l.qtyWas; verifyLine(l); });
@@ -7855,7 +7922,7 @@ function pendingToPo(p){
     shipBy:p.shipBy|| new Date(new Date(p.poDate||today()).getTime()+(S.settings.defaultShipDays||30)*864e5).toISOString().slice(0,10),
     terms:p.terms||'', shipTo:p.shipTo||'', buyer:p.buyer||'', contact:p.contact||'', fob:p.fob||'', shipVia:p.shipVia||'',
     customerNote:p.customerNote||'', notes:p.notes||'', source:p.source||'',
-    lines:(p.lines||[]).filter(l=>l.code).map(l=>({code:String(l.code).trim(), desc:l.desc||'', cases:toNum(l.cases),
+    lines:(p.lines||[]).filter(l=>l.code).map(l=>({code:String(l.code).trim(), desc:l.desc||'', itemNo:l.itemNo||'', cases:toNum(l.cases),
       price:toNum(l.price), total:toNum(l.total)||+(toNum(l.cases)*toNum(l.price)).toFixed(2),
       uom:l.uom||'', packSize:toNum(l.packSize)||packSizeFrom(l.uom||'',l.code), note:l.note||''})),
     value:(p.lines||[]).reduce((s,l)=>s+(toNum(l.total)||toNum(l.cases)*toNum(l.price)),0)};
@@ -7889,8 +7956,9 @@ ACT['po-save'] = ()=>{
   if(p.copy) rec.copy=p.copy;
   S.pos.push(rec); newPriceRows(rec);
   (rec.lines||[]).forEach(l=>{ if(!byId('products',l.code,'code'))
-    S.products.push({code:l.code, name:l.desc||l.code, customer:rec.customer, formula:'', packSize:l.packSize||0,
-      uom:l.uom||'', fill:0, fillUom:'ml', shelfLife:24, npra:'', npraExp:'', fdaListing:'', status:'active'}); });
+    S.products.push({code:l.code, itemNo:l.itemNo||'', name:l.desc||l.code, customer:rec.customer, formula:'', packSize:l.packSize||0,
+      uom:l.uom||'', fill:0, fillUom:'ml', shelfLife:24, npra:'', npraExp:'', fdaListing:'', status:'active',
+      source:'PO '+rec.po, createdAt:today()}); });
   logAudit('Order received', rec.id, rec.po+' · '+nf(rec.lines.length)+' lines · '+money(rec.value));
   PENDING=null; save(); closeModal(); render(); renderNav();
   toast(rec.po+' saved to the register','ok');
