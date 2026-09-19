@@ -1481,10 +1481,16 @@ function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); retur
 const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs'];
 /* clone(SEED) with every operational collection emptied — settings/company config untouched.
    Used only when WIPE_FLAG is set, so a post-factory-reset boot never re-merges the shipped
-   example data back in (see WIPE_FLAG comment above). */
+   example data back in (see WIPE_FLAG comment above).
+   WIPE_EXEMPT collections are reference/master data, not the operational transactions (customer
+   orders, batches, stock movements...) a factory reset is meant to clear — sopDocs is the
+   Document Control register, seeded once from the company's real ISO 9001/22716 master list;
+   a factory reset must not erase that catalogue. reconcile()'s ordinary by-id merge still lets
+   any real edits made to it (a filed copy, a revision) persist normally from localStorage. */
+const WIPE_EXEMPT = ['sopDocs'];
 function blankedSeed(){
   const b = clone(SEED);
-  COLLECTIONS.forEach(k=>{ b[k]=[]; });
+  COLLECTIONS.forEach(k=>{ if(!WIPE_EXEMPT.includes(k)) b[k]=[]; });
   return b;
 }
 function reconcile(a,b){
