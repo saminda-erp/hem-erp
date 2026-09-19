@@ -6549,6 +6549,22 @@ document.addEventListener('change', e=>{
   openReview();
 });
 
+/* Formula auto-fill on any form that has both a Product field and a Formula field (batch
+   creation, "Plan a batch"...) — the moment a product with an already-linked formula is
+   picked, its formula appears on its own; a value the person has already chosen themselves is
+   never overwritten. This is what makes a formula "continuously used and automatically appear"
+   once it has been linked on the Product Register or from a PO line, rather than having to be
+   reselected by hand at every batch. */
+document.addEventListener('change', e=>{
+  const el=e.target;
+  if(!(el.dataset && el.dataset.f==='product')) return;
+  if(!el.closest('#modal-root')) return;
+  const formulaEl = document.querySelector('#modal-root [data-f="formula"]');
+  if(!formulaEl || formulaEl.value) return;
+  const p = byId('products', el.value, 'code');
+  if(p && p.formula) formulaEl.value = p.formula;
+});
+
 /* ---------------- boot ---------------- */
 window.HEM_ON_LOGIN = function(email){
   UI.userEmail = email||'';
@@ -7124,6 +7140,12 @@ function lineRow(l,i){
   const f=(k,cls,type)=>'<input class="'+(cls||'')+'" type="'+(type||'text')+'" data-l="'+i+'" data-k="'+k+'" value="'+esc(l[k]==null?'':l[k])+'">';
   const bad = l.qtyFixed;
   const known = l.code && byId('products',l.code,'code');
+  /* Formula picked here (mainly for a brand-new code, since a known code already carries its
+     own linked formula) is written straight onto the product stub when the order is saved —
+     see ACT['po-save'] — so a common formula shared across products can be assigned the moment
+     the product is first introduced, not only afterwards from the Product Register. */
+  const formulaSel = '<select data-l="'+i+'" data-k="formula"><option value="">'+(known?'— use Product Register\'s —':'— none yet —')+'</option>'
+    +(S.formulas||[]).map(fo=>'<option value="'+esc(fo.id)+'"'+(l.formula===fo.id?' selected':'')+'>'+esc(fo.id)+' — '+esc(fo.name)+'</option>').join('')+'</select>';
   return '<tr'+(bad?' class="fixrow"':'')+'>'
    +'<td>'+f('itemNo','wnarrow')+'</td>'
    +'<td><input class="wmed" type="text" list="hemProductCodes" data-l="'+i+'" data-k="code" value="'+esc(l.code||'')+'">'
@@ -7134,6 +7156,7 @@ function lineRow(l,i){
    +'<td class="num">'+f('packSize','wnarrow','number')+'</td>'
    +'<td class="num">'+f('price','wnarrow','number')+'</td>'
    +'<td class="num">'+f('total','wnarrow','number')+'</td>'
+   +'<td>'+formulaSel+'</td>'
    +'<td>'+f('note')+'</td>'
    +'<td>'+btn('×','line-del',String(i))+'</td></tr>';
 }
@@ -7195,10 +7218,10 @@ function openReview(){
    +'<datalist id="hemProductCodes">'+(S.products||[]).map(pr=>'<option value="'+esc(pr.code)+'">'+esc(pr.name)+'</option>').join('')+'</datalist>'
    +'<div class="hint" style="margin-bottom:8px">Type or pick a Product Code already in the Product Register (Masters → Product Register) and its description, pack size and case code fill in automatically. A code not on file is registered as a new product when this order is saved.</div>'
    +'<div class="tw"><table class="lgrid"><thead><tr><th>Item no.</th><th>Product code</th><th>Description</th><th class="num">Cases</th>'
-   +'<th>UOM</th><th class="num">Pack</th><th class="num">Price/cs</th><th class="num">Line total</th><th>Special note</th><th></th></tr></thead>'
+   +'<th>UOM</th><th class="num">Pack</th><th class="num">Price/cs</th><th class="num">Line total</th><th>Formula</th><th>Special note</th><th></th></tr></thead>'
    +'<tbody>'+(p.lines||[]).map(lineRow).join('')+'</tbody>'
    +'<tfoot><tr><td colspan="3"><b>'+(p.lines||[]).length+' lines</b></td><td class="num"><b>'+nf(totalCases)+'</b></td>'
-   +'<td colspan="3"></td><td class="num"><b>'+money(totalValue)+'</b></td><td colspan="2"></td></tr></tfoot></table></div>'
+   +'<td colspan="3"></td><td class="num"><b>'+money(totalValue)+'</b></td><td colspan="3"></td></tr></tfoot></table></div>'
    +'<div class="pillrow" style="margin-top:10px">'+btn('Add a line','line-add')+btn('Re-check the arithmetic','line-recheck')+'</div>'
    +'</fieldset>';
 
@@ -7228,7 +7251,7 @@ function readReview(){
   });
   return p;
 }
-ACT['line-add']    = ()=>{ readReview(); PENDING.lines.push({code:'',desc:'',itemNo:'',cases:0,price:0,total:0,uom:'',note:'',packSize:0}); openReview(); };
+ACT['line-add']    = ()=>{ readReview(); PENDING.lines.push({code:'',desc:'',itemNo:'',cases:0,price:0,total:0,uom:'',note:'',packSize:0,formula:''}); openReview(); };
 ACT['line-del']    = a=>{ readReview(); PENDING.lines.splice(+a,1); openReview(); };
 ACT['line-recheck']= ()=>{ readReview();
   PENDING.lines.forEach(l=>{ delete l.qtyFixed; delete l.qtyWas; verifyLine(l); });
@@ -8445,7 +8468,7 @@ function pendingToPo(p){
     customerNote:p.customerNote||'', notes:p.notes||'', source:p.source||'',
     lines:(p.lines||[]).filter(l=>l.code).map(l=>({code:String(l.code).trim(), desc:l.desc||'', itemNo:l.itemNo||'', cases:toNum(l.cases),
       price:toNum(l.price), total:toNum(l.total)||+(toNum(l.cases)*toNum(l.price)).toFixed(2),
-      uom:l.uom||'', packSize:toNum(l.packSize)||packSizeFrom(l.uom||'',l.code), note:l.note||''})),
+      uom:l.uom||'', packSize:toNum(l.packSize)||packSizeFrom(l.uom||'',l.code), note:l.note||'', formula:l.formula||''})),
     value:(p.lines||[]).reduce((s,l)=>s+(toNum(l.total)||toNum(l.cases)*toNum(l.price)),0)};
 }
 /* a revision often arrives as a bare line list — never let a blank wipe a field we already hold */
@@ -8476,10 +8499,17 @@ ACT['po-save'] = ()=>{
   rec.id='PO-'+rec.po; rec.status='planned'; rec.revision=0; rec.revisions=[];
   if(p.copy) rec.copy=p.copy;
   S.pos.push(rec); newPriceRows(rec);
-  (rec.lines||[]).forEach(l=>{ if(!byId('products',l.code,'code'))
-    S.products.push({code:l.code, itemNo:l.itemNo||'', name:l.desc||l.code, customer:rec.customer, formula:'', packSize:l.packSize||0,
-      uom:l.uom||'', fill:0, fillUom:'ml', shelfLife:24, npra:'', npraExp:'', fdaListing:'', status:'active',
-      source:'PO '+rec.po, createdAt:today()}); });
+  (rec.lines||[]).forEach(l=>{
+    const existingProd = byId('products',l.code,'code');
+    if(!existingProd)
+      S.products.push({code:l.code, itemNo:l.itemNo||'', name:l.desc||l.code, customer:rec.customer, formula:l.formula||'', packSize:l.packSize||0,
+        uom:l.uom||'', fill:0, fillUom:'ml', shelfLife:24, npra:'', npraExp:'', fdaListing:'', status:'active',
+        source:'PO '+rec.po, createdAt:today()});
+    /* A formula picked on the PO line editor for a product that already exists (e.g. assigning
+       a shared/common formula the first time it comes up) is applied here too, so it only has
+       to be chosen once and then keeps appearing automatically everywhere that product is used. */
+    else if(l.formula && !existingProd.formula) existingProd.formula = l.formula;
+  });
   logAudit('Order received', rec.id, rec.po+' · '+nf(rec.lines.length)+' lines · '+money(rec.value));
   PENDING=null; save(); closeModal(); render(); renderNav();
   toast(rec.po+' saved to the register','ok');
