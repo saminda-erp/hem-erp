@@ -480,6 +480,7 @@ legend{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(
 <script type="application/json" id="hem-images">/*IMG_START*/{}/*IMG_END*/</script>
 <script data-hem src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script data-hem src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script data-hem src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
 <div id="app">
   <aside id="rail" data-collapsed="0">
     <div class="brandbox">
@@ -6274,7 +6275,55 @@ async function pdfToRows(file){
     });
     text+='\n';
   }
-  return {rows, text, hasText:rows.length>0};
+  if(rows.length===0){
+    /* No text layer at all — this is what "Print to PDF" (rather than "Export to PDF" or a real
+       PDF export) produces: every character is vector artwork, nothing for the reader above to
+       find. Fall back to OCR on a rendered image of each page, in the browser, via Tesseract.js.
+       It's slower and can misread a character here and there, so callers must know the result
+       came from OCR (the `ocr:true` flag) so the review screen can ask for a careful check —
+       but it turns what used to be a dead end into something that mostly just works. */
+    try{
+      const ocr = await pdfToRowsByOcr(pdf);
+      if(ocr.rows.length) return {rows:ocr.rows, text:ocr.text, hasText:true, ocr:true};
+    }catch(e){ /* OCR unavailable or failed — fall through to the plain "no text" result below */ }
+  }
+  return {rows, text, hasText:rows.length>0, ocr:false};
+}
+
+/* Same row/cell reconstruction as above, but from an OCR pass over a rendered page image
+   instead of a PDF text layer — used only when the PDF has no text layer at all. */
+async function pdfToRowsByOcr(pdf){
+  if(typeof Tesseract==='undefined') throw new Error('OCR reader did not load');
+  const rows=[]; let text='';
+  const n=Math.min(pdf.numPages, 6); // OCR is slow; a PO is rarely more than a few pages
+  for(let i=1;i<=n;i++){
+    const page=await pdf.getPage(i);
+    const vp=page.getViewport({scale:2.2}); // higher resolution than the filed copy, for legibility
+    const c=document.createElement('canvas'); c.width=vp.width; c.height=vp.height;
+    await page.render({canvasContext:c.getContext('2d'), viewport:vp}).promise;
+    const result = await Tesseract.recognize(c, 'eng');
+    const data = result && result.data || {};
+    text += (data.text||'')+'\n';
+    const words=(data.words||[]).filter(w=>w.text && w.text.trim());
+    const lines=new Map();
+    words.forEach(w=>{
+      const box=w.bbox||{};
+      const y=Math.round(((box.y0||0)+(box.y1||0))/2/4)*4;   // 4px tolerance, top-to-bottom
+      if(!lines.has(y)) lines.set(y,[]);
+      lines.get(y).push({x:box.x0||0, s:w.text.trim(), w:(box.x1||0)-(box.x0||0)});
+    });
+    [...lines.entries()].sort((a,b)=>a[0]-b[0]).forEach(([,items])=>{
+      items.sort((a,b)=>a.x-b.x);
+      const cells=[]; let cur='', lastEnd=null;
+      items.forEach(it=>{
+        if(lastEnd!=null && it.x-lastEnd > 14){ cells.push(cur.trim()); cur=''; }
+        cur += (cur?' ':'')+it.s; lastEnd = it.x + it.w;
+      });
+      if(cur.trim()) cells.push(cur.trim());
+      if(cells.length) rows.push(cells);
+    });
+  }
+  return {rows, text};
 }
 
 /* pull header fields out of the flat text of the document */
@@ -6561,7 +6610,7 @@ async function handleFiles(files){
       try{ copy=storePages(await pdfToPageImages(pdfs[0]), pdfs[0].name); }
       catch(e){ warn='The PDF pages could not be rendered, so no copy was filed ('+e.message+'). Attach a screenshot of the order instead.'; }
       try{
-        const {rows,text,hasText}=await pdfToRows(pdfs[0]);
+        const {rows,text,hasText,ocr}=await pdfToRows(pdfs[0]);
         if(hasText){
           const hdr=grabHeader(text, rows), lines=rowsToLines(rows);
           const cm=matchCustomer(hdr.customer);
@@ -6569,10 +6618,13 @@ async function handleFiles(files){
             poDate:hdr.poDate?normDate(hdr.poDate):today(),
             shipBy:hdr.shipBy?normDate(hdr.shipBy):'', terms:hdr.terms||'', shipTo:hdr.shipTo||'',
             buyer:hdr.buyer||'', contact:hdr.contact||'', fob:hdr.fob||'', shipVia:hdr.shipVia||'',
-            customerNote:'', notes:'', source:'PDF — '+pdfs[0].name, lines};
-          if(!lines.length) warn='The PDF has a text layer but no line items could be recognised in it. Check the lines below.';
+            customerNote:'', notes:'', source:(ocr?'PDF (OCR) — ':'PDF — ')+pdfs[0].name, lines};
+          if(ocr) warn='This PDF has no text layer — every character is artwork — so the fields and lines below were read with OCR instead. '
+             +'OCR can misread similar-looking characters (0/O, 1/l/I, 5/S), so check every code, quantity and price against '
+             +(copy?'the filed copy ':'the original ')+'before saving.';
+          else if(!lines.length) warn='The PDF has a text layer but no line items could be recognised in it. Check the lines below.';
         } else {
-          warn='This PDF has no text layer — every character is artwork, so nothing can be extracted from it. '
+          warn='This PDF has no text layer — every character is artwork, so nothing can be extracted from it, and OCR could not read it either. '
              +(copy? 'The picture has been filed; enter the lines below.' : 'Enter the lines below.')
              +' This is what "Microsoft Print to PDF" produces; ask the customer to use Export → PDF, or to send CSV, and uploads become one click permanently.';
         }
