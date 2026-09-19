@@ -481,6 +481,7 @@ legend{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(
 <script data-hem src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script data-hem src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script data-hem src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+<script data-hem src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <div id="app">
   <aside id="rail" data-collapsed="0">
     <div class="brandbox">
@@ -3557,6 +3558,113 @@ function V_trace(){
         +'<div style="height:16px"></div>'+traceChain(sel) : '<div class="empty"><b>No batches yet</b>Create one in Production.</div>');
 }
 
+/* ============================================================
+   FORMULATION UPLOAD — standard .xlsx template, download & import
+   ============================================================
+   The user works with real Excel master lists elsewhere in this system
+   (the Document Master List that seeded the SOP register), so the
+   formulation upload follows the same pattern: a downloadable .xlsx
+   template with two sheets — "Formula Header" (one row per formulation)
+   and "Formula Items" (one row per raw material in that formulation) —
+   plus an "Instructions" sheet. FORMULA_TEMPLATE_B64 below is that exact
+   file, generated once and embedded so no extra request or server is
+   needed to hand it out. Uploading a filled copy is parsed client-side
+   with SheetJS (loaded above) — nothing is sent anywhere else. */
+const FORMULA_TEMPLATE_B64 = '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';
+function downloadFormulaTemplate(){
+  const bin = atob(FORMULA_TEMPLATE_B64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  const blob = new Blob([bytes], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='HE-Formulation-Upload-Template.xlsx';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+/* Reads a filled copy of that template (.xlsx) and returns a validated,
+   not-yet-committed preview: which formulas will be created vs. updated,
+   their composition, and warnings (missing material/product codes, a
+   composition that doesn't total ~100%) — so nothing is written to S
+   until the user confirms what they see. */
+function parseFormulaWorkbook(wb){
+  const shName = wb.SheetNames.find(n=>/formula\s*header/i.test(n));
+  const itName = wb.SheetNames.find(n=>/formula\s*items?/i.test(n));
+  if(!shName) throw new Error('No "Formula Header" sheet found — use the downloaded template unmodified.');
+  const headerRows = XLSX.utils.sheet_to_json(wb.Sheets[shName], {defval:''});
+  const itemRows = itName? XLSX.utils.sheet_to_json(wb.Sheets[itName], {defval:''}) : [];
+  const get = (row,...keys)=>{ for(const k of keys){ if(row[k]!==undefined&&row[k]!=='') return row[k]; } return ''; };
+  const formulas = [];
+  headerRows.forEach(row=>{
+    const id = String(get(row,'Formula Code*','Formula Code')).trim();
+    if(!id || /^sample/i.test(String(get(row,'Notes')))&&!get(row,'Formula Name*','Formula Name')) return;
+    if(!id) return;
+    const name = String(get(row,'Formula Name*','Formula Name')).trim();
+    if(!name) return;
+    const productCodes = String(get(row,'Linked Product Code(s)*','Linked Product Code(s)')).split(',').map(s=>s.trim()).filter(Boolean);
+    const items = itemRows.filter(r=> String(get(r,'Formula Code*','Formula Code')).trim()===id).map(r=>({
+      phase: String(get(r,'Phase')).trim(),
+      code: String(get(r,'Material Code*','Material Code')).trim(),
+      pct: Number(get(r,'% w/w*','% w/w'))||0,
+      fn: String(get(r,'Function')).trim()
+    })).filter(i=>i.code);
+    const existing = byId('formulas', id);
+    const warnings = [];
+    productCodes.forEach(pc=>{ if(!byId('products',pc,'code')) warnings.push('Product code "'+pc+'" was not found in the Product Register — it will not be linked.'); });
+    items.forEach(i=>{ if(!byId('materials',i.code,'code')) warnings.push('Material code "'+i.code+'" was not found in the Materials Master.'); });
+    const total = items.reduce((s,i)=>s+i.pct,0);
+    if(items.length && Math.abs(total-100)>0.5) warnings.push('Composition totals '+total.toFixed(2)+'% — expected 100%.');
+    if(!items.length) warnings.push('No composition rows found on "Formula Items" for this formula code.');
+    formulas.push({
+      id, name, productCodes, items, warnings, isNew: !existing,
+      version: String(get(row,'Version'))||( existing? existing.version:'0.1'),
+      status: String(get(row,'Status'))||(existing?existing.status:'draft'),
+      stage: String(get(row,'Stage'))||(existing?existing.stage:'lab trial'),
+      batchSizeKg: Number(get(row,'Standard Batch Size (kg)'))||(existing?existing.batchSizeKg:0),
+      density: Number(get(row,'Density (g/mL)'))||(existing?existing.density:1),
+      ph: String(get(row,'pH Range'))||(existing?existing.ph:''),
+      viscosity: String(get(row,'Viscosity Range'))||(existing?existing.viscosity:''),
+      appearance: String(get(row,'Appearance'))||(existing?existing.appearance:''),
+      owner: String(get(row,'Owner (initials)'))||(existing?existing.owner:''),
+      approvedBy: String(get(row,'Approved By (initials)'))||(existing?existing.approvedBy:''),
+      approvedOn: String(get(row,'Approved On (YYYY-MM-DD)'))||(existing?existing.approvedOn:''),
+      procedure: String(get(row,'Manufacturing Procedure'))||(existing?existing.procedure:''),
+      notes: String(get(row,'Notes'))||(existing?existing.notes:'')
+    });
+  });
+  return formulas;
+}
+function formulaImportPreview(parsed){
+  const warnCount = parsed.reduce((s,f)=>s+f.warnings.length,0);
+  const body = (warnCount? '<div class="banner warn">'+warnCount+' warning(s) below — the import still goes ahead; nothing here blocks it, but check them before relying on the result.</div>':'')
+    + T([
+        {h:'Formula', f:f=>'<b class="mono">'+esc(f.id)+'</b><div class="sub">'+esc(f.name)+'</div>'},
+        {h:'', f:f=>f.isNew?'<span class="tag t-info">new</span>':'<span class="tag t-warn">will update existing</span>'},
+        {h:'Items', c:'num', f:f=>nf(f.items.length)},
+        {h:'Total %', c:'num', f:f=>{const t=f.items.reduce((s,i)=>s+i.pct,0); return '<span class="mono"'+(Math.abs(t-100)>0.5?' style="color:var(--bad)"':'')+'>'+nf(t,2)+'</span>';}},
+        {h:'Links to', f:f=>f.productCodes.length? f.productCodes.map(c=>'<span class="mono" style="font-size:12px">'+esc(c)+'</span>').join('<br>'):'<span class="tag t-mute">none</span>'},
+        {h:'Warnings', f:f=>f.warnings.length? '<span class="tag t-warn">'+f.warnings.length+'</span>':'<span class="tag t-ok">none</span>'}
+      ], parsed, {empty:'No formula rows recognised in that file — check it matches the template.'})
+    + (warnCount? '<div class="note" style="margin-top:10px">'+parsed.flatMap(f=>f.warnings.map(w=>'<b>'+esc(f.id)+'</b> — '+esc(w))).join('<br>')+'</div>':'');
+  modal('Import preview — '+parsed.length+' formulation'+(parsed.length===1?'':'s'), body,
+    parsed.length? btn('Confirm import','formula-import-commit',null,'btn primary'):false, true);
+  FORMULA_IMPORT_PENDING = parsed;
+}
+let FORMULA_IMPORT_PENDING = null;
+function formulaImportPick(){
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='.xlsx,.xls';
+  inp.onchange = async e=>{
+    const file = e.target.files[0]; if(!file) return;
+    try{
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const parsed = parseFormulaWorkbook(wb);
+      if(!parsed.length){ toast('No formula rows recognised — check the file matches the template.','bad'); return; }
+      formulaImportPreview(parsed);
+    }catch(err){ toast('Could not read that file: '+err.message,'bad'); }
+  };
+  inp.click();
+}
 /* ============================ R&D / FORMULATION ============================ */
 function V_rnd(){
   const sel = UI.sel.rnd, q=F('q');
@@ -3605,7 +3713,8 @@ function V_rnd(){
     {k:'In development', v:nf((S.formulas||[]).filter(f=>f.status!=='approved').length), d:'trial or draft', cls:'info'},
     {k:'Without stability data', v:nf((S.formulas||[]).filter(f=>!(f.stability||[]).length).length), d:'PIF gap if commercial', cls:(S.formulas||[]).filter(f=>!(f.stability||[]).length&&f.status==='approved').length?'warn':''}
   ])
-  + filterBar([searchCtl('q',q,'Formula code or name'), btn('New formulation','formula-new',null,'btn primary')])
+  + filterBar([searchCtl('q',q,'Formula code or name'), btn('New formulation','formula-new',null,'btn primary'),
+      btn('Download formulation template (.xlsx)','formula-template',null,'btn'), btn('Import formulations (.xlsx)','formula-import',null,'btn')])
   + T([
       {h:'Formula', f:f=>'<b class="mono">'+esc(f.id)+'</b><div class="sub">v'+esc(f.version)+'</div>'},
       {h:'Name', f:f=>esc(f.name)},
@@ -5601,6 +5710,7 @@ const ACT = {
    onSave:v=>{ if(!v.id||!v.name) return toast('Code and name are required','bad');
      S.formulas.push(Object.assign({items:[], stability:[], approvedBy:'', approvedOn:''}, v));
      logAudit('Formulation created', v.id, v.name); save(); toast(v.id+' created — add its composition next','ok'); go('rnd', v.id); }}),
+
  'settings-edit': ()=> formModal({title:'Company details and linked systems', wide:true,
    values:Object.assign({}, S.settings, {linkPoRegister:(S.settings.links||{}).poRegister||'', linkLoadingReport:(S.settings.links||{}).loadingReport||''}),
    groups:[{legend:'Company', fields:[
@@ -8375,6 +8485,27 @@ ACT['po-save-fix'] = ()=>{
 /* ---------- filed copies ---------- */
 ACT['copy-attach-pending'] = ()=>{ readReview(); pickCopy(null); };
 ACT['copy-attach'] = a=>pickCopy(a);
+
+/* ---------- Formulation upload (standard template + import) — statement-style, after the
+   const ACT declaration on purpose, same reason as the blocks below. ---------- */
+ACT['formula-template'] = ()=> downloadFormulaTemplate();
+ACT['formula-import'] = ()=> formulaImportPick();
+ACT['formula-import-commit'] = ()=>{
+  const parsed = FORMULA_IMPORT_PENDING||[]; let created=0, updated=0, linked=0;
+  parsed.forEach(f=>{
+    let rec = byId('formulas', f.id);
+    const fields = {id:f.id, name:f.name, version:f.version, status:f.status, stage:f.stage, batchSizeKg:f.batchSizeKg,
+      density:f.density, ph:f.ph, viscosity:f.viscosity, appearance:f.appearance, owner:f.owner, approvedBy:f.approvedBy,
+      approvedOn:f.approvedOn, procedure:f.procedure, notes:f.notes, items:f.items};
+    if(rec){ Object.assign(rec, fields); updated++; }
+    else { rec = Object.assign({stability:[]}, fields); S.formulas.push(rec); created++; }
+    f.productCodes.forEach(pc=>{ const p=byId('products',pc,'code'); if(p){ p.formula=f.id; linked++; } });
+  });
+  logAudit('Formulations imported', '', created+' created, '+updated+' updated, '+linked+' product link(s)');
+  save(); closeModal(); FORMULA_IMPORT_PENDING=null;
+  toast(created+' created, '+updated+' updated, '+linked+' product'+(linked===1?'':'s')+' linked','ok');
+  render();
+};
 
 /* ---------- Document Control / SOP Register: change-control actions (placed after the
    const ACT declaration on purpose — see ways-of-working note on the ACT temporal-dead-zone
