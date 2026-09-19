@@ -1354,7 +1354,8 @@ function inArr(a,v){ return Array.isArray(a)&&a.includes(v); }
 function toast(msg, kind){
   const t=document.createElement('div'); t.className='toastmsg'+(kind?' '+kind:''); t.textContent=msg;
   $('#toast').appendChild(t);
-  setTimeout(()=>{t.style.transition='opacity .4s';t.style.opacity='0';setTimeout(()=>t.remove(),450);},2600);
+  const life = kind==='bad' ? 9000 : 2600; /* a "you might lose data" warning needs longer than a routine toast */
+  setTimeout(()=>{t.style.transition='opacity .4s';t.style.opacity='0';setTimeout(()=>t.remove(),450);},life);
   return false;
 }
 
@@ -1414,8 +1415,10 @@ function readEmbedded(){
 function readLocal(){
   try{ const v = localStorage.getItem(LS_KEY); return v? JSON.parse(v):null; }catch(e){ return null; }
 }
+let lastSaveErr = null;
 function writeLocal(){
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); }catch(e){}
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); return true; }
+  catch(e){ lastSaveErr = e; return false; }
 }
 function encodeState(){
   return btoa(unescape(encodeURIComponent(JSON.stringify(S))));
@@ -1448,7 +1451,7 @@ function pruneImages(){
   });
   Object.keys(IMAGES).forEach(id=>{ if(!keep.has(id)) delete IMAGES[id]; });
 }
-function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); }catch(e){} }
+function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); return true; }catch(e){ lastSaveErr = e; return false; } }
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
 const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput'];
@@ -1477,9 +1480,31 @@ function reconcile(a,b){
 }
 
 let pubTimer=null;
-function markSaved(kind){ saveState=kind; const c=$('#savechip'); if(c){ c.className='savechip'+(kind==='saved'?' on':kind==='error'?' err':''); c.textContent = kind==='saving'?'saving…':kind==='saved'?'saved '+new Date().toTimeString().slice(0,5):kind==='local'?'saved locally':kind==='error'?'not shared':''; } }
+function markSaved(kind){ saveState=kind; const c=$('#savechip'); if(c){ c.className='savechip'+(kind==='saved'?' on':(kind==='error'||kind==='full')?' err':''); c.textContent = kind==='saving'?'saving…':kind==='saved'?'saved '+new Date().toTimeString().slice(0,5):kind==='local'?'saved locally':kind==='full'?'NOT SAVED — storage full':kind==='error'?'not shared':''; } }
+/* This is the one place that decides whether the user is told their work is safe.
+   writeLocal()/writeImagesLocal() can fail silently (browser storage quota exceeded is the
+   common real-world case once a few filed PO/agreement PDF pages accumulate) — if either
+   write actually failed, we must NOT let the debounced publish() call later stamp this
+   as "saved locally", because on the real hem-erp.com deployment (no artifact host) that
+   is the ONLY persistence there is. A refresh after a failed write reverts to whatever last
+   truly made it into storage — this is what previously showed up as "my new PO disappeared
+   on refresh" with no warning at all. */
 function save(reason){
-  pruneImages(); writeLocal(); writeImagesLocal(); dirty=true; markSaved('saving');
+  pruneImages();
+  lastSaveErr = null;
+  const okState = writeLocal();
+  const okImages = writeImagesLocal();
+  dirty = true;
+  if(!okState || !okImages){
+    markSaved('full');
+    const quota = lastSaveErr && (lastSaveErr.name==='QuotaExceededError' || lastSaveErr.code===22 || lastSaveErr.code===1014);
+    toast(quota
+      ? 'NOT SAVED — this browser\'s storage is full. Go to Settings → Data, export a backup now, then remove old filed PO/document copies to free space before entering more data.'
+      : 'NOT SAVED — this browser could not store your changes. Export a backup from Settings → Data and try again.',
+      'bad');
+    return;
+  }
+  markSaved('saving');
   clearTimeout(pubTimer);
   pubTimer = setTimeout(()=>publish(reason), 1400);
 }
@@ -4014,7 +4039,14 @@ function V_settings(){
    + '<dt>Certifications</dt><dd style="font-size:12.5px">'+esc(st.isoCerts)+'</dd></dl>'
    + '<div style="margin-top:12px">'+btn('Edit company details','settings-edit',null,'btn')+'</div></div>'
    + '<div class="card"><h3>Authorised signatories</h3>'
-   + T([{h:'Initials',f:s=>'<b class="mono">'+esc(s.init)+'</b>'},{h:'Name',f:s=>esc(s.name)},{h:'Role',f:s=>esc(s.role)}], st.signatories||[])
+   + T([{h:'Initials',f:s=>'<b class="mono">'+esc(s.init)+'</b>'},{h:'Name',f:s=>esc(s.name)},{h:'Role',f:s=>esc(s.role)},
+        {h:'Responsible for', f:s=>{const areas=(s.areas||[]).map(id=>{
+            for(const g of PERM_SECTIONS){ const it=g.items.find(x=>x.id===id); if(it) return it.label; } return id; });
+          return (areas.length? '<div style="margin-bottom:3px">'+areas.map(a=>'<span class="tag t-mute" style="margin:1px 3px 1px 0">'+esc(a)+'</span>').join('') : '')
+            + (s.responsibilities? '<div class="sub" style="max-width:260px">'+esc(s.responsibilities)+'</div>' : (areas.length?'':'—'));}},
+        {h:'', f:s=>btn('Edit','sig-open',s.init,'btn sm')+btn('Remove','sig-del',s.init,'btn sm danger')}
+      ], st.signatories||[])
+   + '<div class="pillrow" style="margin-top:11px">'+btn('Add signatory','sig-new',null,'btn primary')+'</div>'
    + '<div class="note" style="margin-top:11px">Release decisions, material dispositions and COAs are signed with these initials and stored with the record. Only the QA Manager acts as the qualified person for finished product release.</div></div>'
    + '</div>'
    + sect('Linked systems', '<div class="card">'
@@ -5970,9 +6002,30 @@ window.HEM_ON_LOGIN = function(email){
 };
 if(window.HEM_USER_EMAIL) window.HEM_ON_LOGIN(window.HEM_USER_EMAIL);
 
+/* Catches two real-world causes of "my data vanished on refresh" up front, at load time,
+   instead of only after a failed write: (1) storage blocked entirely — private/incognito
+   windows in some browsers, or a device policy — where every save will silently fail from
+   the very first entry; (2) storage already close to full from previously filed PO/document
+   page images, which is a QuotaExceededError waiting to happen on the next upload. Both were
+   previously invisible to the user because writeLocal()/writeImagesLocal() swallow their
+   errors and the UI still said "saved locally" regardless. */
+function storageHealthCheck(){
+  try{
+    const k='__hem_probe__'; localStorage.setItem(k,'1'); localStorage.removeItem(k);
+  }catch(e){
+    toast('This browser is not able to save any changes right now (private/incognito window, or storage is blocked/full). Anything you enter will be LOST on refresh until this is fixed — use a normal browser window, or free up storage in Settings → Data.', 'bad');
+    return;
+  }
+  try{
+    const stateLen=(localStorage.getItem(LS_KEY)||'').length, imgLen=(localStorage.getItem(IMG_LS_KEY)||'').length;
+    const totalMB=(stateLen+imgLen)/1024/1024;
+    if(totalMB>4) toast('Browser storage is at '+totalMB.toFixed(1)+' MB and getting full. Export a backup from Settings → Data and remove old filed PO/document copies soon — once storage is full, new entries will stop saving.', 'bad');
+  }catch(e){}
+}
 function boot(){
   captureDoc();
   try{ const t=localStorage.getItem('hem-theme'); if(t) document.documentElement.setAttribute('data-theme',t); }catch(e){}
+  storageHealthCheck();
   const embImg=readImages(), locImg=readImagesLocal();
   IMAGES = Object.assign({}, embImg||{}, locImg||{});
   const emb=readEmbedded(), loc=readLocal();
@@ -7177,6 +7230,61 @@ ACT['user-del'] = a=>{
       S.users=(S.users||[]).filter(x=>x.id!==u.id);
       logAudit('User permission record removed', u.email, '');
       save(); toast('Removed','ok'); closeModal(); render(); renderNav();
+    }});
+};
+
+/* ============================================================
+   AUTHORISED SIGNATORY EDITOR — allocates responsibility two ways: a free-text statement
+   (what a QMS document usually records for cl. 5.3 roles/responsibilities/authorities) and
+   a structured set of department/section tags, reusing the exact same checklist as the User
+   Permissions editor so "responsible for" and "has access to" stay visually consistent.
+   ============================================================ */
+let PENDING_SIG=null;
+function openSigEditor(){
+  const s=PENDING_SIG; if(!s) return;
+  const checks=PERM_SECTIONS.map(g=>'<div style="margin-bottom:10px"><b style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">'+esc(g.group)+'</b>'
+    +'<div class="pillrow" style="margin-top:6px">'
+    +g.items.map(it=>'<label style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;border:1px solid var(--line);border-radius:20px;padding:4px 10px 4px 8px;cursor:pointer">'
+      +'<input type="checkbox" data-area="'+it.id+'" '+((s.areas||[]).includes(it.id)?'checked':'')+' style="margin:0">'+esc(it.label)+'</label>').join('')
+    +'</div></div>').join('');
+  const body='<div class="fgrid">'
+   + hf('init','Initials',s.init) + hf('name','Name',s.name) + hf('role','Role / title',s.role)
+   + '</div>'
+   + '<div class="field full" style="margin-top:6px"><label>Responsibilities (free text — what this person is accountable and authorised for)</label>'
+   + '<textarea data-h="responsibilities" rows="3">'+esc(s.responsibilities||'')+'</textarea></div>'
+   + '<div style="margin-top:12px"><b style="font-size:12.5px">Responsible for (department / section)</b>'
+   + '<div style="font-size:12px;color:var(--muted);margin:4px 0 8px">Tags shown in the signatories table for a quick at-a-glance view. Optional.</div>'+checks+'</div>';
+  modal((s._isNew?'Add':'Edit')+' authorised signatory', body, btn('Save','sig-save',null,'btn primary'), true);
+}
+ACT['sig-new']=()=>{ PENDING_SIG={init:'', name:'', role:'', responsibilities:'', areas:[], _isNew:true}; openSigEditor(); };
+ACT['sig-open']=a=>{ const s=(S.settings.signatories||[]).find(x=>x.init===a); if(!s) return; PENDING_SIG=clone(s); openSigEditor(); };
+ACT['sig-save']=()=>{
+  const s=PENDING_SIG; if(!s) return;
+  document.querySelectorAll('#modal-root [data-h]').forEach(el=>{ s[el.dataset.h]=el.value; });
+  const areas=[]; document.querySelectorAll('#modal-root [data-area]').forEach(el=>{ if(el.checked) areas.push(el.dataset.area); });
+  s.areas=areas;
+  if(!String(s.init||'').trim()) return toast('Initials are required','bad');
+  if(!String(s.name||'').trim()) return toast('Name is required','bad');
+  const isNew=s._isNew; delete s._isNew;
+  S.settings.signatories=S.settings.signatories||[];
+  if(isNew){
+    if(S.settings.signatories.some(x=>x.init===s.init)) return toast('Those initials are already in use','bad');
+    S.settings.signatories.push(s);
+  } else {
+    const i=S.settings.signatories.findIndex(x=>x.init===s.init);
+    if(i>-1) S.settings.signatories[i]=s; else S.settings.signatories.push(s);
+  }
+  logAudit(isNew?'Signatory added':'Signatory updated', s.init, s.name+' — '+s.role);
+  save(); toast('Saved','ok'); closeModal(); render();
+};
+ACT['sig-del']=a=>{ const s=(S.settings.signatories||[]).find(x=>x.init===a); if(!s) return;
+  formModal({title:'Remove signatory — '+s.name,
+    intro:'This removes them from the authorised signatory list. It does not change any past record they already signed — those keep their initials permanently.',
+    fields:[{k:'confirm',label:'Type REMOVE to confirm',full:true}], saveLabel:'Remove',
+    onSave:v=>{ if(v.confirm!=='REMOVE') return toast('Type REMOVE to confirm','bad');
+      S.settings.signatories=(S.settings.signatories||[]).filter(x=>x.init!==a);
+      logAudit('Signatory removed', a, s.name);
+      save(); toast('Removed','ok'); closeModal(); render();
     }});
 };
 
