@@ -568,6 +568,16 @@ machines:[],
    standardOutputPerDay and flags it as such. Deliberately empty. */
 productMachineOutput:[],
 
+/* Document Control / SOP Register — every controlled document in the company's ISO 9001:2015 /
+   ISO 22716 / Malaysian GMP quality system: the Level 1 Manual & Appendixes, Level 2 Procedures,
+   Level 3 Work Instructions (GMP SOPs), and the Forms & Records registers kept per department
+   (GE/MT/PU/PR/QC/ST). Seeded verbatim from the company's own "DOCUMENT MASTER LIST - LATEST.xlsx"
+   — doc no., name, department, current revision, effective date and retention period are exactly
+   as recorded there. `fileId` is deliberately empty for every entry: the actual controlled copy
+   (PDF/image) is attached inside the app, never invented here. `history` starts empty; the current
+   revision recorded above becomes history[0] once a first change-control action runs against it. */
+sopDocs:[{"id": "SOP-0001", "seq": 1, "docNo": "HE-QM", "name": "Quality Manual", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "1", "effectiveDate": "2023-11-07", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0002", "seq": 2, "docNo": "Appendix I", "name": "Organization Chart", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0003", "seq": 3, "docNo": "Appendix II", "name": "Sequence & Interaction of Processes", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0004", "seq": 4, "docNo": "Appendix III", "name": "Quality Policy", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0005", "seq": 5, "docNo": "Appendix IV", "name": "Quality Objectives", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0006", "seq": 6, "docNo": "Appendix V", "name": "External & Internal Issues and Interested Parties", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0007", "seq": 7, "docNo": "Appendix VI", "name": "Sexual Harassment Policy", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-11-07", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0008", "seq": 8, "docNo": "Appendix VII", "name": "Whistle-blowing Policy", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-11-07", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0009", "seq": 9, "docNo": "Appendix VIII", "name": "Mental Health Policy", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-11-07", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0010", "seq": 10, "docNo": "HE - JD", "name": "Job Description", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0011", "seq": 11, "docNo": "HE - QCP", "name": "Quality Control Plan", "kind": "document", "level": "Level 1 \u2014 Manual & Appendixes", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0012", "seq": 12, "docNo": "HE-HR-P01", "name": "Competency, Training & Awareness Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "01", "effectiveDate": "2023-11-07", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0013", "seq": 13, "docNo": "HE-MT-P01", "name": "Management of Change Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0014", "seq": 14, "docNo": "HE-MT-P02", "name": "Control of Documented Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0015", "seq": 15, "docNo": "HE-MT-P03", "name": "Control of Non-Conformity Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0016", "seq": 16, "docNo": "HE-MT-P04", "name": "Corrective Action", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0017", "seq": 17, "docNo": "HE-MT-P05", "name": "Risk Assessment Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0018", "seq": 18, "docNo": "HE-MT-P06", "name": "Internal Audit & Management Review Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0019", "seq": 19, "docNo": "HE-OP-P01", "name": "Operational Planning & Control Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0020", "seq": 20, "docNo": "HE-OP-P02", "name": "Product Identification & Traceability Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0021", "seq": 21, "docNo": "HE-OP-P03", "name": "Infrastructure Maintenance Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0022", "seq": 22, "docNo": "HE-PU-P01", "name": "Control of Externally Provided Processes, Products & Services Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0023", "seq": 23, "docNo": "HE-CS-P01", "name": "Customer Enquiry, Complaint & Feedback Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0024", "seq": 24, "docNo": "HE-QA-P01", "name": "Control of Product Development Procedure", "kind": "document", "level": "Level 2 \u2014 Procedures", "dept": "M", "revision": "0", "effectiveDate": "2023-06-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0025", "seq": 25, "docNo": "GE/01/01", "name": "Preparation of SOP", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0026", "seq": 26, "docNo": "GE/02/01", "name": "Numbering System", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0027", "seq": 27, "docNo": "GE/03/01", "name": "Organization Chart & Job Description", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0028", "seq": 28, "docNo": "GE/04/01", "name": "Medical Check-Up", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0029", "seq": 29, "docNo": "GE/05/01", "name": "GMP Training", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0030", "seq": 30, "docNo": "GE/06/01", "name": "Pest Control", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0031", "seq": 31, "docNo": "GE/07/01", "name": "Self-Inspection Report", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0032", "seq": 32, "docNo": "GE/08/01", "name": "Product Complaint", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0033", "seq": 33, "docNo": "GE/09/01", "name": "Product Recall", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0034", "seq": 34, "docNo": "GE/10/01", "name": "Planned Preventive Maintenance", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0035", "seq": 35, "docNo": "GE/11/00", "name": "Calibration Maintenance", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0036", "seq": 36, "docNo": "GE/12/02", "name": "Aircond Maintenance", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "A", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0037", "seq": 37, "docNo": "PR/01/01", "name": "Procedure for Change Rooms", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0038", "seq": 38, "docNo": "PR/04/00", "name": "Procedure for Buffer Room - Raw Materials", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0039", "seq": 39, "docNo": "PR/05/00", "name": "Procedure for Buffer Room - Finished Goods", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0040", "seq": 40, "docNo": "PR/06/00", "name": "Procedure for Buffer Room - Packing Materials", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0041", "seq": 41, "docNo": "PR/07/00", "name": "Issuing of Batch Master Records", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0042", "seq": 42, "docNo": "PR/08/01", "name": "Weighing Procedure - Raw Materials", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0043", "seq": 43, "docNo": "PR/09/00", "name": "Temperature Monitoring Procedure - Production", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0044", "seq": 44, "docNo": "PR/10/00", "name": "Cleaning Housekeeping Equipment", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0045", "seq": 45, "docNo": "PR/11/00", "name": "Tooling Maintenance", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0046", "seq": 46, "docNo": "PR/12/01", "name": "Maintenance of Machines and GMP Premises", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0047", "seq": 47, "docNo": "PR/13/00", "name": "Room Cleaning", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0048", "seq": 48, "docNo": "PR/14/00", "name": "Rubbish Disposable Procedure", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0049", "seq": 49, "docNo": "PR/15/00", "name": "Machine Cleaning", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0050", "seq": 50, "docNo": "PR/16/00", "name": "Cleaning of Mould", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0051", "seq": 51, "docNo": "PR/17/00", "name": "Storage of Raw Soap in WIP Room", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0052", "seq": 52, "docNo": "PR/18/00", "name": "Tube Filling", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "P", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0053", "seq": 53, "docNo": "QC/01/01", "name": "Sampling Procedure for Raw Materials", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "Q", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0054", "seq": 54, "docNo": "QC/02/00", "name": "Retained Samples", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "Q", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0055", "seq": 55, "docNo": "QC/03/01", "name": "In Process Quality Control (IPQC)", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "Q", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0056", "seq": 56, "docNo": "QC/04/01", "name": "Finished Product Release Procedure (FPQC)", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "Q", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0057", "seq": 57, "docNo": "QC/05/00", "name": "Specification for Raw Materials", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "Q", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0058", "seq": 58, "docNo": "QC/06/00", "name": "Specification for Packaging Materials Procedure", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "Q", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0059", "seq": 59, "docNo": "QC/07/00", "name": "Specificaton for Finished Product", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "Q", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0060", "seq": 60, "docNo": "QC/08/00", "name": "Tube Filling Quality Control", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "Q", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0061", "seq": 61, "docNo": "ST/01/00", "name": "Cleaning and Safety", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "S", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0062", "seq": 62, "docNo": "ST/02/00", "name": "Handling of Raw Materials", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "S", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0063", "seq": 63, "docNo": "ST/03/01", "name": "Handling of Packing Materials", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "S", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0064", "seq": 64, "docNo": "ST/04/01", "name": "Handling of Finished Products", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "S", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0065", "seq": 65, "docNo": "ST/05/00", "name": "Temperature Monitoring Procedure - Store", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "S", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0066", "seq": 66, "docNo": "ST/06/00", "name": "Handling Tube Filling Materials - Final Products", "kind": "document", "level": "Level 3 \u2014 Work Instructions (GMP SOP)", "dept": "S", "revision": "01", "effectiveDate": "2023-09-01", "retention": "2 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0067", "seq": 67, "docNo": "GE/01A", "name": "Sop Change Control Form", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0068", "seq": 68, "docNo": "GE/01B", "name": "Sop Distribution & Retrieval Form", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0069", "seq": 69, "docNo": "GE/01C", "name": "Expired Sop Destruction Form", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0070", "seq": 70, "docNo": "GE/03A", "name": "Organization Chart", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "obsolete + 1 year", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0071", "seq": 71, "docNo": "GE/05A", "name": "Training Program", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "employment term + 6 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0072", "seq": 72, "docNo": "GE/05B", "name": "Training Attendance Record", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "employment term + 6 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0073", "seq": 73, "docNo": "GE/05C", "name": "Training Evaluation Record", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "employment term + 6 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0074", "seq": 74, "docNo": "GE/05D", "name": "Training Needs Analysis Form", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "employment term + 6 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0075", "seq": 75, "docNo": "GE/05E", "name": "New Employees Orientation Form", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "employment term + 6 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0076", "seq": 76, "docNo": "GE/05F", "name": "Staff Training History Form", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "employment term + 6 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0077", "seq": 77, "docNo": "GE/06A", "name": "Gmp - Floor Plan", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0078", "seq": 78, "docNo": "GE/07A", "name": "Self-Inspection Checklist", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0079", "seq": 79, "docNo": "GE/07B", "name": "Self - Inspection Report", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0080", "seq": 80, "docNo": "GE/07C", "name": "Audit Schedule", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0081", "seq": 81, "docNo": "GE/07D", "name": "Audit Findings And Capa Report", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0082", "seq": 82, "docNo": "GE/07E", "name": "Iso 9001:2015 Internal Audit Programme", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0083", "seq": 83, "docNo": "GE/07F", "name": "Iso 9001:2015 Internal Audit Plan", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0084", "seq": 84, "docNo": "GE/07G", "name": "Iso 9001:2015 Internal Audit Checklist", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0085", "seq": 85, "docNo": "GE/07H", "name": "Iso 9001:2015 Internal Audit Summary Report", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0086", "seq": 86, "docNo": "GE/08A", "name": "Product Complaint Report Form", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "AL", "revision": "B", "effectiveDate": "2023-09-01", "retention": "product shelf life", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0087", "seq": 87, "docNo": "GE/08B", "name": "Contact Nos Of 2 Product Complaint Team Members", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0088", "seq": 88, "docNo": "GE/09A", "name": "Product Recall Report", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "AL", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0089", "seq": 89, "docNo": "GE/09B", "name": "Contact Nos Of 2 Recall Team Members", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0090", "seq": 90, "docNo": "GE/10A", "name": "Planned Preventive Equipment Maintenance Master List", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0091", "seq": 91, "docNo": "GE/11A", "name": "Equipment Calibration Master List", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0092", "seq": 92, "docNo": "GE/11B", "name": "Equipment Maintenance Record", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0093", "seq": 93, "docNo": "GE/12A", "name": "Air Conditioning Master List", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0094", "seq": 94, "docNo": "GE/12B", "name": "Air Conditioining Unit Cleaning & Maintenance Record (Gmp Area)", "kind": "form", "level": "Forms & records \u2014 General / Admin forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0095", "seq": 95, "docNo": "MT/05A", "name": "Risks & Opportunities Assessment", "kind": "form", "level": "Forms & records \u2014 Management system forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0096", "seq": 96, "docNo": "MT/01A", "name": "Change Management Form", "kind": "form", "level": "Forms & records \u2014 Management system forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0097", "seq": 97, "docNo": "MT/04A", "name": "Corrective Action Request Form", "kind": "form", "level": "Forms & records \u2014 Management system forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0098", "seq": 98, "docNo": "MT/04B", "name": "Corrective Action Request Log", "kind": "form", "level": "Forms & records \u2014 Management system forms", "dept": "A", "revision": "A", "effectiveDate": "2023-01-06", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0099", "seq": 99, "docNo": "PU/01A", "name": "New External Provider Registration Form", "kind": "form", "level": "Forms & records \u2014 Purchasing forms", "dept": "AL", "revision": "A", "effectiveDate": "2023-06-01", "retention": "3 YEARS", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0100", "seq": 100, "docNo": "PU/01B", "name": "External Provider Evaluation Form", "kind": "form", "level": "Forms & records \u2014 Purchasing forms", "dept": "AL", "revision": "A", "effectiveDate": "2023-06-01", "retention": "3 YEARS", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0101", "seq": 101, "docNo": "PU/01C", "name": "Approved External Provider List", "kind": "form", "level": "Forms & records \u2014 Purchasing forms", "dept": "AL", "revision": "A", "effectiveDate": "2023-06-01", "retention": "3 YEARS", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0102", "seq": 102, "docNo": "PR/04A", "name": "Material Requisition Note (Mrn)", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0103", "seq": 103, "docNo": "PR/05A", "name": "Finished Goods Transfer Note (Fgtn)", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0104", "seq": 104, "docNo": "PR/06A", "name": "Packaging Material Requisition Note (Pmrn)", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0105", "seq": 105, "docNo": "PR/07A", "name": "Batch Manufacturing Record Log Book", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0106", "seq": 106, "docNo": "PR/07B", "name": "Product (Batch) Manufacturing Record Sheet", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0107", "seq": 107, "docNo": "PR/07C", "name": "Soap Master Formula / Formulation", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0108", "seq": 108, "docNo": "PR/08A", "name": "Batch Sheet For Mixing Machine - Perfumed Soap", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0109", "seq": 109, "docNo": "PR/08B", "name": "Batch Sheet For Mixing Machine - Oatmeal Soap", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0110", "seq": 110, "docNo": "PR/08C", "name": "Batch Sheet For Mixing Machine - Translucent Soap", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0111", "seq": 111, "docNo": "PR/08D", "name": "Approved Sticker - Raw Materials", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0112", "seq": 112, "docNo": "PR/09A", "name": "Temperature / Humidity Record (Production Dept)", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0113", "seq": 113, "docNo": "PR/12A", "name": "Machine Maintenance Record", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0114", "seq": 114, "docNo": "PR/12B", "name": "Gmp Premises Maintenance Record", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0115", "seq": 115, "docNo": "PR/13A", "name": "Room Cleaning Record (Manufacturing)", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0116", "seq": 116, "docNo": "PR/15A", "name": "Machines Cleaning Record", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0117", "seq": 117, "docNo": "PR/15B", "name": "Cleaning Instructions For Critical Soap Production Equipment / Machines", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "A", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0118", "seq": 118, "docNo": "PR/16A", "name": "Mould Cleaning Record", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0119", "seq": 119, "docNo": "PR/16B", "name": "Mould Stock Card", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0120", "seq": 120, "docNo": "PR/17A", "name": "Wip Stock Card", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0121", "seq": 121, "docNo": "PR/18A", "name": "Batch Sheet For Tube Filling", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0122", "seq": 122, "docNo": "PR/18B", "name": "Batch Manufacturing Record Sheet", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0123", "seq": 123, "docNo": "PR/18C", "name": "Batch Manufacturing Record (Filling)", "kind": "form", "level": "Forms & records \u2014 Production forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0124", "seq": 124, "docNo": "QC/01A", "name": "Quality Assurance Of All Incoming Raw Material", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0125", "seq": 125, "docNo": "QC/01B", "name": "Raw Materials Approved / Reject / Quarantine Stickers", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0126", "seq": 126, "docNo": "QC/02A", "name": "Retained Samples Log Book", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0127", "seq": 127, "docNo": "QC/03A", "name": "Soap Production Line - Ipqc Inspection Report", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0128", "seq": 128, "docNo": "QC/03B", "name": "Packing Line - Pillow Packing - Ipqc Inspection Report", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0129", "seq": 129, "docNo": "QC/03C", "name": "Packing Line - Pleat Wrapping - Ipqc Inspection Report", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0130", "seq": 130, "docNo": "QC/03D", "name": "Packing Line - Manual Packing - Ipqc Inspection Report", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "P", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0131", "seq": 131, "docNo": "QC/03E", "name": "In Process Inspection Check Standard & Specifications", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0132", "seq": 132, "docNo": "QC/04A", "name": "Finished Product - Approved Sticker For Pallet", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0133", "seq": 133, "docNo": "QC/04B", "name": "Qc Checklist For Cor For Finished Products", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0134", "seq": 134, "docNo": "QC/04C", "name": "Certificate Of Release (Cor)", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0135", "seq": 135, "docNo": "QC/05A", "name": "Specification - Raw Materials", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0136", "seq": 136, "docNo": "QC/06A", "name": "Specification - Packaging Materials", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0137", "seq": 137, "docNo": "QC/07A", "name": "Specification Of Finished Products", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0138", "seq": 138, "docNo": "QC/08A", "name": "Ipqc Inspection Report - Tube Filling", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0139", "seq": 139, "docNo": "QC/08B", "name": "Certificate Of Release (Cor) - Tube Filling", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0140", "seq": 140, "docNo": "QC/09A", "name": "Sample Preparation Form", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "A", "effectiveDate": "2023-11-07", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0141", "seq": 141, "docNo": "QC/09B", "name": "Final Product Formulation", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "A", "effectiveDate": "2023-11-07", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0142", "seq": 142, "docNo": "QC/09C", "name": "R&D Tracking Log For Sample", "kind": "form", "level": "Forms & records \u2014 QC forms", "dept": "Q", "revision": "A", "effectiveDate": "2023-11-07", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0143", "seq": 143, "docNo": "ST/01A", "name": "Store Cleaning Check List", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0144", "seq": 144, "docNo": "ST/02A", "name": "Goods Received Note", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0145", "seq": 145, "docNo": "ST/02B", "name": "Bin Card (Raw Material)", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0146", "seq": 146, "docNo": "ST/02C", "name": "Material Issue Note", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0147", "seq": 147, "docNo": "ST/03A", "name": "Bin Card (Packaging Material)", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0148", "seq": 148, "docNo": "ST/03B", "name": "Packaging Material Issue Note", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0149", "seq": 149, "docNo": "ST/04A", "name": "Stockcard - Finished Products", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0150", "seq": 150, "docNo": "ST/04B", "name": "Loading Report", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0151", "seq": 151, "docNo": "ST/04C", "name": "Check List Of Loading Finished Goods", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}, {"id": "SOP-0152", "seq": 152, "docNo": "ST/05A", "name": "Temparature / Humidity Record (Store Dept)", "kind": "form", "level": "Forms & records \u2014 Store forms", "dept": "S", "revision": "B", "effectiveDate": "2023-09-01", "retention": "3 years", "nextReviewDate": "", "status": "active", "fileId": "", "history": []}],
+
 /* Employees — imported from the 2026 staff leave report (28 selected in that export; 24 had
    leave activity to import). Department left blank for HR to assign. */
 employees:[
@@ -1468,7 +1478,7 @@ function pruneImages(){
 function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); return true; }catch(e){ lastSaveErr = e; return false; } }
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
-const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput'];
+const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs'];
 /* clone(SEED) with every operational collection emptied — settings/company config untouched.
    Used only when WIPE_FLAG is set, so a post-factory-reset boot never re-merges the shipped
    example data back in (see WIPE_FLAG comment above). */
@@ -2217,7 +2227,9 @@ const TAGS = {
   met:'t-ok', partial:'t-warn', gap:'t-bad', current:'t-ok', overdue:'t-bad', due:'t-warn',
   calibrated:'t-ok', qualified:'t-ok', implemented:'t-ok', 'under review':'t-warn',
   major:'t-bad', minor:'t-warn', critical:'t-bad', low:'t-mute', medium:'t-warn', high:'t-bad',
-  active:'t-ok', loaded:'t-info'
+  active:'t-ok', loaded:'t-info',
+  'revision drafted':'t-warn', verified:'t-info', 'pending approval':'t-warn',
+  'review due soon':'t-warn', 'review overdue':'t-bad', obsolete:'t-mute'
 };
 function tag(v){ if(!v) return '<span class="tag t-mute">—</span>'; const k=TAGS[String(v).toLowerCase()]||'t-mute'; return '<span class="tag '+k+'">'+esc(v)+'</span>'; }
 
@@ -2258,7 +2270,8 @@ const NAV = [
    {id:'changes',   label:'Change control'},
    {id:'complaints',label:'Complaints & recall'},
    {id:'compliance',label:'Standards tracker'},
-   {id:'audit',     label:'Audit readiness'}
+   {id:'audit',     label:'Audit readiness'},
+   {id:'docs',      label:'Document Control'}
  ]},
  {group:'System', items:[
    {id:'masters',   label:'Masters'},
@@ -2333,7 +2346,7 @@ const PERM_SECTIONS = [
   {group:'Records', items:[{id:'inventory',label:'Inventory'},{id:'trace',label:'Batch traceability'}]},
   {group:'Quality system', items:[{id:'rnd',label:'R&D / formulation'},{id:'deviations',label:'Deviations & CAPA'},
     {id:'changes',label:'Change control'},{id:'complaints',label:'Complaints & recall'},
-    {id:'compliance',label:'Standards tracker'},{id:'audit',label:'Audit readiness'}]},
+    {id:'compliance',label:'Standards tracker'},{id:'audit',label:'Audit readiness'},{id:'docs',label:'Document Control'}]},
   {group:'System', items:[{id:'masters',label:'Masters'},{id:'reports',label:'Reports'},{id:'settings',label:'Settings'}]}
 ];
 function currentUserPerm(){
@@ -2396,6 +2409,7 @@ const VIEWMETA = {
   complaints:{eyebrow:'Quality system', title:'Complaints & Recall', sub:'Complaints investigated, reportability assessed, recall capability maintained. ISO 22716 cl. 14.'},
   compliance:{eyebrow:'Quality system', title:'Standards Tracker', sub:'Clause by clause across ISO 22716, ISO 9001:2015, Malaysian GMP/NPRA and FDA MoCRA — what is met, what is not, and the evidence.'},
   audit:{eyebrow:'Quality system', title:'Audit Readiness', sub:'What an inspector would ask for, whether it exists, and the electronic record trail.'},
+  docs:{eyebrow:'Quality system', title:'Document Control — SOP Register', sub:'Every controlled document — manuals, procedures, work instructions and forms — with its current revision, filed copy, review/expiry tracking and change-control sign-off.'},
   masters:{eyebrow:'System', title:'Master Data', sub:'Products, materials, customers and suppliers.'},
   reports:{eyebrow:'System', title:'Reports', sub:'Print-ready documents and data exports.'},
   settings:{eyebrow:'System', title:'Settings', sub:'Company details, licences, signatories and data.'}
@@ -3900,6 +3914,86 @@ function V_audit(){
     ], (S.audit||[]).slice(0,60), {emptyTitle:'No entries yet', empty:'Actions taken in this system are logged here — create a record or release a batch and it will appear.'}),
     btn('Export trail (CSV)','export-audit'));
 }
+
+/* ============================ DOCUMENT CONTROL / SOP REGISTER ============================
+   Every controlled document in the ISO 9001:2015 / ISO 22716 / Malaysian GMP quality system —
+   the Level 1 Manual, Level 2 Procedures, Level 3 Work Instructions (GMP SOPs) and the
+   department Forms & Records registers — lives here as one entry per document, seeded
+   verbatim from the company's own Document Master List. Two things are deliberately kept
+   separate:
+     - Filing a copy of the CURRENT approved revision (sop-attach) — just gets an already-
+       approved document into the system. No approval needed, since nothing is changing.
+     - The change-control workflow (sop-revise -> sop-verify -> sop-approve) — for an actual
+       new revision, matching the RECORDING / VERIFICATION / FINAL RESP columns already used
+       across the company's own GE/PR/QC/ST form registers. The outgoing revision is archived
+       into history, never deleted, so retention-period requirements (e.g. "obsolete + 1 year")
+       stay satisfiable.
+   ============================================================================================ */
+const SOP_DEPTS = {A:'Admin',P:'Production',S:'Store',Q:'QC / Lab',Y:'Purchasing',M:'Management',AL:'All departments'};
+function sopBucket(d){ if(d.kind==='form') return 'forms'; if((d.level||'').indexOf('Level 1')===0) return 'l1'; if((d.level||'').indexOf('Level 2')===0) return 'l2'; return 'l3'; }
+function sopDisplayStatus(d){
+  if(d.status==='obsolete') return 'obsolete';
+  if(d.status==='draft') return 'revision drafted';
+  if(d.status==='verified') return 'pending approval';
+  if(d.nextReviewDate){
+    const days=daysFromToday(d.nextReviewDate);
+    if(days!=null && days<0) return 'review overdue';
+    if(days!=null && days<=60) return 'review due soon';
+  }
+  return 'active';
+}
+function sopCopy(d){ return (d.pending&&d.pending.fileCopy) || d.fileCopy || null; }
+function sopNextRevision(cur){
+  cur=String(cur||'0').trim();
+  if(/^\d+$/.test(cur)) return String(Number(cur)+1);
+  if(/^[A-Za-z]$/.test(cur)) return String.fromCharCode(cur.toUpperCase().charCodeAt(0)+1);
+  return cur+'+1';
+}
+
+function V_docs(){
+  const tab=F('tab','all'), dept=F('dept'), status=F('status'), q=F('q');
+  const all=S.sopDocs||[];
+  const tabLabels={all:'All documents',l1:'Level 1 — Manual',l2:'Level 2 — Procedures',l3:'Level 3 — Work Instructions',forms:'Forms & Records'};
+  const tabs=Object.keys(tabLabels).map(t=>
+    '<button class="chip'+(tab===t?' on':'')+'" data-chip="tab" data-val="'+t+'" type="button">'+esc(tabLabels[t])+'</button>').join('');
+  const byTab = tab==='all'? all : all.filter(d=>sopBucket(d)===tab);
+  const rows = byTab.filter(d=>{
+    if(dept && d.dept!==dept) return false;
+    if(status && sopDisplayStatus(d)!==status) return false;
+    return match(d.docNo,q)||match(d.name,q);
+  }).sort((a,b)=>(a.seq||0)-(b.seq||0));
+
+  const overdue=all.filter(d=>sopDisplayStatus(d)==='review overdue').length;
+  const dueSoon=all.filter(d=>sopDisplayStatus(d)==='review due soon').length;
+  const inRevision=all.filter(d=>d.status==='draft'||d.status==='verified').length;
+  const filed=all.filter(d=>sopCopy(d)).length;
+
+  return KPI([
+    {k:'Controlled documents', v:nf(all.length), d:'manual, procedures, work instructions & forms'},
+    {k:'Copy on file', v:nf(filed)+'/'+all.length, d:filed<all.length? 'attach the rest as you go':'every document has a filed copy', cls:filed<all.length?'warn':'ok'},
+    {k:'In revision', v:nf(inRevision), d:'drafted or awaiting final approval', cls:inRevision?'warn':'ok'},
+    {k:'Review due / overdue', v:dueSoon+' / '+overdue, d:'within 60 days / past due', cls:overdue?'bad':dueSoon?'warn':'ok'}
+  ])
+  + sect('Document register',
+      filterBar([tabs, searchCtl('q',q,'Doc no. or name'),
+        selCtl('dept',Object.keys(SOP_DEPTS).map(k=>({v:k,t:SOP_DEPTS[k]})),dept,'All departments'),
+        selCtl('status',['active','review due soon','review overdue','revision drafted','pending approval','obsolete'],status,'Any status'),
+        btn('Add document not on the master list','sop-new',null,'btn primary')])
+    + T([
+        {h:'Doc No.', f:d=>'<b class="mono">'+esc(d.docNo)+'</b>'},
+        {h:'Name', f:d=>'<b>'+esc(d.name)+'</b><div class="sub">'+esc(d.level)+'</div>'},
+        {h:'Dept', f:d=>'<span class="tag t-mute">'+esc(SOP_DEPTS[d.dept]||d.dept||'—')+'</span>'},
+        {h:'Rev', c:'num', f:d=>'<span class="mono">'+esc(d.revision||'—')+'</span>'},
+        {h:'Effective', c:'num', f:d=>'<span class="mono">'+esc(d.effectiveDate||'—')+'</span>'},
+        {h:'Next review', c:'num', f:d=>d.nextReviewDate?'<span class="mono">'+esc(d.nextReviewDate)+'</span>':'<span class="sub">not set</span>'},
+        {h:'Copy', f:d=>sopCopy(d)?'<span class="tag t-ok">filed</span>':'<span class="tag t-warn">none</span>'},
+        {h:'Status', f:d=>tag(sopDisplayStatus(d))},
+        {h:'', f:d=>btn('Open','sop-open',d.id)}
+      ], rows, {emptyTitle:'No documents match this filter', empty:'Clear the filters above, or add a document not yet on the master list.'})
+    );
+}
+
+
 
 /* ============================ MASTERS ============================ */
 function V_masters(){
@@ -6009,7 +6103,7 @@ function V_accounting(){ return deptPlaceholder('Accounting module under develop
 const VIEWS = {dashboard:V_dashboard, orders:V_orders, planning:V_planning, receiving:V_receiving, issue:V_issue,
   production:V_production, ipqc:V_ipqc, release:V_release, fg:V_fg, shipping:V_shipping, inventory:V_inventory,
   trace:V_trace, rnd:V_rnd, deviations:V_deviations, changes:V_changes, complaints:V_complaints, people:V_people,
-  compliance:V_compliance, audit:V_audit, masters:V_masters, reports:V_reports, settings:V_settings,
+  compliance:V_compliance, audit:V_audit, docs:V_docs, masters:V_masters, reports:V_reports, settings:V_settings,
   store:V_store, qc:V_qc, purchasing:V_purchasing, sales:V_sales, accounting:V_accounting};
 
 function render(){
@@ -8049,6 +8143,231 @@ ACT['po-save-fix'] = ()=>{
 /* ---------- filed copies ---------- */
 ACT['copy-attach-pending'] = ()=>{ readReview(); pickCopy(null); };
 ACT['copy-attach'] = a=>pickCopy(a);
+
+/* ---------- Document Control / SOP Register: change-control actions (placed after the
+   const ACT declaration on purpose — see ways-of-working note on the ACT temporal-dead-zone
+   bug) ---------- */
+ACT['sop-open'] = a=>{
+  const d=byId('sopDocs',a); if(!d) return;
+  const copy=sopCopy(d);
+  const disp=sopDisplayStatus(d);
+  let body = '<dl class="dl" style="grid-template-columns:auto 1fr auto 1fr">'
+   +'<dt>Doc No.</dt><dd class="mono"><b>'+esc(d.docNo)+'</b></dd><dt>Level</dt><dd>'+esc(d.level)+'</dd>'
+   +'<dt>Name</dt><dd>'+esc(d.name)+'</dd><dt></dt><dd></dd>'
+   +'<dt>Department</dt><dd>'+esc(SOP_DEPTS[d.dept]||d.dept||'—')+'</dd><dt>Status</dt><dd>'+tag(disp)+'</dd>'
+   +'<dt>Current revision</dt><dd class="mono">'+esc(d.revision||'—')+'</dd><dt>Effective date</dt><dd class="mono">'+esc(d.effectiveDate||'—')+'</dd>'
+   +'<dt>Retention period</dt><dd>'+esc(d.retention||'—')+'</dd><dt>Next review due</dt><dd class="mono">'+(d.nextReviewDate?esc(d.nextReviewDate):'<span class="sub">not set</span>')+'</dd>'
+   +'</dl>';
+
+  body += '<div class="pillrow" style="margin:14px 0">'
+    + (copy? btn('View filed copy','sop-view',d.id) : '')
+    + btn(copy?'Replace copy':'Attach a copy','sop-attach',d.id)
+    + btn('Set next review date','sop-review-date',d.id)
+    + btn('Edit details','sop-edit',d.id)
+    +'</div>';
+
+  if(d.status==='active'){
+    body += '<fieldset><legend>Change control</legend>'
+      +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:10px">Start a new revision only when this document’s content is actually changing. It is recorded, verified, and only then approved and published — the current copy stays in force the whole time.</div>'
+      + btn('Start a new revision','sop-revise',d.id,'btn primary')
+      + btn('Mark obsolete','sop-obsolete',d.id,'btn danger')
+      +'</fieldset>';
+  } else if(d.status==='draft'||d.status==='verified'){
+    const p=d.pending||{};
+    body += '<fieldset><legend>Revision in progress — rev '+esc(p.revision||'')+'</legend>'
+      +'<dl class="dl"><dt>Change summary</dt><dd>'+esc(p.changeSummary||'—')+'</dd>'
+      +'<dt>Recorded by</dt><dd>'+personShort(p.recordedBy)+' <span class="sub mono">'+esc(p.recordedDate||'')+'</span></dd>'
+      +(p.verifiedBy?'<dt>Verified by</dt><dd>'+personShort(p.verifiedBy)+' <span class="sub mono">'+esc(p.verifiedDate||'')+'</span></dd>':'')
+      +'<dt>New copy</dt><dd>'+(p.fileCopy?'<span class="tag t-ok">attached</span>':'<span class="tag t-warn">not attached yet</span>')+'</dd></dl>'
+      + (p.fileCopy? btn('View new copy','sop-view-pending',d.id) : '')
+      + btn('Attach / replace new copy','sop-attach-pending',d.id)
+      + '<div class="pillrow" style="margin-top:10px">'
+      + (d.status==='draft'? btn('Send for verification','sop-verify',d.id,'btn primary') : btn('Approve & publish','sop-approve',d.id,'btn primary'))
+      + btn('Discard this revision','sop-revise-discard',d.id,'btn danger')
+      +'</div></fieldset>';
+  } else if(d.status==='obsolete'){
+    body += '<div class="banner info" style="margin-top:8px"><b>Obsolete'+(d.obsoleteDate?' since '+esc(d.obsoleteDate):'')+'.</b> '+esc(d.obsoleteReason||'Kept on file per its retention period.')+'</div>'
+      + btn('Reactivate','sop-reactivate',d.id);
+  }
+
+  if((d.history||[]).length){
+    body += sect('Revision history', T([
+      {h:'Rev', f:h=>'<span class="mono">'+esc(h.revision)+'</span>'},
+      {h:'Effective', c:'num', f:h=>'<span class="mono">'+esc(h.effectiveDate||'—')+'</span>'},
+      {h:'Superseded', c:'num', f:h=>'<span class="mono">'+esc(h.supersededDate||'—')+'</span>'},
+      {h:'Change summary', f:h=>esc(h.changeSummary||'—')},
+      {h:'Recorded / Verified / Approved', f:h=>personShort(h.recordedBy)+' / '+personShort(h.verifiedBy)+' / '+personShort(h.approvedBy)},
+      {h:'', f:h=>h.fileCopy?btn('View','sop-view-history',d.id+'::'+h.revision):''}
+    ], d.history));
+  }
+
+  modal(esc(d.docNo)+' — '+esc(d.name), body, '', true);
+};
+
+ACT['sop-revise'] = a=>{
+  const d=byId('sopDocs',a); if(!d) return;
+  formModal({title:'Start a new revision — '+esc(d.docNo),
+    intro:'This drafts a new revision. The current copy (rev '+esc(d.revision||'—')+') stays active and in force until this one is verified and approved.',
+    values:{revision:sopNextRevision(d.revision), effectiveDate:today()},
+    groups:[{fields:[
+      {k:'revision',label:'New revision no.',req:true},
+      {k:'effectiveDate',label:'Intended effective date',type:'date'},
+      {k:'changeSummary',label:'What is changing and why',type:'textarea',req:true,full:true},
+      {k:'recordedBy',label:'Recorded by',type:'select',opts:optPeople(),req:true}
+    ]}],
+    onSave:v=>{
+      if(!v.revision||!v.changeSummary||!v.recordedBy) return toast('Revision no., change summary and recorded-by are required','bad');
+      d.pending={revision:v.revision, effectiveDate:v.effectiveDate||today(), changeSummary:v.changeSummary,
+        recordedBy:v.recordedBy, recordedDate:today(), fileCopy:null};
+      d.status='draft';
+      logAudit('SOP revision drafted', d.docNo, 'rev '+v.revision+' — '+v.changeSummary);
+      save(); toast('Revision '+v.revision+' drafted','ok');
+    }});
+};
+ACT['sop-verify'] = a=>{
+  const d=byId('sopDocs',a); if(!d||!d.pending) return;
+  formModal({title:'Verify revision '+esc(d.pending.revision)+' — '+esc(d.docNo),
+    intro:'Verification confirms the drafted revision is correct and complete before it goes for final approval.',
+    groups:[{fields:[{k:'verifiedBy',label:'Verified by',type:'select',opts:optPeople(),req:true},
+      {k:'note',label:'Verification note',type:'textarea'}]}],
+    onSave:v=>{
+      if(!v.verifiedBy) return toast('Select who verified this revision','bad');
+      d.pending.verifiedBy=v.verifiedBy; d.pending.verifiedDate=today(); d.pending.verifyNote=v.note||'';
+      d.status='verified';
+      logAudit('SOP revision verified', d.docNo, 'rev '+d.pending.revision+' verified by '+v.verifiedBy);
+      save(); toast('Revision verified — ready for final approval','ok');
+    }});
+};
+ACT['sop-approve'] = a=>{
+  const d=byId('sopDocs',a); if(!d||!d.pending) return;
+  formModal({title:'Approve & publish revision '+esc(d.pending.revision)+' — '+esc(d.docNo),
+    intro:'This supersedes the current revision (rev '+esc(d.revision||'—')+'). The outgoing copy is archived in the history below, never deleted.',
+    groups:[{fields:[{k:'approvedBy',label:'Approved by',type:'select',opts:optPeople(),req:true}]}],
+    onSave:v=>{
+      if(!v.approvedBy) return toast('Select who gave final approval','bad');
+      const p=d.pending;
+      d.history=d.history||[];
+      d.history.unshift({revision:d.revision, effectiveDate:d.effectiveDate, fileCopy:d.fileCopy||null,
+        changeSummary:p.changeSummary||'', recordedBy:p.recordedBy||'', verifiedBy:p.verifiedBy||'', approvedBy:v.approvedBy||'',
+        supersededDate:today()});
+      d.revision=p.revision; d.effectiveDate=p.effectiveDate||today();
+      if(p.fileCopy) d.fileCopy=p.fileCopy;
+      d.status='active'; d.pending=null;
+      logAudit('SOP revision approved & published', d.docNo, 'now rev '+d.revision+', approved by '+v.approvedBy);
+      save(); toast(d.docNo+' is now on revision '+d.revision,'ok');
+    }});
+};
+ACT['sop-revise-discard'] = a=>{ const d=byId('sopDocs',a); if(!d) return;
+  formModal({title:'Discard this revision — '+esc(d.docNo),
+    intro:'The drafted revision '+esc((d.pending||{}).revision||'')+' is discarded. The current revision '+esc(d.revision||'—')+' is unaffected.',
+    groups:[{fields:[{k:'why',label:'Why is it being discarded',type:'textarea'}]}],
+    onSave:v=>{
+      logAudit('SOP revision discarded', d.docNo, 'rev '+((d.pending||{}).revision||'')+' — '+(v.why||'no reason given'));
+      d.pending=null; d.status='active'; save(); toast('Draft revision discarded','ok');
+    }});
+};
+ACT['sop-obsolete'] = a=>{ const d=byId('sopDocs',a); if(!d) return;
+  formModal({title:'Mark obsolete — '+esc(d.docNo),
+    intro:'The document is withdrawn from use. It stays on file for its retention period ('+esc(d.retention||'not set')+').',
+    groups:[{fields:[{k:'reason',label:'Reason',type:'textarea',req:true},{k:'by',label:'Obsoleted by',type:'select',opts:optPeople(),req:true}]}],
+    onSave:v=>{
+      if(!v.reason||!v.by) return toast('A reason and who obsoleted it are required','bad');
+      d.status='obsolete'; d.obsoleteReason=v.reason; d.obsoleteBy=v.by; d.obsoleteDate=today();
+      logAudit('SOP marked obsolete', d.docNo, v.reason+' — by '+v.by);
+      save(); toast(d.docNo+' marked obsolete','ok');
+    }});
+};
+ACT['sop-reactivate'] = a=>{ const d=byId('sopDocs',a); if(!d) return;
+  d.status='active'; logAudit('SOP reactivated', d.docNo, ''); save(); toast('Reactivated','ok'); };
+
+ACT['sop-review-date'] = a=>{ const d=byId('sopDocs',a); if(!d) return;
+  formModal({title:'Set next review date — '+esc(d.docNo), values:{nextReviewDate:d.nextReviewDate||''},
+    groups:[{fields:[{k:'nextReviewDate',label:'Next review due',type:'date',req:true}]}],
+    onSave:v=>{ if(!v.nextReviewDate) return toast('Pick a date','bad');
+      d.nextReviewDate=v.nextReviewDate; logAudit('SOP review date set', d.docNo, v.nextReviewDate); save(); toast('Review date set','ok'); }});
+};
+ACT['sop-edit'] = a=>{ const d=byId('sopDocs',a); if(!d) return;
+  formModal({title:'Edit details — '+esc(d.docNo), values:d, wide:true,
+    groups:[{fields:[
+      {k:'name',label:'Document name',req:true,full:true},
+      {k:'dept',label:'Department',type:'select',opts:Object.keys(SOP_DEPTS).map(k=>({v:k,t:SOP_DEPTS[k]})),req:true},
+      {k:'retention',label:'Retention period'},
+      {k:'level',label:'Level / register',full:true}
+    ]}],
+    onSave:v=>{
+      if(!v.name||!v.dept) return toast('Name and department are required','bad');
+      d.name=v.name; d.dept=v.dept; d.retention=v.retention||d.retention; d.level=v.level||d.level;
+      logAudit('SOP details edited', d.docNo, ''); save(); toast('Saved','ok');
+    }});
+};
+ACT['sop-new'] = ()=> formModal({title:'Add a document not on the master list', wide:true,
+  values:{effectiveDate:today(), revision:'0', dept:'M', kind:'document', level:'Level 3 — Work Instructions (GMP SOP)'},
+  groups:[{fields:[
+    {k:'docNo',label:'Doc No.',req:true},{k:'name',label:'Name',req:true,full:true},
+    {k:'kind',label:'Type',type:'select',opts:[{v:'document',t:'Controlled document (manual/procedure/WI)'},{v:'form',t:'Form / record'}]},
+    {k:'level',label:'Level / register',full:true},
+    {k:'dept',label:'Department',type:'select',opts:Object.keys(SOP_DEPTS).map(k=>({v:k,t:SOP_DEPTS[k]}))},
+    {k:'revision',label:'Revision no.'},{k:'effectiveDate',label:'Effective date',type:'date'},
+    {k:'retention',label:'Retention period'}
+  ]}],
+  onSave:v=>{
+    if(!v.docNo||!v.name) return toast('Doc No. and name are required','bad');
+    if((S.sopDocs||[]).some(x=>x.docNo.toLowerCase()===v.docNo.toLowerCase())) return toast('That Doc No. is already registered','bad');
+    S.sopDocs=S.sopDocs||[];
+    const seq=(S.sopDocs.reduce((m,x)=>Math.max(m,x.seq||0),0))+1;
+    S.sopDocs.push({id:'SOP-'+String(seq).padStart(4,'0'), seq, docNo:v.docNo, name:v.name, kind:v.kind||'document',
+      level:v.level||'', dept:v.dept||'M', revision:v.revision||'0', effectiveDate:v.effectiveDate||today(),
+      retention:v.retention||'', nextReviewDate:'', status:'active', fileCopy:null, history:[]});
+    logAudit('SOP document added', v.docNo, v.name); save(); toast(v.docNo+' added to the register','ok');
+  }});
+
+/* ---------- filed copies (mirrors the PO copy-filing pattern, kept independent of it) ---------- */
+function sopPickFile(docId, pending){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='.pdf,image/*'; inp.multiple=true;
+  inp.onchange=async e=>{
+    const files=[...e.target.files]; if(!files.length) return;
+    const d=byId('sopDocs',docId); if(!d) return;
+    toast('Filing the copy…');
+    try{
+      let pages=[];
+      for(const f of files){
+        if(/\.pdf$/i.test(f.name)) pages=pages.concat(await pdfToPageImages(f));
+        else pages.push(await imageToPageImage(f));
+      }
+      const copy=storePages(pages, files[0].name);
+      if(pending){ d.pending=d.pending||{}; d.pending.fileCopy=copy; }
+      else d.fileCopy=copy;
+      logAudit('SOP copy filed', d.docNo, files[0].name);
+      save(); closeModal(); ACT['sop-open'](docId);
+      toast(pages.length+' page'+(pages.length>1?'s':'')+' filed','ok');
+    }catch(err){ toast('Could not file that copy: '+err.message,'bad'); }
+  };
+  inp.click();
+}
+ACT['sop-attach'] = a=>sopPickFile(a,false);
+ACT['sop-attach-pending'] = a=>sopPickFile(a,true);
+let SOP_VIEWER=null;
+ACT['sop-view'] = a=>{ SOP_VIEWER={docId:a, which:'current', page:0}; sopDrawViewer(); };
+ACT['sop-view-pending'] = a=>{ SOP_VIEWER={docId:a, which:'pending', page:0}; sopDrawViewer(); };
+ACT['sop-view-history'] = a=>{ const parts=a.split('::'); SOP_VIEWER={docId:parts[0], which:'history', rev:parts[1], page:0}; sopDrawViewer(); };
+function sopDrawViewer(){
+  const v=SOP_VIEWER; if(!v) return;
+  const d=byId('sopDocs',v.docId); if(!d) return;
+  const copy = v.which==='pending'? (d.pending&&d.pending.fileCopy)
+    : v.which==='history'? ((d.history||[]).find(h=>String(h.revision)===String(v.rev))||{}).fileCopy
+    : d.fileCopy;
+  if(!copy||!copy.pages||!copy.pages.length) return toast('No copy is filed','bad');
+  const uri=IMAGES[copy.pages[v.page]];
+  modal('Filed copy — '+esc(d.docNo)+(v.which==='pending'?' (new revision)':v.which==='history'?' (rev '+esc(v.rev)+', archived)':''),
+    '<div class="stage">'+(uri?'<img src="'+uri+'" alt="Filed document, page '+(v.page+1)+'">':'<div style="color:#bbb;padding:30px">That page is no longer stored.</div>')+'</div>'
+    +(copy.pages.length>1?'<div class="pagestrip">'+copy.pages.map((_,i)=>
+      '<button class="'+(i===v.page?'on':'')+'" data-act="sop-view-page" data-arg="'+i+'" type="button">'+(i+1)+'</button>').join('')+'</div>':'')
+    +'<div class="sub" style="text-align:center;margin-top:9px;color:var(--muted)">'+esc(copy.name||'')+' · filed '+esc(copy.addedAt||'')+'</div>',
+    '', true);
+}
+ACT['sop-view-page'] = a=>{ SOP_VIEWER.page=+a; sopDrawViewer(); };
+
 function pickCopy(poId){
   const inp=document.createElement('input');
   inp.type='file'; inp.accept='.pdf,image/*'; inp.multiple=true;
