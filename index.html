@@ -3581,6 +3581,38 @@ function downloadFormulaTemplate(){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
 }
+/* The Product Register–specific download: unlike the generic blank template above, this is
+   built live from S.formulas/S.products with SheetJS's own writer (loaded above), so it is
+   the actual current state — every existing formula's header and composition, plus one
+   blank starter row per product that has no formula linked yet, with its code and name
+   already filled in. Editing this and re-uploading it through "Import formulations" is a
+   round trip: download → edit in Excel → upload → the Product Register updates itself. */
+function downloadFormulaWorkbookFromRegister(){
+  const HEADER_COLS = ["Formula Code*","Formula Name*","Linked Product Code(s)*","Version","Status","Stage",
+    "Standard Batch Size (kg)","Density (g/mL)","pH Range","Viscosity Range","Appearance",
+    "Owner (initials)","Approved By (initials)","Approved On (YYYY-MM-DD)","Manufacturing Procedure","Notes"];
+  const ITEM_COLS = ["Formula Code*","Phase","Material Code*","% w/w*","Function"];
+  const headerRows = [HEADER_COLS];
+  const itemRows = [ITEM_COLS];
+  (S.formulas||[]).forEach(f=>{
+    const products = (S.products||[]).filter(p=>p.formula===f.id).map(p=>p.code).join(', ');
+    headerRows.push([f.id, f.name, products, f.version||'', f.status||'', f.stage||'', f.batchSizeKg||'', f.density||'',
+      f.ph||'', f.viscosity||'', f.appearance||'', f.owner||'', f.approvedBy||'', f.approvedOn||'', f.procedure||'', f.notes||'']);
+    (f.items||[]).forEach(i=> itemRows.push([f.id, i.phase||'', i.code||'', i.pct||'', i.fn||'']));
+  });
+  (S.products||[]).filter(p=>!p.formula).forEach(p=>{
+    headerRows.push(['', p.name+' formula', p.code, '0.1', 'draft', 'lab trial', '', '', '', '', '', '', '', '', '',
+      'No formula linked yet — choose a Formula Code, add composition on "Formula Items" using that same code, then re-upload.']);
+  });
+  const wb = XLSX.utils.book_new();
+  const wsH = XLSX.utils.aoa_to_sheet(headerRows);
+  wsH['!cols'] = HEADER_COLS.map(()=>({wch:18}));
+  const wsI = XLSX.utils.aoa_to_sheet(itemRows);
+  wsI['!cols'] = ITEM_COLS.map(()=>({wch:16}));
+  XLSX.utils.book_append_sheet(wb, wsH, 'Formula Header');
+  XLSX.utils.book_append_sheet(wb, wsI, 'Formula Items');
+  XLSX.writeFile(wb, 'HE-Product-Register-Formulations.xlsx');
+}
 /* Reads a filled copy of that template (.xlsx) and returns a validated,
    not-yet-committed preview: which formulas will be created vs. updated,
    their composition, and warnings (missing material/product codes, a
@@ -3609,7 +3641,7 @@ function parseFormulaWorkbook(wb){
     })).filter(i=>i.code);
     const existing = byId('formulas', id);
     const warnings = [];
-    productCodes.forEach(pc=>{ if(!byId('products',pc,'code')) warnings.push('Product code "'+pc+'" was not found in the Product Register — it will not be linked.'); });
+    productCodes.forEach(pc=>{ if(!byId('products',pc,'code')) warnings.push('Product code "'+pc+'" is not in the Product Register yet — it will be created automatically and linked to this formula.'); });
     items.forEach(i=>{ if(!byId('materials',i.code,'code')) warnings.push('Material code "'+i.code+'" was not found in the Materials Master.'); });
     const total = items.reduce((s,i)=>s+i.pct,0);
     if(items.length && Math.abs(total-100)>0.5) warnings.push('Composition totals '+total.toFixed(2)+'% — expected 100%.');
@@ -3641,7 +3673,7 @@ function formulaImportPreview(parsed){
         {h:'', f:f=>f.isNew?'<span class="tag t-info">new</span>':'<span class="tag t-warn">will update existing</span>'},
         {h:'Items', c:'num', f:f=>nf(f.items.length)},
         {h:'Total %', c:'num', f:f=>{const t=f.items.reduce((s,i)=>s+i.pct,0); return '<span class="mono"'+(Math.abs(t-100)>0.5?' style="color:var(--bad)"':'')+'>'+nf(t,2)+'</span>';}},
-        {h:'Links to', f:f=>f.productCodes.length? f.productCodes.map(c=>'<span class="mono" style="font-size:12px">'+esc(c)+'</span>').join('<br>'):'<span class="tag t-mute">none</span>'},
+        {h:'Links to', f:f=>f.productCodes.length? f.productCodes.map(c=>'<span class="mono" style="font-size:12px">'+esc(c)+'</span>'+(byId('products',c,'code')?'':' <span class="tag t-info" style="font-size:10px">new</span>')).join('<br>'):'<span class="tag t-mute">none</span>'},
         {h:'Warnings', f:f=>f.warnings.length? '<span class="tag t-warn">'+f.warnings.length+'</span>':'<span class="tag t-ok">none</span>'}
       ], parsed, {empty:'No formula rows recognised in that file — check it matches the template.'})
     + (warnCount? '<div class="note" style="margin-top:10px">'+parsed.flatMap(f=>f.warnings.map(w=>'<b>'+esc(f.id)+'</b> — '+esc(w))).join('<br>')+'</div>':'');
@@ -4242,7 +4274,8 @@ function V_masters(){
   }
   const newAct={products:'prod-new',materials:'mat-new',boms:'bom-new',machinery:'machine-new',coapresets:'preset-new',customers:'cust-new',suppliers:'sup-new'}[tab];
   const newLabel = tab==='boms'? 'Create BOM manually' : tab==='coapresets'? 'Set up COA Preset' : tab==='machinery'? 'Add machine' : 'Add '+tab.replace(/s$/,'');
-  return filterBar([tabs, searchCtl('q',q,'Search '+tab), btn(newLabel,newAct,null,'btn primary')])+body;
+  const formulaBtns = tab==='products'? [btn('Download formulations (.xlsx)','formula-register-export',null,'btn'), btn('Import formulations (.xlsx)','formula-import',null,'btn')] : [];
+  return filterBar([tabs, searchCtl('q',q,'Search '+tab), btn(newLabel,newAct,null,'btn primary'), ...formulaBtns])+body;
 }
 
 /* ============================ REPORTS ============================ */
@@ -8489,9 +8522,10 @@ ACT['copy-attach'] = a=>pickCopy(a);
 /* ---------- Formulation upload (standard template + import) — statement-style, after the
    const ACT declaration on purpose, same reason as the blocks below. ---------- */
 ACT['formula-template'] = ()=> downloadFormulaTemplate();
+ACT['formula-register-export'] = ()=> downloadFormulaWorkbookFromRegister();
 ACT['formula-import'] = ()=> formulaImportPick();
 ACT['formula-import-commit'] = ()=>{
-  const parsed = FORMULA_IMPORT_PENDING||[]; let created=0, updated=0, linked=0;
+  const parsed = FORMULA_IMPORT_PENDING||[]; let created=0, updated=0, linked=0, productsCreated=0;
   parsed.forEach(f=>{
     let rec = byId('formulas', f.id);
     const fields = {id:f.id, name:f.name, version:f.version, status:f.status, stage:f.stage, batchSizeKg:f.batchSizeKg,
@@ -8499,11 +8533,22 @@ ACT['formula-import-commit'] = ()=>{
       approvedOn:f.approvedOn, procedure:f.procedure, notes:f.notes, items:f.items};
     if(rec){ Object.assign(rec, fields); updated++; }
     else { rec = Object.assign({stability:[]}, fields); S.formulas.push(rec); created++; }
-    f.productCodes.forEach(pc=>{ const p=byId('products',pc,'code'); if(p){ p.formula=f.id; linked++; } });
+    /* "Automatically complete the Product Register": a linked product code that doesn't exist
+       yet is created here, the same way an unrecognised code on a Customer PO auto-creates a
+       product stub (see ACT['po-save']) — rather than just warning and skipping it. */
+    f.productCodes.forEach(pc=>{
+      let p = byId('products',pc,'code');
+      if(!p){
+        p = {code:pc, itemNo:'', name:f.name, customer:'', formula:'', packSize:0, uom:'', fill:0, fillUom:'ml',
+          shelfLife:24, npra:'', npraExp:'', fdaListing:'', status:'active', source:'Formulation import', createdAt:today()};
+        S.products.push(p); productsCreated++;
+      }
+      p.formula=f.id; linked++;
+    });
   });
-  logAudit('Formulations imported', '', created+' created, '+updated+' updated, '+linked+' product link(s)');
+  logAudit('Formulations imported', '', created+' formula(s) created, '+updated+' updated, '+productsCreated+' product(s) created, '+linked+' product link(s)');
   save(); closeModal(); FORMULA_IMPORT_PENDING=null;
-  toast(created+' created, '+updated+' updated, '+linked+' product'+(linked===1?'':'s')+' linked','ok');
+  toast(created+' formula(s) created, '+updated+' updated'+(productsCreated?', '+productsCreated+' new product(s) added to the register':'')+', '+linked+' product'+(linked===1?'':'s')+' linked','ok');
   render();
 };
 
