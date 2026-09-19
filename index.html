@@ -420,7 +420,12 @@ legend{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(
 (function(){
   const SUPABASE_URL = 'https://znxtvkpnwzrzevljdsgx.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_3Q-qF58hDO6Q5Tr8Wr8X4A_WTBVR8z5';
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  /* persistSession:false — otherwise Supabase writes the signed-in session to this browser's
+     own localStorage and silently signs the same person back in on every future visit, with
+     no email/password prompt at all. On a shared plant-floor terminal that is the wrong
+     default: each visit (and each refresh, once the session's short-lived token expires)
+     should ask for credentials again. */
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
   window.HEM_AUTH = sb;
 
   const gate = document.getElementById('authGate');
@@ -1330,6 +1335,14 @@ function captureDoc(){
 }
 
 const LS_KEY = 'hem-erp-v1';
+/* Set by 'factory-reset' and cleared by 'reset-seed'. Needed because reconcile() below is a
+   pure union-by-id merge — it can only ADD records, never remove them. An empty localStorage
+   collection after a factory reset is indistinguishable to reconcile() from "nothing new to
+   merge in", so on the very next boot it would happily re-union the baked-in SEED demo rows
+   (P702, P701, WYN-TG-BW-380ML, ...) right back into S. This flag tells boot() to start from
+   a blanked copy of SEED instead of the real one whenever a factory reset is in effect, so the
+   example data can never resurface until 'reset-seed' explicitly asks for it again. */
+const WIPE_FLAG = 'hem-factory-reset-v1';
 let S = null, UI = {view:'dashboard', filters:{}, sel:{}};
 let CAP = {artifact:null, downloads:null};
 let dirty = false, saveState = 'idle';
@@ -1455,6 +1468,14 @@ function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringif
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
 const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput'];
+/* clone(SEED) with every operational collection emptied — settings/company config untouched.
+   Used only when WIPE_FLAG is set, so a post-factory-reset boot never re-merges the shipped
+   example data back in (see WIPE_FLAG comment above). */
+function blankedSeed(){
+  const b = clone(SEED);
+  COLLECTIONS.forEach(k=>{ b[k]=[]; });
+  return b;
+}
 function reconcile(a,b){
   if(!a) return b; if(!b) return a;
   const out = clone(a);
@@ -5274,6 +5295,7 @@ const ACT = {
  'reset-seed': ()=> formModal({title:'Reset to seed data', intro:'<b>This discards every record entered since the system was seeded.</b> Export a backup first if you are not sure.',
    fields:[{k:'confirm',label:'Type RESET to confirm',full:true}], saveLabel:'Reset',
    onSave:v=>{ if(v.confirm!=='RESET') return toast('Type RESET to confirm','bad');
+     try{ localStorage.removeItem(WIPE_FLAG); }catch(e){} /* undo any earlier factory reset so the demo data is allowed back */
      S=clone(SEED); save(); toast('Reset to seed data','ok'); render(); }}),
 
  /* Factory reset — genuinely empties every operational collection (customers, materials,
@@ -5296,6 +5318,7 @@ const ACT = {
        COLLECTIONS.forEach(k=>{ if(!keep.has(k)) S[k]=[]; });
        IMAGES = {};
        writeImagesLocal();
+       try{ localStorage.setItem(WIPE_FLAG,'1'); }catch(e){} /* stops boot() re-merging the shipped example data back in on next load */
        S.audit=[{at:new Date().toISOString().replace('T',' ').slice(0,16), who:UI.user||'SS',
          action:'Factory reset performed', ref:'', detail:'All operational data cleared to zero by '+(UI.userEmail||UI.user||'SS')}];
        save(); toast('Factory reset complete — every collection is now empty','ok'); closeModal(); go('dashboard');
@@ -6029,8 +6052,10 @@ function boot(){
   const embImg=readImages(), locImg=readImagesLocal();
   IMAGES = Object.assign({}, embImg||{}, locImg||{});
   const emb=readEmbedded(), loc=readLocal();
-  S = reconcile(reconcile(clone(SEED), emb), loc) ;
-  if(!emb && !loc) S = clone(SEED);
+  let wiped=false; try{ wiped = localStorage.getItem(WIPE_FLAG)==='1'; }catch(e){}
+  const seedBase = wiped ? blankedSeed() : clone(SEED);
+  S = reconcile(reconcile(seedBase, emb), loc) ;
+  if(!emb && !loc) S = seedBase;
   COLLECTIONS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
   S.settings = Object.assign(clone(SEED.settings), S.settings||{});
   cleanupVoidedPOs();
