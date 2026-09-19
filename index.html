@@ -1135,6 +1135,14 @@ batches:[
   operator:'LCW', checkedBy:'NR', yieldPct:98.90, notes:'Deviation DEV-2026-013 — cooling ramp exceeded 2 °C/min for 4 min. Assessed no impact, batch released.'}
 ],
 
+/* One record per batch holding the filled-in checklist/reconciliation data for the
+   Batch Manufacturing Record, laid out to match the real SOP forms PR/18B (Product
+   Batch Manufacturing Record Sheet — Filling) and PR/18C (BMR — Filling and Packing
+   Process). Kept separate from S.batches so the BMR print view can be built up
+   step by step without touching the core batch fields bmrHtml()/requirement() rely on.
+   id === batch id (one BMR form per batch). */
+bmrForms:[],
+
 ipqc:[
  {id:'IPQ-3101', batch:'BW-2608-031', point:'SP1 — after preservative', param:'pH', spec:'5.2 – 5.8', result:'5.44', unit:'', verdict:'pass', by:'AK', at:'2026-08-28 14:20'},
  {id:'IPQ-3102', batch:'BW-2608-031', point:'SP1 — after preservative', param:'Appearance', spec:'Clear pale green', result:'Conforms', unit:'', verdict:'pass', by:'AK', at:'2026-08-28 14:22'},
@@ -1478,7 +1486,7 @@ function pruneImages(){
 function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); return true; }catch(e){ lastSaveErr = e; return false; } }
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
-const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs'];
+const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs','bmrForms'];
 /* clone(SEED) with every operational collection emptied — settings/company config untouched.
    Used only when WIPE_FLAG is set, so a post-factory-reset boot never re-merges the shipped
    example data back in (see WIPE_FLAG comment above).
@@ -4314,6 +4322,199 @@ function bmrHtml(b){
      ], ip, {emptyTitle:'No checks yet', empty:'Record in-process checks from the IPQC screen.'}));
 }
 
+/* ============================================================
+   BATCH MANUFACTURING RECORD — SOP-exact form & print (PR/18B, PR/18C)
+   ============================================================
+   Reproduces the two real SOP documents the user filed under the Document
+   Control register (PR/18B "Product Batch Manufacturing Record Sheet
+   (Filling)" and PR/18C "Batch Manufacturing Record — Filling and Packing
+   Process, and In-process Quality Check"), field for field, so a filled
+   batch can be printed in the exact layout auditors already know from the
+   paper SOP. One S.bmrForms record per batch (id === batch id) holds the
+   data; bmrForm() below always returns a complete object (defaults for
+   anything not yet filled) so both the fill form and the print view can
+   read every field without guarding for undefined. */
+const BMR_DISP_ITEMS = [
+  ['roomCleaned','Make sure that the room has been cleaned'],
+  ['airCon','The air conditioning is switched on'],
+  ['ppe','The operator has put on gloves and masks'],
+  ['mrn','MRN has been issued and batch number given'],
+  ['drums','Only drums to be used should be in the room']
+];
+const BMR_MFG_ITEMS = [
+  ['roomClean','The production room is clean'],
+  ['drumsOnly','Only drums for this product are in the area'],
+  ['machinesClean','The production machines have been cleaned'],
+  ['equipInstalled','All equipment to be used are properly installed'],
+  ['doorsClosed','All doors leading to this area are closed'],
+  ['ppe','The operator have put on masks and gloves'],
+  ['airconOn','Air con units are switched on']
+];
+const BMR_PACK_MATS = [['carton','Carton'],['cap','Cap'],['tube','Tube or Bottle'],['others','Others']];
+const BMR_PACK_ROWS = [['issued','Qty issued from store'],['used','Qty used'],['basedOnBmr','Qty based on BMR'],['rejected','Qty rejected'],['returned','Qty returned to store']];
+
+function bmrFormDefault(id){
+  const f = {id, poNo:'', preparedBy:'', dispensing:{}, manufacturing:{}, packing:{},
+    productRecon:{actualYield:'', retention:'', theoreticalYield:'', pctYield:''},
+    qc:{tubeFilling:{result:'',checkedBy:'',verifiedBy:''}, packingProcess:{result:'',checkedBy:'',verifiedBy:''}},
+    signOff:[{checkedBy:'',verifiedBy:'',date:''}],
+    filling:{operator:'',checkedBy:''}, packingProc:{qtyPerCarton:'',operator:'',checkedBy:''}, finalPacking:{operator:'',checkedBy:''},
+    ipqcFilling:{productName:'',fragrance:'',avVolume:'',avWeight:'',tubeVisual:'',printingCheck:'',capCheck:'',qcOperator:'',qcInCharge:''},
+    ipqcPacking:{qcOperator:'',qcInCharge:''}};
+  BMR_DISP_ITEMS.forEach(([k])=>{ f.dispensing[k]={op:'',chk:''}; });
+  BMR_MFG_ITEMS.forEach(([k])=>{ f.manufacturing[k]={op:'',chk:''}; });
+  BMR_PACK_MATS.forEach(([k])=>{ f.packing[k]={issued:'',used:'',basedOnBmr:'',rejected:'',returned:''}; });
+  return f;
+}
+function bmrForm(id){ return byId('bmrForms', id) || bmrFormDefault(id); }
+function bmrGetPath(o,path){ return path.split('.').reduce((a,k)=> (a&&a[k]!==undefined&&a[k]!==null)?a[k]:'', o); }
+function bmrSetPath(o,path,val){ const ks=path.split('.'); let c=o; for(let i=0;i<ks.length-1;i++){ if(c[ks[i]]==null||typeof c[ks[i]]!=='object') c[ks[i]]={}; c=c[ks[i]]; } c[ks[ks.length-1]]=val; }
+
+/* Field groups for the "Fill BMR" form — one source of truth used both to render the
+   form (values pulled by dotted path from the batch's bmrForm) and to write the answers
+   back onto that same record on save, so the two never drift out of sync. */
+function bmrFieldGroups(){
+  const people = optPeople(), pf=['Pass','Fail'];
+  return [
+    {legend:'Order & preparation', fields:[
+      {k:'poNo', label:'PO No.'},
+      {k:'preparedBy', label:'BMR prepared by', type:'select', opts:people}
+    ]},
+    {legend:'PR/18B — Dispensing procedures (GMP checklist before starting)', fields: BMR_DISP_ITEMS.flatMap(([k,label])=>[
+      {k:'dispensing.'+k+'.op', label:label+' — operator', type:'select', opts:people},
+      {k:'dispensing.'+k+'.chk', label:label+' — checked by', type:'select', opts:people}
+    ])},
+    {legend:'PR/18B — Manufacturing procedures (GMP checklist before starting)', fields: BMR_MFG_ITEMS.flatMap(([k,label])=>[
+      {k:'manufacturing.'+k+'.op', label:label+' — operator', type:'select', opts:people},
+      {k:'manufacturing.'+k+'.chk', label:label+' — checked by (QC)', type:'select', opts:people}
+    ])},
+    {legend:'PR/18B — Reconciliation of packing materials', fields: BMR_PACK_MATS.flatMap(([mk,mlabel])=> BMR_PACK_ROWS.map(([rk,rlabel])=>
+      ({k:'packing.'+mk+'.'+rk, label:mlabel+' — '+rlabel, type:'number', step:'1'})))},
+    {legend:'PR/18B — Product reconciliation (target > 97% yield)', fields:[
+      {k:'productRecon.actualYield', label:'Actual volume yield of finished product (L)', type:'number', step:'0.01'},
+      {k:'productRecon.retention', label:'Volume taken for retention samples (L)', type:'number', step:'0.01'},
+      {k:'productRecon.theoreticalYield', label:'Theoretical volume yield of finished product (L)', type:'number', step:'0.01'}
+    ]},
+    {legend:'PR/18B — QC monitoring, inspection and approval', fields:[
+      {k:'qc.tubeFilling.result', label:'Tube filling process — result', type:'select', opts:pf},
+      {k:'qc.tubeFilling.checkedBy', label:'Tube filling — checked by (QC)', type:'select', opts:people},
+      {k:'qc.tubeFilling.verifiedBy', label:'Tube filling — verified (QC)', type:'select', opts:people},
+      {k:'qc.packingProcess.result', label:'Packing process — result', type:'select', opts:pf},
+      {k:'qc.packingProcess.checkedBy', label:'Packing — checked by (QC)', type:'select', opts:people},
+      {k:'qc.packingProcess.verifiedBy', label:'Packing — verified (QC)', type:'select', opts:people}
+    ]},
+    {legend:'PR/18B — Sign-off', fields:[
+      {k:'signOff.0.checkedBy', label:'Checked by — Production officer', type:'select', opts:people},
+      {k:'signOff.0.verifiedBy', label:'Verified by — QC officer', type:'select', opts:people},
+      {k:'signOff.0.date', label:'Date', type:'date'}
+    ]},
+    {legend:'PR/18C — Filling and packing process', fields:[
+      {k:'filling.operator', label:'Filling — operator', type:'select', opts:people},
+      {k:'filling.checkedBy', label:'Filling — checked by', type:'select', opts:people},
+      {k:'packingProc.qtyPerCarton', label:'Quantity per carton (pcs)', type:'number'},
+      {k:'packingProc.operator', label:'Packing — operator', type:'select', opts:people},
+      {k:'packingProc.checkedBy', label:'Packing — checked by', type:'select', opts:people},
+      {k:'finalPacking.operator', label:'Final packing — operator', type:'select', opts:people},
+      {k:'finalPacking.checkedBy', label:'Final packing — checked by', type:'select', opts:people}
+    ]},
+    {legend:'PR/18C — In-process quality check (IPQC), filling', fields:[
+      {k:'ipqcFilling.productName', label:'Product name'},
+      {k:'ipqcFilling.fragrance', label:'Fragrance'},
+      {k:'ipqcFilling.avVolume', label:'Average volume (mL)', type:'number', step:'0.01'},
+      {k:'ipqcFilling.avWeight', label:'Average weight (g)', type:'number', step:'0.01'},
+      {k:'ipqcFilling.tubeVisual', label:'Tube visual check', type:'select', opts:pf},
+      {k:'ipqcFilling.printingCheck', label:'Printing & logo/color check', type:'select', opts:pf},
+      {k:'ipqcFilling.capCheck', label:'Cap form, fit & function check', type:'select', opts:pf},
+      {k:'ipqcFilling.qcOperator', label:'QC operator', type:'select', opts:people},
+      {k:'ipqcFilling.qcInCharge', label:'QC in charge', type:'select', opts:people}
+    ]},
+    {legend:'PR/18C — In-process quality check (IPQC), packing', fields:[
+      {k:'ipqcPacking.qcOperator', label:'QC operator', type:'select', opts:people},
+      {k:'ipqcPacking.qcInCharge', label:'QC in charge', type:'select', opts:people}
+    ]}
+  ];
+}
+
+/* Small header block shared by both halves of the printed BMR, showing the live
+   Document Control revision for PR/18B / PR/18C so the printed sheet always
+   states the current controlled revision, not a hard-coded one. */
+function bmrDocHeader(docNo, title, b){
+  const d = byId('sopDocs', docNo, 'docNo')||{};
+  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--wine);padding-bottom:8px;margin-bottom:12px">'
+   +'<div><div style="font-family:var(--disp);font-size:16px;font-weight:600">'+esc(S.settings.company)+'</div>'
+   +'<div style="font-family:var(--disp);font-size:14px;margin-top:2px">'+esc(title)+'</div></div>'
+   +'<div style="text-align:right;font-size:11.5px" class="mono">'
+   +'<div>Doc No: <b>'+esc(docNo)+'</b></div><div>Rev: '+esc(d.revision||'—')+'</div>'
+   +'<div>Batch: '+esc(b.id)+'</div></div></div>';
+}
+function bmrCheckTable(items, path, form, opCol, chkCol){
+  return T([{h:'Procedure', f:x=>esc(x[1])},
+    {h:opCol||'Operator', f:x=>esc(bmrGetPath(form, path+'.'+x[0]+'.op'))||'—'},
+    {h:chkCol||'Checked by', f:x=>esc(bmrGetPath(form, path+'.'+x[0]+'.chk'))||'—'}
+  ], items, {});
+}
+function bmrPrintHtml(b){
+  const f = bmrForm(b.id), p = product(b.product), fo = formula(b.formula)||{};
+  const req = requirement(b), iss = batchIssues(b.id);
+  return '<div style="max-width:92ch;margin:0 auto">'
+   + bmrDocHeader('PR/18B','Product Batch Manufacturing Record Sheet (Filling)', b)
+   + '<dl class="dl" style="grid-template-columns:auto 1fr auto 1fr;margin-bottom:14px">'
+   + '<dt>Product/Brand name</dt><dd>'+esc(p.name)+'</dd><dt>PO No.</dt><dd class="mono">'+esc(f.poNo||'—')+'</dd>'
+   + '<dt>Batch No.</dt><dd class="mono"><b>'+esc(b.id)+'</b></dd><dt>Manufacturing date</dt><dd class="mono">'+esc(b.mfgDate||'—')+'</dd>'
+   + '<dt>Batch size — kg</dt><dd class="mono">'+nf(b.plannedKg)+'</dd><dt>Expiry date</dt><dd class="mono">'+esc(b.expDate||'—')+'</dd>'
+   + '<dt>Batch size — Qty</dt><dd class="mono">'+nf(b.plannedUnits)+'</dd><dt>BMR prepared by</dt><dd>'+esc(person(f.preparedBy)||'—')+'</dd></dl>'
+   + sect('Dispensing procedures (GMP checklist before starting)', bmrCheckTable(BMR_DISP_ITEMS,'dispensing',f))
+   + sect('Raw material / liquid issued to this batch', T([
+       {h:'No.', f:(i,idx)=>idx+1},
+       {h:'Liquid / code no.', f:i=>'<span class="mono">'+esc(i.code)+'</span><div class="sub">'+esc(material(i.code).name)+'</div>'},
+       {h:'Lot / GRN ref.', f:i=>esc(i.lot)},
+       {h:'Volumes (kg)', c:'num', f:i=>nf(i.qty,2)},
+       {h:'Store operator', f:i=>esc(person(i.by))||'—'},
+       {h:'Checked by (QC)', f:i=>esc(person(i.checkedBy))||'—'}
+     ], iss, {empty:'No material issued to this batch yet — use "Issue material" from Production.'}))
+   + sect('Manufacturing procedures (GMP checklist before starting)', bmrCheckTable(BMR_MFG_ITEMS,'manufacturing',f))
+   + sect('Reconciliation of packing materials', '<div class="tw"><table><thead><tr><th></th>'
+       + BMR_PACK_MATS.map(([,l])=>'<th>'+esc(l)+'</th>').join('') + '</tr></thead><tbody>'
+       + BMR_PACK_ROWS.map(([rk,rl])=> '<tr><td>'+esc(rl)+'</td>'
+           + BMR_PACK_MATS.map(([mk])=> '<td class="mono">'+(bmrGetPath(f,'packing.'+mk+'.'+rk)||'—')+'</td>').join('') + '</tr>').join('')
+       + '</tbody></table></div>')
+   + sect('Product reconciliation (% yield is best when higher than 97%)', '<dl class="dl">'
+       + '<dt>Actual volume yield of finished product (Ya)</dt><dd class="mono">'+(f.productRecon.actualYield||'—')+' L</dd>'
+       + '<dt>Quantity taken for retention samples</dt><dd class="mono">'+(f.productRecon.retention||'—')+' L</dd>'
+       + '<dt>Theoretical volume yield of finished product (Yt)</dt><dd class="mono">'+(f.productRecon.theoreticalYield||'—')+' L</dd>'
+       + '<dt>% Yield (Ya/Yt) × 100</dt><dd class="mono">'+(f.productRecon.pctYield!==''&&f.productRecon.pctYield!=null?nf(f.productRecon.pctYield,2)+'%':'—')+'</dd></dl>')
+   + sect('QC monitoring, inspection and approval', T([
+       {h:'Process', f:r=>esc(r.label)}, {h:'Result', f:r=>tag(r.result)},
+       {h:'Checked by (QC)', f:r=>esc(person(r.checkedBy))||'—'}, {h:'Verified (QC)', f:r=>esc(person(r.verifiedBy))||'—'}
+     ], [{label:'Tube filling process', ...f.qc.tubeFilling},{label:'Packing process', ...f.qc.packingProcess}]))
+   + sect('Sign-off', T([
+       {h:'Checked by (Production officer)', f:r=>esc(person(r.checkedBy))||'—'},
+       {h:'Verified by (QC officer)', f:r=>esc(person(r.verifiedBy))||'—'},
+       {h:'Date', c:'num', f:r=>esc(r.date)||'—'}
+     ], f.signOff))
+   + '<div style="page-break-before:always;margin-top:24px">'
+   + bmrDocHeader('PR/18C','Batch Manufacturing Record — Filling and Packing Process (In-process Quality Check)', b)
+   + sect('A — Filling and packing process', T([
+       {h:'', c:'num', f:()=>'A'},
+       {h:'Step', f:r=>'<b>'+esc(r.title)+'</b><div class="sub">'+esc(r.detail)+'</div>'},
+       {h:'Operator', f:r=>esc(person(r.op))||'—'}, {h:'Checked by', f:r=>esc(person(r.chk))||'—'}
+     ], [
+       {title:'1. Filling', detail:'Check correct drums and packing material are available. Machines clean, personnel properly attired, tube volume/speed set, test-run adjusted, tubes filled to quantity required.', op:f.filling.operator, chk:f.filling.checkedBy},
+       {title:'2. Packing', detail:'Filled tubes transferred to the packing area and packed into outer cartons. Quantity per carton: '+(f.packingProc.qtyPerCarton||'—')+' pcs.', op:f.packingProc.operator, chk:f.packingProc.checkedBy},
+       {title:'3. Final packing', detail:'Product transferred to store and recorded on the Finished Goods Transfer Note (FGTN); batch lot prepared for shipping.', op:f.finalPacking.operator, chk:f.finalPacking.checkedBy}
+     ]))
+   + sect('B — In-process quality check (IPQC)', '<dl class="dl" style="margin-bottom:10px">'
+       + '<dt>Product name</dt><dd>'+(esc(f.ipqcFilling.productName)||'—')+'</dd><dt>Fragrance</dt><dd>'+(esc(f.ipqcFilling.fragrance)||'—')+'</dd>'
+       + '<dt>Average volume</dt><dd class="mono">'+(f.ipqcFilling.avVolume||'—')+' mL</dd><dt>Average weight</dt><dd class="mono">'+(f.ipqcFilling.avWeight||'—')+' g</dd>'
+       + '<dt>Tube visual check</dt><dd>'+tag(f.ipqcFilling.tubeVisual)+'</dd><dt>Printing &amp; logo/color check</dt><dd>'+tag(f.ipqcFilling.printingCheck)+'</dd>'
+       + '<dt>Cap form, fit &amp; function check</dt><dd>'+tag(f.ipqcFilling.capCheck)+'</dd></dl>'
+       + T([{h:'', f:()=>'B'},{h:'Stage', f:r=>esc(r.stage)}, {h:'QC operator', f:r=>esc(person(r.op))||'—'}, {h:'QC in charge', f:r=>esc(person(r.chk))||'—'}], [
+           {stage:'1. Filling — IPQC sampling check', op:f.ipqcFilling.qcOperator, chk:f.ipqcFilling.qcInCharge},
+           {stage:'2. Packing — sample check, batch stamp, document check, release approval (COR)', op:f.ipqcPacking.qcOperator, chk:f.ipqcPacking.qcInCharge}
+         ]))
+   + '</div></div>';
+}
+
 /* Dimensions, formulation and other technical information on the COA — pulled automatically
    from the Product Master and its linked Formula (both already selected via the batch, so
    nothing here is retyped), per the requirement that a COA carry more than just the release
@@ -4635,7 +4836,7 @@ const ACT = {
    let foot='';
    if(b.status==='planned') foot=btn('Start batch','batch-start',b.id,'btn primary');
    else if(b.status==='in production') foot=btn('Record completion','batch-complete',b.id,'btn primary')+btn('Record IPQC','ipqc-new',b.id,'btn');
-   foot+=btn('Trace','trace-open',b.id,'btn');
+   foot+=btn('Trace','trace-open',b.id,'btn')+btn('Fill BMR (PR/18B & PR/18C)','bmr-fill',b.id,'btn')+btn('Print BMR','bmr-print',b.id,'btn');
    modal('Batch record '+esc(b.id), bmrHtml(b), foot, true);
  },
  'batch-new': ()=> formModal({title:'New batch', wide:true,
@@ -4717,6 +4918,31 @@ const ACT = {
        logAudit('Batch completed', b.id, 'yield '+b.yieldPct+'%'); save(); toast(b.id+' complete — yield '+b.yieldPct+'%. Now due for QC release.','ok');
      }});
  },
+
+ /* --- BMR (PR/18B, PR/18C) --- placed after the const ACT declaration on purpose, same
+    reason as the Document Control handlers — see ways-of-working note on the ACT TDZ bug. */
+ 'bmr-fill': a=>{
+   const b=byId('batches',a); if(!b) return;
+   const form = bmrForm(b.id);
+   const groups = bmrFieldGroups();
+   const values = {};
+   groups.forEach(g=>g.fields.forEach(fl=> values[fl.k]=bmrGetPath(form, fl.k)));
+   formModal({title:'Fill BMR — '+b.id+' (PR/18B & PR/18C)', wide:true,
+     intro:'Fields map one-to-one onto the printed SOP forms PR/18B and PR/18C. Anything left blank prints as a blank line, exactly like a paper copy that has not been completed yet.',
+     values, groups,
+     saveLabel:'Save BMR',
+     onSave:v=>{
+       let rec = byId('bmrForms', b.id); const isNew=!rec;
+       if(isNew) rec = bmrFormDefault(b.id);
+       Object.keys(v).forEach(k=> bmrSetPath(rec, k, v[k]));
+       const ay=Number(rec.productRecon.actualYield)||0, ty=Number(rec.productRecon.theoreticalYield)||0;
+       rec.productRecon.pctYield = ty? +(ay/ty*100).toFixed(2) : '';
+       if(isNew) S.bmrForms.push(rec);
+       logAudit('BMR updated', b.id, 'PR/18B & PR/18C batch record'); save(); toast('BMR saved for '+b.id,'ok');
+       ACT['bmr-print'](b.id);
+     }});
+ },
+ 'bmr-print': a=>{ const b=byId('batches',a); if(!b) return; printModal('Batch Manufacturing Record — '+b.id, bmrPrintHtml(b)); },
 
  /* --- IPQC --- */
  'ipqc-new': a=> formModal({title:'Record an in-process check',
