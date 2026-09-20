@@ -1,0 +1,1182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HE-QM — Quality Manual</title>
+<style>
+  :root{ --ink:#1c1c1c; --muted:#6b6b6b; --line:#e2e2e2; --wine:#7a1f2b; --ground:#faf9f7; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+  .wrap{max-width:820px;margin:0 auto;padding:28px 20px 80px}
+  .toolbar{position:sticky;top:0;background:var(--ground);border-bottom:1px solid var(--line);padding:10px 20px;
+    display:flex;justify-content:flex-end;gap:8px;z-index:10}
+  .toolbar button{font:inherit;background:var(--wine);color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer}
+  .toolbar button:hover{opacity:.9}
+  .letterhead{display:flex;gap:14px;align-items:flex-start;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:18px}
+  .crest{width:46px;height:46px;flex:none}
+  .crest img{width:100%;height:100%;object-fit:contain;display:block}
+  .company{font-size:17px;font-weight:600}
+  .addr{font-size:11px;color:var(--muted);max-width:60ch}
+  .lic{font-size:11px;color:var(--muted);margin-top:2px}
+  .doctitle{text-align:center;margin:6px 0 20px}
+  .doctitle .t{font-weight:700;font-size:16px}
+  .doctitle .m{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .docbody table{border-collapse:collapse;width:100%;margin:12px 0}
+  .docbody th,.docbody td{border:1px solid var(--line);padding:6px 8px;font-size:13px;text-align:left;vertical-align:top}
+  .docbody th{background:#f3f1ee}
+  .docbody img{max-width:100%}
+  .docbody blockquote{margin:10px 0;padding:8px 14px;border-left:3px solid var(--line);color:var(--muted)}
+  .note{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+  @media print{
+    @page{ size:A4; margin:16mm; }
+    .toolbar{display:none!important}
+    body{background:#fff}
+  }
+</style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">Print / save as PDF</button></div>
+<div class="wrap">
+  <div class="letterhead">
+    <div class="crest"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAMAAAAJixmgAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAMUExURf///1s2RFw4RVMsOix9Z0cAAAABdFJOUwBA5thmAAAAAWJLR0QAiAUdSAAAAAd0SU1FB+oIHwoLGckJapEAABTmSURBVHja7V3bluSsCg7k/d95T+IJ5KiVVHf/a3sx00kl6geIgGiO4//lKwXgp3vwBYiIp1oQ/1vw/yGl4K4Cdyl/k9/+Pu6ONWLiYP/fRd2xLgDYeed3lNLzvX5/8u7PlAc6XEH/NJIvoaWYfzmf4Vlh/O2Y8YWhd2P+laJ992wNbXICgt+owtKdwuu5IqnXfznoG8R8twRid0FrP8ONsT3fAN83XMH9TZDDvtAHoOMbV0eVEL+ZxCNfKRCTHkzAo5A7aI2NRFO/Aa6GTwK+pKDVafPxpyFnpewcaCzAMB75vWMZdbhS5WIM+OhAIgriTw1lmFHYd5OAzwzeUt0PMFlvFU4NsBh6CuBKlBTzdFq/WsCSK12tJACXF3UFLW9+m8lOeyqLZ4CasitxEaM98fRXmQye2kAD8Dldo/Yi2JVqz3+JyX5LYIHJAHbqlKY6fEldR81oMg0JwM6cXrxiEJDxC2INoSAxTsEATF/TiGID7kKDc9txbz4tmYFDe47KvSqisu9W1YM8qBhor4o1KpIoeknZRwCTBzX31x7CVCucmhX3Hl6NnLoJ0fpV/wB7xiGojJ63X+BQ7ZL3EOsDRpHOwRFYEjg97oEVsEmwtwayUa8SQO7MWsNrlLoidbpO4wuILcmpiyO0xTroIilOt3tVPrfOq35BdZkjBQDOmclPRqeruAj1zK/xacS2ZoDaKfrAgyLWNKDUjK8inqpj3IOjyTWPWz1SgKpo7f47iFH4OqR9qLdeCSpaHsUpJ4cHEc/8PRjBsQwofAeyPRcq3sdDrSt42XU16t+KKCpBTNStlIcQ82rk1Nqdc3zLqi0UHYoDLavsEcQzXhlRfgkm7wRpVnM9nkMMjJagDNTvhB2wd8PB+8CEyPH+kyrZ3Lezbnzd+ClijvdqB6Uh+VXI0VzwGWL2dpWqWWU4HgI8TwpTYY3ufOAtTiGVHnZgbVqY4IVVeziNCekZxLPOa/w6IyofgavUcw23EKvhEqfbC5V7UUQPMWC8Qr6Zn6Pzj9MON4exg8llT+iPI9RA85bQK+3O1sGe4nLfshEnwg//Xr3f31SoWlzt5FPFzjBG4RFNsKzV0ngAjYzhPdGrtruTILIRW2KvKKKnL2blIoifAr6DoORdJcK7PozZxKNj04CkmhmA9/DO40ZfuFmrkVJIN141KU/K0b8pqyitD0wEOt7U7q0hZgKdk74FFVTDfk/F+YioMLtwZRhz8mg+kqDQyoDcGcJeHH5E05ig5ysXQx6DEbeaWVM2eSymohr3R8+ASdmCpgYtXuRxZBnvls5SCVSqunfIgOBSlqJWOpKBeD2YtQdYMznAY0S2AYMy1kD+Zjqgkr7n0C0p1KZCr2KtDO/VftctWhtOjZKh6dSSE2q7/9pA3sG7LdKHMPoC5ZFpgssB56c0WiO8emZsm4dVRAHfZ8T+w6lUXw5nWmVZwruTgRG+s2SuxCymDFaWfkO8MNFLJFcNQxr1zVhc1jWTfWVvX8JXpdh9g0PjL7HotHfhlEWpdZhOqt8S5MVxu9jHy7yuVsEC3mPcUzdZYQyYEUqf8k7XzkQgeiCamkjz2BJwnFlKzZvFAU3NCY0Ak+CCNcd7qa334iaQOx5eyuDWWzRDOdZCZv8D9d950YML5ba1PGw5lr1TWRZTBrcOo2lPolpDTWw3foeQwe0hh2oa4rubfQAmvSai06CTXyeQpcwac0x7M2ZwfcoFPMtd5aMG2FPUbAS7m7VN5d0BW4KEMYNHNz3PQFtt6IAxxeJJ3B17CF0GorukyPE6meY+YK64qkXXxzALQToqTlBA75SzX6mOXWemxAyDCXGs3/gw5oC5WJp1KCAUY8vvR6GFa97kGHwTzSUJX1DqrQcPsvtmLqVMtPPgQLy5LMNgcLPkj0lue9XBg6yrertzz/zdcOcZLpBHKnqAOAPfREsXSyOz1TcsMPiOkffkYaslj8GjNYg8JyqrLVdMt1MgeFuQiD3nc6bNZM7BFOEcPMxTXwbEvgKzyuBlQSJebxSiPqjhslzGm2EwnasdO/CrMZNZWcFCadQLJ4gD9fihUTSKtdk8dN+TYSLNoOaOsEOreO86dLyGYxDMxGPKCuMlHm8oSs2RHZlu4y+JO2bw1Ut7jArAlgdy/xQHiPzdbKNPSqRipDKyvskgZbisdjhY2irLKFZnz6HunaJ7fyAMJmW/8oxXzTxJMPhANPmrH5mm1NFIthZ05GgZycVjYjNZzX/mitJhMM/9tGKwWcDCwDOjt5TFwJq4EiVJffNrk0SP5uiTNoOHjeCtu+UB8xVLzwIRcWVVNkCMzVEB8BVh5PVFGyJdl+7owxbGaLaeHZaxO/crgWU19oTWZdejbWcoJaY9godEOCSxi/VOC9y4CbS8DSNEcsqKSdcJlTj9HMkq74BjkS8DHmGA0xMEGqO0m2cLCtyZZsBobU67rd/PA47SD1hkynkK9Vc0EpMeO3Qu9HBiNk4x6YiDlA7g5VVRJ+RG3/Dd8fL701viEik1uYVv5ksauQzcPQvoXFmcAnwGw5LUCqFEB6FnDaTtleCk8kMU4wWIHvXPHGt/YII23jIwMbYoliMukWBx2YNg1AW1IaknatdsrBz/qgFOeZWhYNEYB0RqJlYIo6K4ezLArORz6th9NIlnEuZWDvDZN/jF7OB18QmQbGgbD/A5WR01CckaGWrRAZwpwGfrfIiXpy1Tg52GVAZMYApbkobT3C1lhojkEHKA8chOOWwQN6xV8Sk+MdLIwKkjzonWQWzBjwD3uSiZkMkk13Kjx2kgbF8fOdV77sESYG/SOXMkyUS1GoThOcdrZyQPhRuSU9J0qnH0PeIk4C4k2ZxzErFB+yEBc14u5R3I5fcnrP0EYFgDDGuArdMKpoSAXNMQuXNDU3j1rAEmg1gYt8K4BBMwUE2QTsaNxT8DGCLnawasiym9HoCtRwcF0kP4MvdD4mQAl4BhOmue1MbeAZQG1piV5ClsO4DjBNsU4Ht+STubFFfbyFWz5AcBJOCpC9TaTi+MQbjm11cPj/CxLcAlH9sO5DH7mj2WOWdA62ec0JlziBdWH1MnLvWcOdaTThqkk3nMjz7e4uWCLOAWE88M5Yw0NMBiU5YQuQzgYf6SyIIP2ArojnaPhBmTB4wSMKh4c3vCOwgyEvwMACOrcAgWZGyUXucOYIJ4TutIeOFVUMmg8PMtrR97Bxf2ku8CPtRPpeRmpY4DyQ0PsLVuyHqSnBH3AVtQMmu1kzYyXvMAw/R6Fm8KMDwMmHSRXGqEtgETeuFEPr/Qidhe/ChtpAZI0jlkPDG6mwMM9kMRYAtRW5t7EDAPiRny6AAmwaFKuazpQe27k3yh7ApnLAOGBcA0HGw5xrbuHW/gGZ52agKeO58FzL3htUUjcIN5ZoU9tL28e9wAzFy3CPCeKU0Rq4DvBm8507Y9lZZyS1QR4DavccBzwKNKP39wmcMj21Pbl9Q3KKj7mnbwSsDKLD4DFiknHwG+e60Abnu6VY1W1i428M6A1bNC5nkYngV89Vs9U0Rrgvy4hZcB1u3jADBX51uAryO1JCZOU7kDGrbwsn1D1oYcFIDLRzalhlwwACbEqEByWAwrYR0TsJXYJWzp5sFrtW2eI6MP01Hkmt3meQJzByEDuN1/ELDYQsZGjtjwkzH7coAP9TMJ9dH5ycdEurTLmiyTcGcvP5/pg8NPVUNVnBgQAGZR2s2zHICeF9cMKaD/E92IzQJe5jPVjnQss5raPj0pC/z/MBfO6IAYqoyzMNvUfHAv8poFSngkXiwQk7j0UQytUyTvrgKeVHHh2YSGr73XM6ccfeYWOuFPkyvxomQg3pgkV78Vq1SDM5rphvrMEmDUW5eAIWlbLgxiyiw06lZ7hfLFNIlDwB2oBvgSQuTu0prWut2Prn38zFKGD9iLC4CHauzuvwW4J3ugFeNfH1Ty9bDs1+8m+8DgZ+tOJ67f490ORdIsh9BWE4mHOppcnzetgjzefZqmqEWOGAmf3RjEtC+vI06xg3hJLwJe4e82UZOfUB2Ac4HaD/aK5svWuEkNYRATctjvnc58BXBKNOhWpaTW2pG3r4h0ilAswzJ82j1eMGhooezprMUhnNJa+zL9hZKTDAY4ps+mTDOJrtaeLeVXCGyDyame8c1o2cXf1d4kbOjPR3Fi1/oxjduUROzI9KrK2gKclGieDa08MXFzS6a/Adj4yLMAzFNZlJVLsQN3Q6a/AViXaLnCw7NWlDfkrvn17sDKnLR5gKvaKyGz0w12WQ9a0SPoHzit75RZoqFSQZBleosAwXrIplbz75uKBRfOMvEFEX5xtsEpF6P2ZLoNzZLJ27Ne7kv8fAQrKutUuo8+x/UvMeyxeFqF55fkyJ5KjFXASpe01VJlYVak3skBq95MdWn64tkcYSTUWKxcnZO0Q88EnxSZRr2iVRYLWp9iKZe0sFE5ajdnkVXWy8QbcOg1rUdQ04CPVRXhMNhE116lx5qgnoAcHMr+AOBF8TEYDNPgUPOY6QZq+6ENFmtj2AS8VrWq5tqBbew5tV/TDW0NfYfFWcAbM7ynUsJTLKQ9rVFb6r9FwMeDgLPEN/z95LvLQp0FvGdz5LKa1du5ryLgslAnAa9/jCjdEYsqOUldFuok4GWbIy1q5uSe3BG9KtQcMOqAc3v9RT+SLDJ+SH7bZNXKP5UyJ82t6/784o8zVHMVxDv4FcDYjgtTOVwOoFkCnBczp+JkWhiuIc7Nw4sfOcv3wJXbZKOzXD4BeM1vWIgoBicmZYyPxWH8wrTkBRRF7NGVAzWuIxcDlr4f9LylZUUiQAlghvvQBYvVunN7vDXAT9jSBl5togpnHm1PhobszCuuLGAzeVlvW8cr05GDyjRFDVqwOI84K9LtzibeQ1ttTcw76dkhjXgNcBiIX5whwkf843yJAoMs4jXAuQMTyCZ02TNCvQxhrNHRy5xOmGJJOqYVnQrPapsC20qwJ8YrTZ4OrJ/ChNMPK4DdMG3oQvAGx1YsfTdj8tuW02PA5AVoqDa14zUTiK+R+KguUOiNXFj4mmj6cKqpkXm705hJTpWy9OHBBbbUclpLLQ5gjlfl6NL30lTK9AQZIF9D5Z+8WtGanxTms7D9n1eycN9kTTie7hR59KybPSdgnZbuiQ2PlnPGO2mS/mGro99fqXy8BePcF2qrCsRq9VCPAKq+cD8J/04/x7aRm/+u9oh/SGEshw5bH9o+GZwwZAqMt7BeweDtaFRSeCpPpTyI/S+d0e3jfVAXTNqSw9ontft0eL99b3CdFmKOMYdYezmfAzzpRgp82EH3sS7Qur4YT2gCcb92eeZID42CqUGibNUN0J8Cnqb/c0wRRNXghRix8WNj3RUbM6+lqemQGcJkrqy1ieJDwJNa7INUfJAB8Q4iQBHs5Wmjbh1rgGtreJYU0LlZvoGSScpqmXMzeL2M1HXvfhW3q48V8MIH02lXK7VOaAJSDqwoH4wgmntm8oMz1LSPvzdaJo/SoeYVXkOv9Hl5ALfKq3ggC7D1KWFwuX9V8mHIk25oG6mQzJKkpSrS90bCLTvoQlu09OSVD08bmNO9va1Mb1775AptcY5LFGEkc/QGgcukZvvkw3KY+7hwqIxBbTGqy24z79sfWM8O2aZ2o64SKLlNJVm3cZb1OqntSupxX8pyPbYT5fbp3BuUm/TK9kQlAMYg77CZHzah/A63bp5uVvleX5STbVtnNfU9Ck3WGqHPDzAbIQzaBACamyNyux8ixM0tiXs4vkq9A3p2j1G7rY9P4sR96Kje321sW7xtuLOppaT+u1tWlFCA0IOIDmRoAaiPHXPP6+DrMMBsXtCtSqpnm47XHuP7p6dGnPXeBywAG3GzPKD/06Mww33eKURAKbz6STD7VNZFl3AV8WzAsb3vqMzMucJHbmP11CNjfD1m4akVybs8YN0NogWwLGpmq0vUgw2PGfFqVdgiC6yrTLLl8M6A1ZPB+DfNUfOaH3ValNU0KD9gz9yg0qckgoAFe9LfbOiSkYEtRwQOZUXmUbzqlo8a7Oo6dxia3XeeGNeBO1axNnRHiPJ+pXjq4tSqh8OmosKzmNj38RfngEghmwd56Uf2EbE9JrhtoGCxIO/Q1bt4ZXb+WZzPFm0YPa7dnCAwZmq5bUPghTZos1QjawnCsM68ERafpr/7qL5xsDJde5pWZsiSVwlHFwL0W+RbKbMwUNN4uEelabNnLyG+m5xyygfk3st2j9ugw/wkS5Jc0U8V0a2BUFt/GS+N6lfADD8pqCurhpLmXTYPSDwsnG3KUgp4N6CTKux7GTbgo7np/GSrOn2Re7fIzusrdTSLGingMYbXd/4slVH91UmaeNAhkUVGIq7Vm+3vQ9dJJQJIB/JQcXS5CYbEw9Hbfn0VD0iIiRKCsu3qu5ZRQzJIkSyGoXawJAvA1ndYXVNvXkXMLNy7adQsCDzZF+HLYiYxPfufjUrjQGjVeYaypE7afnX4EkoLK9fz7OkA7eZBOZu2/60/rVTGdcLXtrq6LXldHgKNB100MfG5n3H95l7m02jMWzmtGgs68JImbWQqVU2NaIV0zne1s9J31WOkCVTTnDS8WGzHAtJL+sET/rbm/OLXxLkXhck8Xg9EbY3VdQIc6kmtMIIcXcFN/qJo6Lvs7a3ODhS07+aw2ZisWrP/SV4FoVL7vybmFIdwjvD80EkEk1zdzkRdfh9sJY5bAnBbbi6z013XRbrTbvWrhcf5r5SDkjeA/VxpoI5h01l9RRmpDis1QsuiwHbQ9TWaT6PJn4WMmuzR4djNyqalgd8/Wjx9Sn3EDvin4fI+XJyYhY1pn7L22qAiuXRbOBuH4fxBaSale0DR8f1IGEUYGSRkAI6vZPwGuA1yyY1w5a1MW63z/SLMuGlfjPgtcI+jrTJF6fvFwqjPd8ffTaA9Sij4F4xdDfIZnOFft6CNdwq3vVdAC/j9kgJ6ZKf92rEhv1kkGrYq/fESbVJv32GqDx9HwODlk8t/oKAaeh/LbOXq1rxAaCB5rEe2fmVRMJNVwXZN0nUl4D+EtgNjoHtgBuaoJZAfKdjfLskKZr6+2a0uHpfuWJvTYK1G/Y3SA7U0clG9e5hu9Sf/KliJugWoT3ZprhP/8WLl65xWSt9/qwTx2P+X58r/AApYcbYPHcLRAAAAAElFTkSuQmCC" alt="HE Manufacturing"></div>
+    <div>
+      <div class="company">HE Manufacturing (M) Sdn Bhd</div>
+      <div class="addr">Lot 4823, Jalan Perusahaan 3, Kawasan Perindustrian Bukit Raja, 41050 Klang, Selangor, Malaysia</div>
+      <div class="lic">Manufacturing licence MAL-CM-2019-00417 &middot; FEI 3021748915</div>
+    </div>
+  </div>
+  <div class="doctitle">
+    <div class="t">Quality Manual</div>
+    <div class="m">HE-QM &middot; Rev 1 &middot; Effective 2023-11-07</div>
+  </div>
+  <div class="docbody">
+<p><img src="data:image/png;base64,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" style="width:1.80694in;height:0.53333in" /></p>
+<p>ISO 9001:2015</p>
+<p>QUALITY MANUAL</p>
+<p>(HE-QM)</p>
+<p><strong>DO NOT DUPLICATE</strong></p>
+<p>This Document is the intellectual property of <strong>HE MANUFACTURING (M) SDN BHD</strong> and contains confidential information may not be copied in whole or part, or transmitted to any third party without the express written permission from the Management of <strong>HE MANUFACTURING (M) SDN BHD.</strong> The Company reserves the right to withhold any information without giving any reason.</p>
+<p><br />
+<strong>UPDATING OR REVISION HISTORY</strong></p>
+<table>
+<colgroup>
+<col style="width: 7%" />
+<col style="width: 21%" />
+<col style="width: 10%" />
+<col style="width: 21%" />
+<col style="width: 18%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><strong>Rev No</strong></th>
+<th><strong>Effective Date</strong></th>
+<th><strong>Affected Page</strong></th>
+<th><strong>Change Descriptions</strong></th>
+<th><strong>Author / Created by</strong></th>
+<th><strong>Approved by</strong></th>
+</tr>
+<tr class="odd">
+<th>0</th>
+<th>01/06/2023</th>
+<th>All</th>
+<th>Original Issue</th>
+<th><strong>Diviya</strong></th>
+<th><strong>Saminda</strong></th>
+</tr>
+<tr class="header">
+<th>01</th>
+<th>07/11/2023</th>
+<th>All</th>
+<th>Revised Scope &amp; include clause 8.3</th>
+<th><strong>Diviya</strong></th>
+<th><strong>Saminda</strong></th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<h1 id="table-of-contents"><strong>TABLE OF CONTENTS</strong></h1>
+<table>
+<colgroup>
+<col style="width: 78%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><strong>Contents</strong></th>
+<th><strong>Page No</strong></th>
+</tr>
+<tr class="odd">
+<th>Revision Change History</th>
+<th>1</th>
+</tr>
+<tr class="header">
+<th><h2 id="table-of-contents-1">Table of Contents</h2></th>
+<th>2</th>
+</tr>
+<tr class="odd">
+<th><ol type="1">
+<li><blockquote>
+<p>Preface</p>
+</blockquote></li>
+</ol></th>
+<th>3</th>
+</tr>
+<tr class="header">
+<th><ol start="2" type="1">
+<li><blockquote>
+<p>Applicability</p>
+</blockquote></li>
+</ol></th>
+<th>3</th>
+</tr>
+<tr class="odd">
+<th><ol start="3" type="1">
+<li><blockquote>
+<p>Terms and Definition</p>
+</blockquote></li>
+</ol></th>
+<th>4</th>
+</tr>
+<tr class="header">
+<th>4. Context of the organization</th>
+<th>5</th>
+</tr>
+<tr class="odd">
+<th>5. Leadership</th>
+<th>7</th>
+</tr>
+<tr class="header">
+<th>6. Planning</th>
+<th>9</th>
+</tr>
+<tr class="odd">
+<th>7. Support</th>
+<th>12</th>
+</tr>
+<tr class="header">
+<th>8. Operation</th>
+<th>19</th>
+</tr>
+<tr class="odd">
+<th>9. Performance evaluation</th>
+<th>25</th>
+</tr>
+<tr class="header">
+<th>10. Improvement</th>
+<th>28</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<p><strong>PRE-FACE</strong></p>
+<p>Date of Incorporation : <strong>11<sup>th</sup> September 2013</strong></p>
+<p>Company Registration No : <strong>1061849-K</strong></p>
+<p>Office Address : <strong>No.3, Jalan KPK 4/3, Kundang Jaya, Rawang,</strong></p>
+<blockquote>
+<p><strong>Selangor 48020, Malaysia.</strong></p>
+</blockquote>
+<p><strong>HE MANUFACTURING (M) SDN BHD (HE)</strong> is dynamic and evolving Italian soap manufacturing company based in Malaysia, and we are globally recognized as a direct manufacturer of premium hotel Personal Care Amenities as well as a trendsetter in introducing eco-friendly products. We take pride in developing and manufacturing 100% Plastic – Free Personal Care Amenities, which have a greater impact on saving the planet by lowering the Carbon Footprint and benefiting the environment, society, and economy. Quality, Innovation, and Sustainability have been the driving forces behind our company since its inception. Our Value Statement, "Promoting Environmental Sustainability and Delivering Excellence", has been instrumental in propelling our company to where it is today.</p>
+<p><strong>HE MANUFACTURING (M) SDN BHD (HE)</strong> was founded in 2014 and has grown tremendously in seven years, gaining a reputation in the Hotel Supply industry. The United States is the largest buyer, with Canada, France, Japan, Malaysia, and Vietnam rounding out the top six.</p>
+<p>Our passion for Eco-Friendly products drives us to continue developing revolutionary Zero Plastic products that are globally recognized as "The Best for The Guest", and we are committed to delivering world-class products and services to International Hotel Chains, Hotel Suppliers, and Retailers.</p>
+<h5 id="standard-for-certification"><strong><u>Standard for Certification</u></strong></h5>
+<h6 id="iso-90012015-quality-management-system">ISO 9001:2015 Quality Management System </h6>
+<ol type="1">
+<li><p><strong>Scope of Quality Management System</strong></p></li>
+</ol>
+<blockquote>
+<p><strong>MANUFACTURE OF PERSONAL CARE AMENITIES, INCLUDING SOAPS, SHAMPOOS, BODY WASHES, CONDITIONERS AND BODY LOTIONS</strong></p>
+</blockquote>
+<ol start="2" type="1">
+<li><p><strong>Applicability</strong></p></li>
+</ol>
+<blockquote>
+<p>This Manual specifies requirements for an QMS when <strong>HE MANUFACTURING (M) SDN BHD (HE)</strong> :</p>
+</blockquote>
+<ol type="a">
+<li><blockquote>
+<p>needs to demonstrate its ability to consistently provide products and services that meet customer and applicable statutory and regulatory requirements, and</p>
+</blockquote></li>
+<li><blockquote>
+<p>an QMS to enhance customer satisfaction through the effective application of the system, including processes for improvement of the system and the assurance of conformity to customer and applicable statutory and regulatory requirements.</p>
+</blockquote></li>
+</ol>
+<p>This Manual does not refer to “exclusions” in relation to the applicability of its requirements to <strong>HE’s</strong> QMS. However, <strong>HE</strong> can review the applicability of requirements due to the size or complexity of our organization, the management model we adopt, the range of the <strong>HE</strong> activities and the nature of the risks and opportunities we encounter.</p>
+<blockquote>
+<p>The requirements for applicability are addressed in 4.3 of this Manual which defines conditions under which an organization can decide that a requirement cannot be applied to any of the processes within the scope of its QMS. <strong>HE MANUFACTURING (M) SDN BHD (HE)</strong> can only decide that a requirement is not applicable if its decision will not result in failure to achieve conformity of products and services (<strong>refer to 4.3</strong>).</p>
+</blockquote>
+<ol start="3" type="1">
+<li><p><strong>Terms and Definitions</strong></p></li>
+</ol>
+<blockquote>
+<p>For the purposes of this document, the terms and definitions given are defined as follows:</p>
+</blockquote>
+<table>
+<colgroup>
+<col style="width: 23%" />
+<col style="width: 76%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><blockquote>
+<p><strong>HE</strong></p>
+</blockquote></th>
+<th><blockquote>
+<p><strong>HE MANUFACTURING (M) SDN BHD (HE)</strong> </p>
+</blockquote></th>
+</tr>
+<tr class="odd">
+<th><blockquote>
+<p>DCC</p>
+</blockquote></th>
+<th><blockquote>
+<p>Document Control Coordinator</p>
+</blockquote></th>
+</tr>
+<tr class="header">
+<th><blockquote>
+<p>QMS</p>
+</blockquote></th>
+<th><blockquote>
+<p>Quality Management System</p>
+</blockquote></th>
+</tr>
+<tr class="odd">
+<th><blockquote>
+<p>HOD</p>
+</blockquote></th>
+<th><blockquote>
+<p>Head of Department</p>
+</blockquote></th>
+</tr>
+<tr class="header">
+<th><blockquote>
+<p>External Provider</p>
+</blockquote></th>
+<th><blockquote>
+<p>An external organization performs part of the company’s function or process</p>
+</blockquote></th>
+</tr>
+<tr class="odd">
+<th><blockquote>
+<p>Customer / Client</p>
+</blockquote></th>
+<th><blockquote>
+<p>Recipient of <strong>HE</strong> products or services</p>
+</blockquote></th>
+</tr>
+<tr class="header">
+<th><blockquote>
+<p>Product / Services</p>
+</blockquote></th>
+<th>Result of activities or processes <strong>HE MANUFACTURING (M) SDN BHD (HE)</strong> intended for, or required by a client, i.e., <strong>MANUFACTURE OF PERSONAL CARE AMENITIES, INCLUDING SOAPS, SHAMPOOS, BODY WASHES, CONDITIONERS AND BODY LOTIONS.</strong></th>
+</tr>
+<tr class="odd">
+<th><blockquote>
+<p>Interested Parties</p>
+</blockquote></th>
+<th><blockquote>
+<p>Person or <em>organization</em> that can affect, be affected by, or perceive itself to be affected by a decision or activity</p>
+</blockquote></th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<p><strong>4. Context of the organization</strong></p>
+<p><strong>4.1 Understanding the organization and its context.</strong></p>
+<p><strong>HE MANUFACTURING (M) SDN BHD (HE)</strong> shall determine external and internal issues that are relevant to its purpose and its strategic direction and that affect its ability to achieve the intended result(s) and outcomes of its QMS. Such issues shall include environmental and safety conditions being affected by or capable of affecting the organization.</p>
+<p>The company shall monitor and review information about these external and internal issues.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-MT-P05 Risks &amp; Opportunities Procedure</strong></p>
+<p><strong>2. Appendix V External &amp; Internal Issues and Interested Parties</strong></p>
+<p><strong>4.2 Understanding the needs and expectations of interested parties.</strong></p>
+<p>Due to their effect or potential effect on the company’s ability to consistently provide products and services that meet customer and applicable statutory and regulatory requirements, <strong>HE</strong> shall determine:</p>
+<p>a) the interested parties, in addition to workers, that are relevant to the quality management system.</p>
+<p>b) the needs and expectations of workers and of these interested parties that are relevant to the quality management system.</p>
+<p>c) which of these needs and expectations are, or could become, legal requirements and other requirements.</p>
+<p><strong>HE</strong> shall monitor and review information about these interested parties and their relevant requirements.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. Appendix V External &amp; Internal Issues and Interested Parties</strong></p>
+<p><strong>4.3 Determining the scope of the QMS</strong></p>
+<p><strong>HE</strong> shall determine the boundaries and applicability of the QMS to establish its scope.</p>
+<p>When determining this scope, the company shall consider:</p>
+<p>a) the external and internal issues referred to in 4.1;</p>
+<p>b) the requirements of relevant interested parties referred to in 4.2;</p>
+<p>c) the legal requirements referred to in 4.2;</p>
+<p>d) its organizational units, functions and physical boundaries;</p>
+<p>e) the products and services of <strong>HE</strong></p>
+<p>f) its authority and ability to exercise control and influence.</p>
+<p>g) the planned or performed work-related activities.</p>
+<p><strong>HE</strong> shall apply all the requirements of this Quality Manual if they are applicable within the determined scope of its QMS.</p>
+<p>The scope of the company’s QMS shall be available and be maintained as documented information. The scope shall state the types of products and services covered and provide justification for any requirement of this Quality Manual that <strong>HE</strong> determines is not applicable to the scope of its QMS.</p>
+<p><strong>HE</strong> has determined the scope of the QMS covers all activities in the boundaries of its office located at <strong>NO 3, JALAN KPK 4/3 KUNDANG JAYA, 48020 RAWANG, SELANGOR.</strong> These activities comply with the requirements of <strong>ISO 9001: 2015</strong> standards pertaining to the company’s scope of certification.</p>
+<p>Conformity to the standards may only be claimed if the requirements determined as not being applicable do not affect the organization’s ability or responsibility to ensure the conformity of its products and services and the enhancement of customer satisfaction.</p>
+<p><strong>4.4 Quality management system and its processes</strong></p>
+<p>4.4.1 To achieve the intended outcomes, including enhancing its environmental and safety performance, <strong>HE</strong> shall establish, implement, maintain, and continually improve an QMS, including the processes needed and their interactions, in accordance with the requirements of this Quality Manual.</p>
+<blockquote>
+<p><strong>HE</strong> shall determine the processes needed for the QMS and their application throughout the company, and shall:</p>
+<p>a) determine the inputs required and the outputs expected from these processes;</p>
+<p>b) determine the sequence and interaction of these processes; (<strong>refer to Appendix II Sequence and interaction of processes)</strong></p>
+<p>c) determine and apply the criteria and methods (including monitoring, measurements and related performance indicators) needed to ensure the effective operation and control of these processes;</p>
+<p>d) determine the resources needed for these processes and ensure their availability;</p>
+<p>e) assign the responsibilities and authorities for these processes;</p>
+<p>f) address the risks and opportunities as determined in accordance with the requirements of 6.1; (<strong>refer to Appendix V External &amp; Internal Issues &amp; Interested Parties)</strong></p>
+<p>g) evaluate these processes and implement any changes needed to ensure that these processes achieve their intended results;</p>
+<p>h) improve the processes and the QMS</p>
+<p><strong>HE</strong> shall consider the knowledge gained in 4.1 and 4.2 when establishing and maintaining the QMS.</p>
+</blockquote>
+<ol start="2" type="1">
+<li><p>To the extent necessary, <strong>HE</strong> shall:</p></li>
+</ol>
+<ol type="a">
+<li><blockquote>
+<p>maintain documented information to support the operation of its processes;</p>
+</blockquote></li>
+</ol>
+<blockquote>
+<p>b) retain documented information to have confidence that the processes are being carried out as planned.</p>
+</blockquote>
+<p><strong>5 Leadership</strong></p>
+<p><strong>5.1 Leadership and commitment</strong></p>
+<p><strong>5.1.1 General</strong></p>
+<p>Top management shall demonstrate leadership and commitment with respect to the QMS by:</p>
+<ol type="a">
+<li><p>taking accountability for the effectiveness of the QMS and overall responsibility and accountability for the prevention of work-related injury and ill health, as well as the provision of safe and healthy workplaces and activities;</p></li>
+<li><p>ensuring that the quality policy, Quality Policy, Quality Objectives are established for the QMS and are compatible with the context and strategic direction of <strong>HE</strong>; (<strong>refer to Appendix III - QP Quality Policy and Appendix IV - Quality Objectives)</strong></p></li>
+</ol>
+<p>c) ensuring the integration of the QMS requirements into the company’s business processes;</p>
+<p>d) promoting the use of the process approach and risk-based thinking;</p>
+<p>e) ensuring that the resources needed for the QMS are available;</p>
+<p>f) communicating the importance of effective quality management and of conforming to the QMS requirements;</p>
+<p>g) ensuring that the QMS achieves its intended results and outcomes;</p>
+<p>h) engaging, directing and supporting persons to contribute to the effectiveness of the QMS</p>
+<ol type="i">
+<li><p>ensuring and promoting improvement;</p></li>
+</ol>
+<p>j) supporting other relevant management roles to demonstrate their leadership as it applies to their areas of responsibility;</p>
+<p>h) developing, leading and promoting a culture in the organization that supports the intended outcomes of the QMS;</p>
+<p><strong>5.1.2 Customer focus</strong></p>
+<p>Top management shall demonstrate leadership and commitment with respect to customer focus by ensuring that:</p>
+<p>a) customer and applicable statutory and regulatory requirements are determined, understood and consistently met;</p>
+<p>b) the risks and opportunities that can affect conformity of products and services and the ability to enhance customer satisfaction are determined and addressed; (<strong>refer to refer to Appendix III Quality Policy and Appendix IV Quality Objectives</strong>)</p>
+<ol start="3" type="a">
+<li><p>the focus on enhancing customer satisfaction is maintained.</p></li>
+</ol>
+<p>`</p>
+<p>﻿</p>
+<p><strong>5.2 Policy</strong></p>
+<p><strong>5.2.1 Developing the Quality Policy</strong></p>
+<p>Top management shall establish, implement, and maintain a Quality policy that, within the defined scope of its QMS:</p>
+<ol type="a">
+<li><p>is appropriate to the purpose and context of <strong>HE</strong> and supports its strategic direction, including the nature, scale and environmental impacts of its activities, products and services;</p></li>
+<li><p>provides a framework for setting quality objectives;</p></li>
+<li><p>includes a commitment to satisfy applicable requirements;</p></li>
+</ol>
+<p><strong>5.2.2 Communicating the Quality Policies</strong></p>
+<p>The policies shall:</p>
+<ol type="a">
+<li><p>be available and be maintained as documented information;</p></li>
+</ol>
+<p>b) be communicated, understood and applied within <strong>HE</strong>;</p>
+<p>c) be available to relevant interested parties, as appropriate.</p>
+<p><strong>Refer to:</strong></p>
+<ol type="1">
+<li><blockquote>
+<p><strong>Appendix III Quality Policy</strong></p>
+</blockquote></li>
+</ol>
+<p><strong>5.3 Organizational roles, responsibilities, and authorities</strong></p>
+<p>Top management shall ensure that the responsibilities and authorities for relevant roles are assigned, communicated and understood within <strong>HE</strong>. Workers at each level of the organization shall assume responsibility for those aspects of the QMS over which they have control.</p>
+<p>Top management shall assign the responsibility and authority for:</p>
+<p>a) ensuring that the QMS conforms to the requirements of this Quality Manual;</p>
+<ol start="2" type="a">
+<li><p>ensuring that the processes are delivering their intended outputs;</p></li>
+<li><p>reporting on the performance of the QMS and on opportunities for improvement (see 10.1), in particular to top management;</p></li>
+<li><p>ensuring the promotion of customer focus throughout the company;</p></li>
+<li><p>ensuring that the integrity of the QMS is maintained when changes to the QMS are planned and implemented.</p></li>
+</ol>
+<p><strong>HE</strong> recognizes that quality, environmental and safety is the responsibility of all personnel within the organization. Accordingly, responsibility for achieving quality will be assigned and the authority to discharge these responsibilities delegated. The responsibilities and authorities are communicated to relevant employees to facilitate effective implementation of QMS.</p>
+<p>The Managing Director and Directors are overseeing the day-to-day operation of the organization. They are also making crucial decision relating to the operations of the organization. In dedicating responsibilities and authorities to the organization personnel, specific Job Description are established to define responsibilities, authority &amp; their interrelation for various Job positions relating to personnel who manage, perform and verify work that affect quality. The Job Description are communicated to relevant employees to effective implementation of QMS.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. Appendix I Organization Chart</strong></p>
+<p><strong>2. HE-JD Job Description</strong></p>
+<p><strong>6 Planning</strong></p>
+<p><strong>6.1 Actions to address risks and opportunities</strong></p>
+<p>6.1.1 When planning for the QMS, <strong>HE</strong> shall consider the issues referred to in 4.1, the requirements referred to in 4.2 and the scope of its QMS and determine the risks and opportunities identified in 4.1 and 4.2, that need to be addressed to:</p>
+<blockquote>
+<p>a) give assurance that the QMS can achieve its intended result(s)</p>
+<p>and outcomes;</p>
+<p>b) enhance desirable effects;</p>
+<p>c) prevent, or reduce, undesired effects;</p>
+<p>d) achieve improvement.</p>
+<p><strong>HE</strong> in its planning process(es), shall determine and assess the risks and opportunities that are relevant to the intended outcomes of the QMS associated with changes in the organization, its processes or the QMS. In the case of planned changes, permanent or temporary, this assessment shall be undertaken before the change is implemented.</p>
+</blockquote>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-MT-P05 Risks and Opportunities Procedure</strong></p>
+<p><strong>6.1.2 HE</strong> shall plan:</p>
+<blockquote>
+<p>a) actions to address these risks and opportunities;</p>
+<p>b) how to:</p>
+<p>1) integrate and implement the actions into its quality management system processes (see 4.4);</p>
+<p>2) evaluate the effectiveness of these actions.</p>
+<p>Actions taken to address risks and opportunities shall be proportionate to the potential impact on the conformity of products and services.</p>
+<p>NOTE 1 Options to address risks can include avoiding risk, taking risk in order to pursue an opportunity,</p>
+<p>eliminating the risk source, changing the likelihood or consequences, sharing the risk, or retaining risk by</p>
+<p>informed decision.</p>
+<p>NOTE 2 Opportunities can lead to the adoption of new practices, launching new products, opening new</p>
+<p>markets, addressing new customers, building partnerships, using new technology and other desirable and viable possibilities to address the organizations or its customers’ needs.</p>
+</blockquote>
+<p><strong>6.2 Quality objectives and planning to achieve them</strong></p>
+<p>6.2.1 <strong>HE</strong> shall establish Quality Objectives at relevant functions, levels, taking into account the organization’s significant risk and associated legal requirements considering its risks and opportunities and processes needed for the QMS.</p>
+<blockquote>
+<p>The Quality objectives shall:</p>
+<p>a) be consistent with the Quality policies;</p>
+<p>b) be measurable;</p>
+<p>c) take into account;</p>
+<p>1) applicable requirements;</p>
+<p>2) the results of the assessment of risks and opportunities;</p>
+<p>3) the results of consultation with workers and, where they exist, workers’ representatives;</p>
+<p>d) be relevant to conformity of products and services and to enhancement of customer satisfaction;</p>
+<p>e) be monitored;</p>
+<p>f) be communicated;</p>
+<p>g) be updated as appropriate.</p>
+</blockquote>
+<p><strong>HE</strong> shall maintain documented information on the objectives.</p>
+<p>6.2.2 When planning how to achieve its objectives, the company shall determine:</p>
+<blockquote>
+<p>a) what will be done;</p>
+<p>b) what resources will be required;</p>
+<p>c) who will be responsible;</p>
+<p>d) when it will be completed;</p>
+<p>e) how the results will be evaluated, including indicators for monitoring progress toward achievement of its measurable objectives (see 9.1.1).</p>
+<p>f) how the actions to achieve Quality objectives will be QMS into the organization’s</p>
+<p>business processes.</p>
+</blockquote>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. Appendix IV Quality Objectives</strong></p>
+<p><strong>6.3 Planning of changes</strong></p>
+<p>When <strong>HE</strong> determines the need for changes to the QMS, the changes shall be carried out in a planned manner (see 4.4).</p>
+<p>﻿<strong>HE</strong> shall consider:</p>
+<p>a) the purpose of the changes and their potential consequences;</p>
+<p>b) the integrity of the QMS;</p>
+<p>c) the availability of resources;</p>
+<p>d) the allocation or reallocation of responsibilities and authorities.</p>
+<p><strong>HE</strong> shall distribute the latest QMS to reflect following changes (if applicable and relevant) from time to time to the staff for implementation:</p>
+<ul>
+<li><blockquote>
+<p>Change to a process (inputs, activities, outputs, controls, etc.)</p>
+</blockquote></li>
+<li><blockquote>
+<p>Communication with client</p>
+</blockquote></li>
+<li><blockquote>
+<p>Communication with the supply chain</p>
+</blockquote></li>
+<li><blockquote>
+<p>Additional controls for processes</p>
+</blockquote></li>
+<li><blockquote>
+<p>Inspection</p>
+</blockquote></li>
+<li><blockquote>
+<p>Employee training</p>
+</blockquote></li>
+<li><blockquote>
+<p>Implement a new process</p>
+</blockquote></li>
+<li><blockquote>
+<p>Provide documented information</p>
+</blockquote></li>
+<li><blockquote>
+<p>Change existing documented information</p>
+</blockquote></li>
+<li><blockquote>
+<p>Improve employee competence</p>
+</blockquote></li>
+<li><blockquote>
+<p>Outsource a process</p>
+</blockquote></li>
+</ul>
+<p><strong>6.3.1 Management of change</strong></p>
+<p><strong>HE</strong> shall establish a process for the implementation and control of planned temporary and permanent changes that impact performance, including:</p>
+<p>a) new products, services and processes, or changes to existing products, services and</p>
+<blockquote>
+<p>processes, including:</p>
+<p>— workplace locations and surroundings;</p>
+<p>— work organization;</p>
+<p>— working conditions;</p>
+<p>— equipment;</p>
+<p>— work force;</p>
+</blockquote>
+<p>b) developments in knowledge and technology.</p>
+<p>The company shall review the consequences of unintended changes, taking action to mitigate any adverse effects, as necessary.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-MT-P01 Management of Change Procedure</strong></p>
+<p><strong>7 Support</strong></p>
+<p><strong>7.1 Resources</strong></p>
+<p><strong>7.1.1 General</strong></p>
+<p><strong>HE</strong> shall determine and provide the resources needed for the establishment, implementation, maintenance and continual improvement of the quality management system.</p>
+<p><strong>HE</strong> shall consider:</p>
+<p>a) the capabilities of, and constraints on, existing internal resources</p>
+<p>b) what needs to be obtained from external providers.</p>
+<p><strong>7.1.2 People</strong></p>
+<p><strong>HE</strong> shall determine and provide the persons necessary for the effective implementation of its quality management system and for the operation and control of its processes.</p>
+<p><strong>7.1.3 Infrastructure</strong></p>
+<p><strong>HE</strong> shall determine, provide and maintain the infrastructure necessary for the operation of its processes and to achieve conformity of products and services.</p>
+<p>The responsible personnel shall perform the periodic maintenance of the infrastructures in ensuring their suitability in meeting the company needs. Planning of maintenance shall be based on:</p>
+<ul>
+<li><p>the criticality of infrastructures</p></li>
+<li><p>the frequency of usage</p></li>
+<li><p>the suitability of the infrastructures</p></li>
+</ul>
+<p>All the maintenance activities shall be planned and recorded in the related maintenance record.</p>
+<p><strong>Refer to:</strong></p>
+<ol type="1">
+<li><p><strong>HE-OP-P03 Infrastructure Maintenance Procedure</strong></p></li>
+</ol>
+<p><strong>7.1.4 Environment for the operation of processes</strong></p>
+<p><strong>HE</strong> shall determine, provide and maintain the environment necessary for the operation of its processes and to achieve conformity of products and services.</p>
+<p>A suitable environment can be a combination of human and physical factors, such as:</p>
+<p>a) social (e.g., non-discriminatory, calm, non-confrontational);</p>
+<p>b) psychological (e.g., stress-reducing, burnout prevention, emotionally protective);</p>
+<p>c) physical (e.g., temperature, heat, humidity, light, airflow, hygiene, noise).</p>
+<p>These factors can differ substantially depending on the products and services provided.</p>
+<p><strong>HE</strong> shall identify and manage the human and physical factors of the work environment needed to achieve product and process conformity to requirements. Post’s environment shall be surveyed to determine obstacles or requirements for security provision. Office personnel shall adopt good housekeeping to maintain clean and tidy work condition. While working on site, operation department shall ensure that safety procedures and requirements at site are adhered to.</p>
+<p><strong>7.1.5 Monitoring and measuring resources</strong></p>
+<p><strong>7.1.5.1 General</strong></p>
+<p><strong>HE</strong> shall determine and provide the resources needed to ensure valid and reliable results when monitoring or measuring is used to verify the conformity of products and services to requirements.</p>
+<p>The company shall ensure that the resources provided:</p>
+<p>a) are suitable for the specific type of monitoring and measurement activities being undertaken</p>
+<p>b) are maintained to ensure their continuing fitness for their purpose.</p>
+<p><strong>HE</strong> shall retain appropriate documented information as evidence of fitness for purpose of the monitoring and measurement resources.</p>
+<p><strong>7.1.5.2 Measurement traceability</strong></p>
+<p>When measurement traceability is a requirement, or is considered by <strong>HE</strong> to be an essential part of providing confidence in the validity of measurement results, measuring equipment shall be:</p>
+<p>a) calibrated or verified, or both, at specified intervals, or prior to use, against measurement standards traceable to international or national measurement standards; when no such standards exist, the basis used for calibration or verification shall be retained as documented information;</p>
+<p>b) identified in order to determine their status;</p>
+<p>c) safeguarded from adjustments, damage or deterioration that would invalidate the calibration status and subsequent measurement results.</p>
+<p><strong>HE</strong> shall determine if the validity of previous measurement results has been adversely affected when measuring equipment is found to be unfit for its intended purpose and shall take appropriate action as necessary.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-OP-P03 Infrastructure Maintenance Procedure</strong></p>
+<p><strong>7.1.6 Organizational knowledge</strong></p>
+<p><strong>HE</strong> shall determine the knowledge necessary for the operation of its processes and to achieve conformity of products and services.</p>
+<p>This knowledge shall be maintained and be made available to the extent necessary.</p>
+<p>When addressing changing needs and trends, the company shall consider its current knowledge and determine how to acquire or access any necessary additional knowledge and required updates. This can be done through post-mortem meetings, handover checklist, training materials retention and post trainings report or internal training.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>HE-HR-P01 Rev0 Competency Training &amp; Awareness,</strong> in particular knowledge specific to the organization; it is generally gained by experience. It is information that is used and shared to achieve the organization’s objectives and can be based on:</p>
+<ol type="a">
+<li><p>internal sources (e.g., intellectual property; knowledge gained from experience; lessons learned from failures and successful projects; capturing and sharing undocumented knowledge and experience; the results of improvements in processes, products and services);</p></li>
+</ol>
+<p>b) external sources (e.g., standards; academia; conferences; gathering knowledge from clients or external providers)</p>
+<p><strong>7.2 Competence</strong></p>
+<p><strong>HE</strong> shall:</p>
+<p>a) determine the necessary competence of person(s) doing work under its control that affects the performance and effectiveness of the quality management system</p>
+<p>﻿b) ensure that these persons are competent on the basis of appropriate education, training, or experience</p>
+<p>c) where applicable, take actions to acquire the necessary competence, and evaluate the effectiveness of the actions taken</p>
+<p>d) retain appropriate documented information as evidence of competence.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-HR-P01 Competency Training &amp; Awareness Procedure</strong></p>
+<p><strong>7.3 Awareness</strong></p>
+<p><strong>HE</strong> shall ensure that persons doing work under <strong>HE</strong> controls are aware of:</p>
+<p>a) the quality policy</p>
+<p>b) relevant quality objectives</p>
+<p>c) their contribution to the effectiveness of the quality management system, including the benefits of improved performance</p>
+<p>d) the implications of not conforming with the quality management system requirements.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-HR-P01 Competency Training &amp; Awareness Procedure</strong></p>
+<p><strong>7.4 Communication</strong></p>
+<p><strong>HE</strong> shall determine the internal and external communications relevant to the quality management system, including:</p>
+<p>a) on what it will communicate</p>
+<p>b) when to communicate</p>
+<p>c) with whom to communicate</p>
+<p>d) how to communicate</p>
+<p>e) who communicates.</p>
+<p>The Top Management shall ensure that information on the process and effectiveness of the quality management system is being communicated between its various levels and functions in <strong>HE</strong>. For example, through the use of meeting, notice, memo, e-mail, forms, etc.</p>
+<p>Should the internal communication found not effective, the respective head of department shall determine the problem and propose the effective communication as deemed necessary.</p>
+<table>
+<colgroup>
+<col style="width: 21%" />
+<col style="width: 21%" />
+<col style="width: 21%" />
+<col style="width: 18%" />
+<col style="width: 18%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th colspan="5"><strong>Internal Communication</strong></th>
+</tr>
+<tr class="odd">
+<th><strong>What</strong></th>
+<th><strong>When</strong></th>
+<th><strong>with Whom</strong></th>
+<th><strong>How</strong></th>
+<th><strong>Who</strong></th>
+</tr>
+<tr class="header">
+<th>Quality Policy</th>
+<th>Permanent</th>
+<th><p>All employees /</p>
+<p>Interested parties</p></th>
+<th>Display / Letter / Training</th>
+<th>MR</th>
+</tr>
+<tr class="odd">
+<th>Importance of Effective QMS</th>
+<th>As per Training Plan / during Orientation Training</th>
+<th>All employees</th>
+<th>Training / Display</th>
+<th>Human Resource</th>
+</tr>
+<tr class="header">
+<th>Responsibilities and Authority</th>
+<th>During recruitment / promotion / department change</th>
+<th>Employee</th>
+<th>Procedure / Training</th>
+<th>Human Resource</th>
+</tr>
+<tr class="odd">
+<th>Quality Objectives</th>
+<th>While defining / once in a year</th>
+<th>All employees</th>
+<th>Procedure / Training</th>
+<th>MR</th>
+</tr>
+<tr class="header">
+<th>Customer Feedback / Complaint</th>
+<th>At the time of receipt</th>
+<th>Head of the department / Respective process owner</th>
+<th>Meeting</th>
+<th>Operations Executive</th>
+</tr>
+<tr class="odd">
+<th colspan="5"><strong>External Communication</strong></th>
+</tr>
+<tr class="header">
+<th><strong>What</strong></th>
+<th><strong>When</strong></th>
+<th><strong>with Whom</strong></th>
+<th><strong>How</strong></th>
+<th><strong>Who</strong></th>
+</tr>
+<tr class="odd">
+<th>Information to external providers</th>
+<th>Placing purchase order / quotation</th>
+<th>External Provider</th>
+<th>Purchase Order / Letter / Email / Verbal / Fax</th>
+<th>Administration</th>
+</tr>
+<tr class="header">
+<th><p>Product</p>
+<p>Information</p></th>
+<th>Inquiry stage</th>
+<th>Customer</th>
+<th>Email / Verbal / Email / Fax</th>
+<th>Sales Dept</th>
+</tr>
+<tr class="odd">
+<th>Inquiry, amendments</th>
+<th>Contract review</th>
+<th>Customer</th>
+<th>Letter / Verbal / Email / Fax</th>
+<th>Sales Dept</th>
+</tr>
+<tr class="header">
+<th>Customer Satisfaction</th>
+<th>Once in a year / After Service</th>
+<th>Customer</th>
+<th>Forwarding customer satisfaction form</th>
+<th>Sales Dept</th>
+</tr>
+<tr class="odd">
+<th>Action taken for customer complaints</th>
+<th>Once action taken</th>
+<th>Customer</th>
+<th>Verbal / Email / Fax</th>
+<th>Sales Dept</th>
+</tr>
+<tr class="header">
+<th>Information to customer</th>
+<th>As agreed with customer</th>
+<th>Customer</th>
+<th>Letter / Verbal /Email / Fax</th>
+<th>Sales Dept</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<p>Refer to the information on the process and effectiveness of the QMS required to be communicated between its various levels and functions within the organization and external interested parties, for example, through briefing, face to face talk, display of policy, objectives, meetings, discussions, memo, notice, announcement, internal e-mail, teleconferencing, training and regular reporting.</p>
+<p><strong>7.5 Documented information</strong></p>
+<p><strong>7.5.1 General</strong></p>
+<p><strong>HE</strong> quality management system shall include:</p>
+<p>a) documented information required by this Quality Manual</p>
+<p>b) documented information determined by <strong>HE</strong> as being necessary for the effectiveness of the quality management system.</p>
+<p><strong>7.5.2 Creating and updating</strong></p>
+<p>When creating and updating documented information, <strong>HE</strong> shall ensure appropriate:</p>
+<p>a) identification and description (e.g., a title, date, <strong>author</strong>, or reference number)</p>
+<p>b) format (e.g., language, software version, graphics) and media (e.g., paper, electronic)</p>
+<p>c) review and approval for suitability and adequacy.</p>
+<p><strong>7.5.3 Control of documented information</strong></p>
+<p>7.5.3.1 Documented information required by the quality management system and by this Quality Manual shall be controlled to ensure:</p>
+<ol type="a">
+<li><blockquote>
+<p>it is available and suitable for use, where and when it is needed</p>
+</blockquote></li>
+</ol>
+<blockquote>
+<p>b) it is adequately protected (e.g., from loss of confidentiality, improper use, or loss of integrity).</p>
+</blockquote>
+<p>7.5.3.2 For the control of documented information, <strong>HE</strong> shall address the following activities, as applicable:</p>
+<blockquote>
+<p>a) distribution, access, retrieval and use</p>
+<p>b) storage and preservation, including preservation of legibility</p>
+<p>c) control of changes (e.g., version control);</p>
+<p>d) retention and disposition.</p>
+</blockquote>
+<p>Documented information of external origin determined by <strong>HE</strong> to be necessary for the planning and operation of the quality management system shall be identified as appropriate and be controlled.</p>
+<p>Documented information retained as evidence of conformity shall be protected from unintended alterations.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-MT-P02 Control of Documented Information Procedure</strong></p>
+<p>7.5.4 Quality System Structure</p>
+<p>The Quality System is structured into 4 levels, namely:</p>
+<p><img src="data:image/png;base64,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" style="width:5.47292in;height:2.91042in" /></p>
+<p>7.5.4.1 Quality Manual</p>
+<blockquote>
+<p>The Quality Manual specifies the company policy, objectives and outlines the Quality Management System.</p>
+</blockquote>
+<p>7.5.4.2 Procedures</p>
+<blockquote>
+<p>The Procedures describe <strong>HE</strong> interfaces between different sections or departments, including the process flow in satisfying the ISO 9001:2015 Requirements as well as meeting the needs of <strong>HE</strong></p>
+</blockquote>
+<p>7.5.4.3 Work Instructions</p>
+<blockquote>
+<p>The Work Instructions are documents maintained to provide specific instructions to tasks and clearly specifies the criteria to characteristics.</p>
+</blockquote>
+<p>7.5.4.4 Specifications/Standards</p>
+<blockquote>
+<p>Specifications are data maintained to demonstrate the conformance to requirements of specified product or services.</p>
+</blockquote>
+<p>7.5.4.5 Records and Checklist</p>
+<blockquote>
+<p>Records and checklists are formats designed for demonstrating conformance to the quality system, product and process quality.</p>
+</blockquote>
+<p><strong>8 Operation</strong></p>
+<p><strong>8.1 Operational planning and control</strong></p>
+<p><strong>HE</strong> shall plan, implement and control the processes (see 4.4) needed to meet the requirements for the provision of products and services, and to implement the actions determined in</p>
+<p>Clause 6, by:</p>
+<p>a) determining the requirements for the products and services</p>
+<p>b) establishing criteria for:</p>
+<blockquote>
+<p>i) the processes</p>
+<p>ii) the acceptance of products and services</p>
+</blockquote>
+<p>c) determining the resources needed to achieve conformity to the product and service requirements</p>
+<p>d) implementing control of the processes in accordance with the criteria</p>
+<p>e) determining and keeping documented information to the extent necessary:</p>
+<p>i) to have confidence that the processes have been carried out as planned</p>
+<p>﻿ ii) to demonstrate the conformity of products and services to their requirements.</p>
+<p>The output of this planning shall be suitable for <strong>HE</strong> operations.</p>
+<p><strong>HE</strong> shall control planned changes and review the consequences of unintended changes, taking action to mitigate any adverse effects, as necessary.</p>
+<p><strong>HE</strong> shall ensure that outsourced processes are controlled (see 8.4).</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-OP-P01 Operational Planning &amp; Control Procedure</strong></p>
+<p><strong>8.2 Requirements for products and services</strong></p>
+<p><strong>8.2.1 Customer communication</strong></p>
+<p>Communication with customers shall include:</p>
+<p>a) providing information relating to products and services</p>
+<p>b) handling enquiries, contracts or orders, including changes</p>
+<p>c) obtaining customer feedback relating to products and services, including customer complaints</p>
+<p>d) handling or controlling customer property</p>
+<p>e) establishing specific requirements for contingency actions, when relevant.</p>
+<p><strong>8.2.2 Determining the requirements related to products and services</strong></p>
+<p>When determining the requirements for the products and services to be offered to customers, <strong>HE</strong> shall ensure that:</p>
+<p>a) the requirements for the products and services are defined, including:</p>
+<p>i) any applicable statutory and regulatory requirements</p>
+<p>ii) those considered necessary by <strong>HE</strong></p>
+<p>b) <strong>HE</strong> can meet the claims for the products and services it offers.</p>
+<p><strong>8.2.3 Review of requirements related to products and services</strong></p>
+<p>8.2.3.1 <strong>HE</strong> shall ensure that it has the ability to meet the requirements for products and services to be offered to customers. <strong>HE</strong> shall conduct a review before committing to supply products and services to a customer, to include:</p>
+<p>a) requirements specified by the customer, including the requirements for delivery and post-delivery activities</p>
+<blockquote>
+<p>b) requirements not stated by the customer, but necessary for the specified or intended use, when known</p>
+</blockquote>
+<p>c) requirements specified by <strong>HE</strong></p>
+<p>d) statutory and regulatory requirements applicable to the products and services</p>
+<p>e) contract or order requirements differing from those previously expressed.</p>
+<blockquote>
+<p><strong>HE</strong> shall ensure that contract or order requirements differing from those previously defined are resolved.</p>
+<p>The customer’s requirements shall be confirmed by <strong>HE</strong> before acceptance, when the customer does not provide a documented statement of their requirements.</p>
+</blockquote>
+<p>8.2.3.2 <strong>HE</strong> shall retain documented information, as applicable:</p>
+<p>a) on the results of the review</p>
+<p>b) on any new requirements for the products and services.</p>
+<p><strong>8.2.4 Changes to requirements for products and services</strong></p>
+<p><strong>HE</strong> shall ensure that relevant documented information is amended, and that relevant persons are made aware of the changed requirements, when the requirements for products and services are changed.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-CS-P01 Customer Enquiry, Complaint &amp; Feedback Procedure</strong></p>
+<p><strong>8.3 Design and development of products and services</strong></p>
+<p><strong>8.3.1 General</strong></p>
+<p>The organization shall establish, implement and maintain a design and development process that is appropriate to ensure the subsequent provision of products and services.</p>
+<p><strong>8.3.2 Design and development planning</strong></p>
+<p>In determining the stages and controls for design and development, the organization shall consider:</p>
+<ol type="a">
+<li><blockquote>
+<p>the nature, duration and complexity of the design and development activities;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the required process stages, including applicable design and development reviews;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the required design and development verification and validation activities;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the responsibilities and authorities involved in the design and development process;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the internal and external resource needs for the design and development of products and services;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the need to control interfaces between persons involved in the design and development process;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the need for involvement of customers and users in the design and development process;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the requirements for subsequent provision of products and services;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the level of control expected for the design and development process by customers and other relevant interested parties;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the documented information needed to demonstrate that design and development requirements have been met.</p>
+</blockquote></li>
+</ol>
+<p><strong>8.3.3 Design and development inputs</strong></p>
+<p>The organization shall determine the requirements essential for the specific types of products and services to be designed and developed. The organization shall consider:</p>
+<ol type="a">
+<li><blockquote>
+<p>functional and performance requirements</p>
+</blockquote></li>
+<li><blockquote>
+<p>information derived from previous similar design and development activities;</p>
+</blockquote></li>
+<li><blockquote>
+<p>statutory and regulatory requirements;</p>
+</blockquote></li>
+<li><blockquote>
+<p>standards or codes of practice that the organization has committed to implement;</p>
+</blockquote></li>
+<li><blockquote>
+<p>potential consequences of failure due to the nature of the products and services.</p>
+</blockquote></li>
+</ol>
+<p>Inputs shall be adequate for design and development purposes, complete and unambiguous.</p>
+<p>Conflicting design and development inputs shall be resolved.</p>
+<p>The organization shall retain documented information on design and development inputs.</p>
+<p><strong>8.3.4 Design and development controls</strong></p>
+<p>The organization shall apply controls to the design and development process to ensure that:</p>
+<ol type="a">
+<li><blockquote>
+<p>the results to be achieved are defined;</p>
+</blockquote></li>
+<li><blockquote>
+<p>reviews are conducted to evaluate the ability of the results of design and development to meet requirements;</p>
+</blockquote></li>
+<li><blockquote>
+<p>verification activities are conducted to ensure that the design and development outputs meet the input requirements;</p>
+</blockquote></li>
+<li><blockquote>
+<p>validation activities are conducted to ensure that the resulting products and services meet the requirements for the specified application or intended use;</p>
+</blockquote></li>
+<li><blockquote>
+<p>any necessary actions are taken on problems determined during the reviews, or verification and validation activities;</p>
+</blockquote></li>
+<li><blockquote>
+<p>documented information of these activities is retained.</p>
+</blockquote></li>
+</ol>
+<p>NOTE Design and development reviews, verification and validation have distinct purposes. They can be conducted separately or in any combination, as is suitable for the products and services of the organization.</p>
+<p><strong>8.3.5 Design and development outputs</strong></p>
+<p>The organization shall ensure that design and development outputs:</p>
+<ol type="a">
+<li><blockquote>
+<p>meet the input requirements;</p>
+</blockquote></li>
+<li><blockquote>
+<p>are adequate for the subsequent processes for the provision of products and services;</p>
+</blockquote></li>
+<li><blockquote>
+<p>include or reference monitoring and measuring requirements, as appropriate, and acceptance criteria;</p>
+</blockquote></li>
+<li><blockquote>
+<p>specify the characteristics of the products and services that are essential for their intended purpose and their safe and proper provision.</p>
+</blockquote></li>
+</ol>
+<p><strong>8.3.6 Design and development changes</strong></p>
+<p>The organization shall identify, review and control changes made during, or subsequent to, the design and development of products and services, to the extent necessary to ensure that there is no adverse impact on conformity to requirements.</p>
+<p>The organization shall retain documented information on:</p>
+<ol type="a">
+<li><blockquote>
+<p>design and development changes;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the results of reviews;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the authorization of the changes;</p>
+</blockquote></li>
+<li><blockquote>
+<p>the actions taken to prevent adverse impacts.</p>
+</blockquote></li>
+</ol>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-QA-P01 Control of Product Development Procedure</strong></p>
+<p><strong>8.4 Control of externally provided processes, products and services</strong></p>
+<p><strong>8.4.1 General</strong></p>
+<p><strong>HE</strong> shall ensure that externally provided processes, products and services conform to requirements including the selection process of new supplier and service provider (e.g., Uniform Provider, Security Service Provider and etc.) and monitoring of suppliers and service provider performances.</p>
+<p><strong>HE</strong> shall determine the controls to be applied to externally provided processes, products and services when:</p>
+<p>a) products and services from external providers are intended for incorporation into the company own products and services</p>
+<p>b) products and services are provided directly to the customer(s) by external providers on behalf of the company</p>
+<p>c) a process, or part of a process, is provided by an external provider as a result of a decision by the company.</p>
+<p><strong>HE</strong> shall determine and apply criteria for the evaluation, selection, monitoring of performance, and re-evaluation of external providers, based on their ability to provide processes or products and services in accordance with requirements. The company shall retain documented information of these activities and any necessary actions arising from the evaluations.</p>
+<p><strong>HE</strong> shall establish and implement review and verification activities for ensuring that outsourced processes (where necessary) meet specified requirements.</p>
+<p>However, at the time when this QMS is being developed, <strong>HE</strong> does not out-source its processes or activities to third party. If outsourced, the company’s specifications and requirements will be communicated to the Service Provider through Letter of Award or Purchase Order (whichever relevant) to ensure that the organization’s requirements are met. The company also establishes and implements inspection to ensure that outsourced processes or activities met specified requirements.</p>
+<p><strong>8.4.2 Type and extent of control</strong></p>
+<p><strong>HE</strong> shall ensure that externally provided processes, products and services do not adversely affect the company’s ability to consistently deliver conforming products and services to its customers.</p>
+<p><strong>HE</strong> shall:</p>
+<p>a) ensure that externally provided processes remain within the control of its quality management system</p>
+<p>b) define both the controls that it intends to apply to an external provider and those it intends to apply to the resulting output</p>
+<p>c) take into consideration:</p>
+<ol type="1">
+<li><blockquote>
+<p>the potential impact of the externally provided processes, products and services on the company’s ability to consistently meet customer and applicable statutory and regulatory requirements</p>
+</blockquote></li>
+<li><blockquote>
+<p>the effectiveness of the controls applied by the external provider</p>
+</blockquote></li>
+</ol>
+<p>d) determine the verification, or other activities, necessary to ensure that the externally provided processes, products and services meet requirements.</p>
+<p><strong>8.4.3 Information for external providers</strong></p>
+<p><strong>HE</strong> shall ensure the adequacy of requirements prior to their communication to the external provider.</p>
+<p><strong>HE</strong> shall communicate to external providers its requirements for:</p>
+<p>a) the processes, products and services to be provided</p>
+<p>b) the approval of:</p>
+<p>i) products and services</p>
+<p>ii) methods, processes and equipment</p>
+<p>iii) the release of products and services</p>
+<p>c) competence, including any required qualification of persons</p>
+<p>d) the external providers’ interactions with <strong>HE</strong></p>
+<p>e) control and monitoring of the external providers’ performance to be applied by <strong>HE</strong></p>
+<p>f) verification or validation activities that <strong>HE</strong>, or its customer, intends to perform at the external providers’ premises.</p>
+<p><strong>Related Quality Procedure:</strong></p>
+<ol type="1">
+<li><blockquote>
+<p><strong>HE-PU-P01 Control of externally provided processes, products and services</strong></p>
+</blockquote></li>
+</ol>
+<p><strong>8.5 Production and service provision</strong></p>
+<p><strong>8.5.1 Control of production and service provision</strong></p>
+<p><strong>HE</strong> shall implement production and service provision under controlled conditions.</p>
+<p>Controlled conditions shall include, as applicable:</p>
+<p>a) the availability of documented information that defines:</p>
+<p>i) the characteristics of the products to be produced, the services to be provided, or the activities to be performed</p>
+<p>ii) the results to be achieved</p>
+<p>b) the availability and use of suitable monitoring and measuring resources</p>
+<p>c) the implementation of monitoring and measurement activities at appropriate stages to verify that criteria for control of processes or outputs, and acceptance criteria for products and services, have been met</p>
+<p>d) the use of suitable infrastructure and environment for the operation of processes</p>
+<p>e) the appointment of competent persons, including any required qualification</p>
+<p>f) the validation, and periodic revalidation, of the ability to achieve planned results of the processes for production and service provision, where the resulting output cannot be verified by subsequent monitoring or measurement</p>
+<p>g) the implementation of actions to prevent human error</p>
+<p>h) the implementation of release, delivery and post-delivery activities.</p>
+<p><strong>Related Quality Procedure:</strong></p>
+<ol type="1">
+<li><blockquote>
+<p><strong>HE-OP-P01 Operational Planning &amp; Control Procedure</strong></p>
+</blockquote></li>
+</ol>
+<p><strong>8.5.2 Identification and traceability</strong></p>
+<p><strong>HE</strong> shall use suitable means to identify outputs when it is necessary to ensure the conformity of products and services. The company shall identify the status of outputs with respect to monitoring and measurement requirements throughout production and service provision.</p>
+<p><strong>HE</strong> shall control the unique identification of the outputs when traceability is a requirement and shall retain the documented information necessary to enable traceability.</p>
+<p><strong>Related Quality Procedure:</strong></p>
+<ol type="1">
+<li><blockquote>
+<p><strong>HE-OP-P02 Product Identification &amp; Traceability Procedure</strong></p>
+</blockquote></li>
+</ol>
+<p><strong>8.5.3 Property belonging to customers or external providers.</strong></p>
+<p><strong>HE</strong> shall exercise care with property belonging to customers or external providers while it is under the company’s control or being used by, <strong>HE</strong></p>
+<p><strong>HE</strong> shall identify, verify, protect and safeguard customers’ or external providers’ property throughout the whole chain of operations processes from start of voyage, during the voyage or on-board vessel to the point of arrival of destination.</p>
+<p>When the property of a customer or external provider is lost, damaged, or otherwise found to be unsuitable for use, the company shall report this to the customer or external provider and retain documented information on what has occurred.</p>
+<p>The responsible personnel shall record any incidents or damage to any customer property on the incident reports.</p>
+<p><strong>8.5.4 Preservation</strong></p>
+<p><strong>HE</strong> shall preserve the outputs during production and service provision, to the extent necessary to ensure conformity to requirements.</p>
+<p>The respective Operation HOD shall preserve conformity of service as according to customer requirements during internal processing and delivery to the intended destination. This shall include identification, handling, storage and protection of security operation records.</p>
+<p><strong>8.5.5 Post-delivery activities</strong></p>
+<p><strong>HE</strong> shall meet requirements for post-delivery activities associated with the products and services.</p>
+<p>In determining the extent of post-delivery activities that are required, <strong>HE</strong> shall consider:</p>
+<p>a) statutory and regulatory requirements;</p>
+<p>b) the potential undesired consequences associated with its products and services;</p>
+<p>c) the nature, use and intended lifetime of its products and services;</p>
+<p>d) customer requirements;</p>
+<p>e) customer feedback.</p>
+<p><strong>8.5.6 Control of changes</strong></p>
+<p><strong>HE</strong> shall review and control changes for production or service provision, to the extent necessary to ensure continuing conformity with requirements.</p>
+<p><strong>HE</strong> shall retain documented information describing the results of the review of changes, the person(s) authorizing the change, and any necessary actions arising from the review.</p>
+<p><strong>8.6 Release of products and services</strong></p>
+<p><strong>HE</strong> shall implement planned arrangements, at appropriate stages, to verify that the product and service requirements have been met.</p>
+<p>The release of products and services to the customer shall not proceed until the planned arrangements have been satisfactorily completed, unless otherwise approved by a relevant authority and, as applicable, by the customer.</p>
+<p><strong>HE</strong> shall retain documented information on the release of products and services. The documented information shall include:</p>
+<p>a) evidence of conformity with the acceptance criteria</p>
+<p>b) traceability to the person(s) authorizing the release.</p>
+<p><strong>8.7 Control of nonconforming outputs</strong></p>
+<p>8.7.1 <strong>HE</strong> shall ensure that outputs that do not conform to their requirements are identified and controlled to prevent their unintended use or delivery.</p>
+<p><strong>HE</strong> shall take appropriate action based on the nature of the nonconformity and its effect on the conformity of products and services. This shall also apply to nonconforming products and services detected after delivery of products, during or after the provision of services.</p>
+<p><strong>HE</strong> shall deal with nonconforming outputs in one or more of the following ways:</p>
+<p>a) correction</p>
+<p>b) segregation, containment, return or suspension of provision of products and services</p>
+<p>c) informing the customer</p>
+<p>d) obtaining authorization for acceptance under concession.</p>
+<blockquote>
+<p>Conformity to the requirements shall be verified when nonconforming outputs are corrected.</p>
+</blockquote>
+<p>8.7.2 <strong>HE</strong> shall retain documented information that:</p>
+<blockquote>
+<p>a) describes the nonconformity</p>
+<p>b) describes the actions taken</p>
+<p>c) describes any concessions obtained</p>
+<p>d) identifies the authority deciding the action in respect of the nonconformity.</p>
+</blockquote>
+<p><strong>Refer to:</strong></p>
+<ol type="1">
+<li><blockquote>
+<p><strong>HE-MT-P03 Control of Non-Conformity Procedure</strong></p>
+</blockquote></li>
+</ol>
+<p><strong>9 Performance evaluation</strong></p>
+<p><strong>9.1 Monitoring, measurement, analysis and evaluation</strong></p>
+<p><strong>9.1.1 General</strong></p>
+<p><strong>HE</strong> shall determine:</p>
+<p>a) what needs to be monitored and measured</p>
+<p>b) the methods for monitoring, measurement, analysis and evaluation needed to ensure valid results</p>
+<p>c) when the monitoring and measuring shall be performed</p>
+<p>d) when the results from monitoring and measurement shall be analysed and evaluated.</p>
+<p><strong>HE</strong> shall evaluate the performance and the effectiveness of the quality management system.</p>
+<p><strong>HE</strong> shall retain appropriate documented information as evidence of the results.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. Appendix IV Quality Objectives</strong></p>
+<p><strong>9.1.2 Customer satisfaction</strong></p>
+<p><strong>HE</strong> shall monitor customers’ perceptions of the degree to which their needs and expectations have been fulfilled. The company shall determine the methods for obtaining, monitoring and reviewing this information.</p>
+<p>The Top Management through the Operations Personnel In-charge shall monitor information on customer satisfaction and / or dissatisfaction as one of the measurements of performance of the quality management system.</p>
+<p>The Top Management or appointed personnel shall send the Client Satisfaction Survey Form to selected customer and obtain the customer feedback.</p>
+<p>The methodologies for obtaining and using this information shall be determined from time to time and shall be carried out should the feedback from customer were not up to the expectation.</p>
+<p><strong>9.1.3 Analysis and evaluation</strong></p>
+<p><strong>HE</strong> shall analyze and evaluate appropriate data and information arising from monitoring and measurement.</p>
+<p>The results of analysis shall be used to evaluate:</p>
+<p>a) conformity of products and services</p>
+<p>b) the degree of customer satisfaction</p>
+<p>c) the performance and effectiveness of the quality management system</p>
+<p>d) if planning has been implemented effectively</p>
+<p>e) the effectiveness of actions taken to address risks and opportunities</p>
+<p>f) the performance of external providers</p>
+<p>g) the need for improvements to the quality management system.</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. Management Review &amp; Data Analysis</strong></p>
+<p><strong>9.2 Internal audit</strong></p>
+<p>9.2.1 <strong>HE</strong> shall conduct internal audits at planned intervals to provide information on whether the QMS</p>
+<p>a) conforms to:</p>
+<p>1) the company’s own requirements for its QMS</p>
+<p>2) the requirements of this Quality Manual;</p>
+<p>b) is effectively implemented and maintained.</p>
+<p>9.2.2 <strong>HE</strong> shall:</p>
+<p>a) plan, establish, implement and maintain an audit programme(s) including the frequency, methods, responsibilities, planning requirements and reporting, which shall take into consideration the importance of the processes concerned, changes affecting the company, and the results of previous audits;</p>
+<p>b) define the audit criteria and scope for each audit;</p>
+<p>c) select auditors and conduct audits to ensure objectivity and the impartiality of the audit process;</p>
+<p>d) ensure that the results of the audits are reported to relevant management;</p>
+<p>e) take appropriate correction and corrective actions without undue delay;</p>
+<p>f) retain documented information as evidence of the implementation of the audit programme and the audit results.</p>
+<p><strong>Refer to:</strong></p>
+<ol type="1">
+<li><p><strong>HE-MT-P06 Internal Audit &amp; Management Review Procedure</strong></p></li>
+</ol>
+<p><strong>9.3 Management review</strong></p>
+<p><strong>9.3.1 General</strong></p>
+<p>Top management shall review the company’s quality management system, at planned intervals, to ensure its continuing suitability, adequacy, effectiveness and alignment with the strategic direction of <strong>HE</strong></p>
+<p><strong>9.3.2 Management Review Inputs</strong></p>
+<p>The management review shall be planned and carried out taking into consideration:</p>
+<p>a) the status of actions from previous management reviews</p>
+<p>b) changes in external and internal issues that are relevant to the quality management system</p>
+<p>c) information on the performance and effectiveness of the quality management system, including trends in:</p>
+<p>1) customer satisfaction and feedback from relevant interested parties</p>
+<p>2) the extent to which quality objectives have been met</p>
+<p>3) process performance and conformity of products and services</p>
+<p>4) nonconformities and corrective actions</p>
+<p>5) monitoring and measurement results</p>
+<p>6) audit results</p>
+<p>7) the performance of external providers</p>
+<p>d) the adequacy of resources</p>
+<p>e) the effectiveness of actions taken to address risks and opportunities (see 6.1)</p>
+<p>f) opportunities for improvement.</p>
+<p><strong>9.3.3 Management Review Outputs</strong></p>
+<p>The outputs of the management review shall include decisions and actions related to:</p>
+<p>a) opportunities for improvement</p>
+<p>b) any need for changes to the quality management system</p>
+<p>c) resource needs.</p>
+<p><strong>HE</strong> shall retain documented information as evidence of the results of management reviews.</p>
+<blockquote>
+<p><strong>Refer to:</strong></p>
+</blockquote>
+<p><strong>1. HE-MT-P06 Internal Audit &amp; Management Review Procedure</strong></p>
+<p><strong>10 Improvement</strong></p>
+<p><strong>10.1 General</strong></p>
+<p><strong>HE</strong> shall determine and select opportunities for improvement and implement any necessary actions to meet customer requirements and enhance customer satisfaction.</p>
+<p>These shall include:</p>
+<p>a) improving products and services to meet requirements as well as to address future needs and expectations</p>
+<p>b) correcting, preventing or reducing undesired effects</p>
+<p>c) improving the performance and effectiveness of the quality management system.</p>
+<p><strong>10.2 Nonconformity and corrective action</strong></p>
+<p>10.2.1 When a nonconformity occurs, including any arising from complaints, <strong>HE</strong> shall:</p>
+<p>a) react to the nonconformity and, as applicable:</p>
+<p>i) take action to control and correct it</p>
+<p>ii) deal with the consequences</p>
+<p>b) evaluate the need for action to eliminate the cause(s) of the nonconformity, in order that it does not recur or occur elsewhere, by:</p>
+<p>i) reviewing and analyzing the nonconformity</p>
+<p>ii) determining the causes of the nonconformity</p>
+<p>iii) determining if similar nonconformities exist, or could potentially occur</p>
+<p>c) implement any action needed</p>
+<p>d) review the effectiveness of any corrective action taken</p>
+<p>e) update risks and opportunities determined during planning, if necessary</p>
+<p>f) make changes to the quality management system, if necessary.</p>
+<p>Corrective actions shall be appropriate to the effects of the nonconformities encountered.</p>
+<p>10.2.2 <strong>HE</strong> shall retain documented information as evidence of:</p>
+<p>a) the nature of the nonconformities and any subsequent actions taken</p>
+<p>b) the results of any corrective action.</p>
+<blockquote>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-MT-P03 Control of Non-Conformity Procedure</strong></p>
+<p><strong>2. HE-MT-P04 Corrective Action Procedure</strong></p>
+</blockquote>
+<p>10.2.2 <strong>HE</strong> shall retain documented information as evidence of:</p>
+<p>a) the nature of the nonconformities and any subsequent actions taken;</p>
+<p>b) the results of any corrective action.</p>
+<p><strong>10.3 Continual improvement</strong></p>
+<p><strong>HE</strong> shall continually improve the suitability, adequacy and effectiveness of the QMS, by:</p>
+<p>a) enhancing overall performance;</p>
+<p>b) promoting a culture that supports an QMS;</p>
+<p>c) promoting the participation of workers in implementing actions for the continual improvement of the QMS</p>
+<p>d) communicating the relevant results of continual improvement to workers, and, where they exist, workers’ representatives;</p>
+<p>e) maintaining and retaining documented information as evidence of continual improvement.</p>
+<p>The company shall consider the results of analysis and evaluation, and the outputs from management review, to determine if there are needs or opportunities that shall be addressed as part of continual improvement.</p>
+<blockquote>
+<p>﻿</p>
+<p><strong>Refer to:</strong></p>
+<p><strong>1. HE-MT-P04 Corrective Action Procedure</strong></p>
+</blockquote>
+
+  </div>
+  <div class="note">This page is maintained directly in the HE Manufacturing ERP's GitHub repository (<span class="mono">docs/HE-QM.html</span>). To publish a revision, replace this file and push — the live link updates automatically once Vercel redeploys. The revision number and effective date above are set by hand in this file and should be updated to match whenever the content changes.</div>
+</div>
+</body>
+</html>
