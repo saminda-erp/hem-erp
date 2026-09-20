@@ -2286,7 +2286,8 @@ const NAV = [
    {id:'complaints',label:'Complaints & recall'},
    {id:'compliance',label:'Standards tracker'},
    {id:'audit',     label:'Audit readiness'},
-   {id:'docs',      label:'Document Control'}
+   {id:'docs',      label:'Document Control'},
+   {id:'sopctl',    label:'SOP Document Control'}
  ]},
  {group:'System', items:[
    {id:'masters',   label:'Masters'},
@@ -2361,7 +2362,8 @@ const PERM_SECTIONS = [
   {group:'Records', items:[{id:'inventory',label:'Inventory'},{id:'trace',label:'Batch traceability'}]},
   {group:'Quality system', items:[{id:'rnd',label:'R&D / formulation'},{id:'deviations',label:'Deviations & CAPA'},
     {id:'changes',label:'Change control'},{id:'complaints',label:'Complaints & recall'},
-    {id:'compliance',label:'Standards tracker'},{id:'audit',label:'Audit readiness'},{id:'docs',label:'Document Control'}]},
+    {id:'compliance',label:'Standards tracker'},{id:'audit',label:'Audit readiness'},{id:'docs',label:'Document Control'},
+    {id:'sopctl',label:'SOP Document Control'}]},
   {group:'System', items:[{id:'masters',label:'Masters'},{id:'reports',label:'Reports'},{id:'settings',label:'Settings'}]}
 ];
 function currentUserPerm(){
@@ -2425,6 +2427,7 @@ const VIEWMETA = {
   compliance:{eyebrow:'Quality system', title:'Standards Tracker', sub:'Clause by clause across ISO 22716, ISO 9001:2015, Malaysian GMP/NPRA and FDA MoCRA — what is met, what is not, and the evidence.'},
   audit:{eyebrow:'Quality system', title:'Audit Readiness', sub:'What an inspector would ask for, whether it exists, and the electronic record trail.'},
   docs:{eyebrow:'Quality system', title:'Document Control — SOP Register', sub:'Every controlled document — manuals, procedures, work instructions and forms — with its current revision, filed copy, review/expiry tracking and change-control sign-off.'},
+  sopctl:{eyebrow:'Quality system', title:'SOP Document Control', sub:'Draft, review and approve SOPs with server-enforced roles, automatic revision history, controlled-copy printing and staff acknowledgement tracking.'},
   masters:{eyebrow:'System', title:'Master Data', sub:'Products, materials, customers and suppliers.'},
   reports:{eyebrow:'System', title:'Reports', sub:'Print-ready documents and data exports.'},
   settings:{eyebrow:'System', title:'Settings', sub:'Company details, licences, signatories and data.'}
@@ -6478,7 +6481,7 @@ function V_accounting(){ return deptPlaceholder('Accounting module under develop
 const VIEWS = {dashboard:V_dashboard, orders:V_orders, planning:V_planning, receiving:V_receiving, issue:V_issue,
   production:V_production, ipqc:V_ipqc, release:V_release, fg:V_fg, shipping:V_shipping, inventory:V_inventory,
   trace:V_trace, rnd:V_rnd, deviations:V_deviations, changes:V_changes, complaints:V_complaints, people:V_people,
-  compliance:V_compliance, audit:V_audit, docs:V_docs, masters:V_masters, reports:V_reports, settings:V_settings,
+  compliance:V_compliance, audit:V_audit, docs:V_docs, sopctl:V_sopctl, masters:V_masters, reports:V_reports, settings:V_settings,
   store:V_store, qc:V_qc, purchasing:V_purchasing, sales:V_sales, accounting:V_accounting};
 
 function render(){
@@ -8906,6 +8909,399 @@ ACT['sop-doc-save'] = a=>{
   save(); toast('Saved','ok');
   ACT['sop-doc-view'](d.id);
 };
+
+/* ==== SOP Document Control module (Phase 10) ==== */
+
+/* ============================================================
+   SOP DOCUMENT CONTROL MODULE (Phase 10) — reusable, server-enforced
+   Draft → Review → Approved → Obsolete workflow, separate from the physical
+   filed-copy register above (S.sopDocs). Backed entirely by two Supabase
+   Postgres RPCs — hem_sop_state() (read) and hem_sop_apply(action,payload)
+   (every write) — in the same project already used for ERP auth and the
+   Employee Leave Portal. The tables (hem_sop_members/hem_sop_documents/
+   hem_sop_audit) have RLS enabled with NO policies and no direct grants —
+   every read and write goes through those two SECURITY DEFINER functions,
+   which check the caller's role themselves and are executable by signed-in
+   ("authenticated") users only, never "anon". See
+   claude/document-control-sop-register.md (Phase 10 section) for the full
+   schema, the security design, and the live-database tests that were run
+   against every rule below before this UI shipped — workflow transitions,
+   permission checks, HTML sanitization, optimistic concurrency, future
+   effective dates, revision immutability, training acknowledgement — each
+   was executed for real against the Supabase project, not just written.
+   This module needs window.HEM_AUTH (the same Supabase client index.html's
+   login screen already creates) — it renders a plain message if that isn't
+   present, rather than failing silently.
+   ============================================================ */
+const SOPCTL_LOGO = 'data:image/jpeg;base64,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';
+let SOPCTL = {state:null, loading:false, err:null};
+
+function sopctlToday(){ return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuala_Lumpur'}); }
+function sopctlMe(){ return (SOPCTL.state&&SOPCTL.state.me) || {email:(window.HEM_USER_EMAIL||'').toLowerCase(), name:'', role:'', active:false}; }
+function sopctlMembers(){ return (SOPCTL.state&&SOPCTL.state.members)||[]; }
+function sopctlDoc(id){ return (SOPCTL.state&&SOPCTL.state.documents||[]).find(d=>d.id===id); }
+function sopctlLatest(d){ return d && d.revisions && d.revisions[d.revisions.length-1]; }
+function sopctlActive(d){
+  if(!d || d.obsolete) return null;
+  const t=sopctlToday();
+  const revs=(d.revisions||[]).slice().reverse();
+  return revs.find(r=>r.status==='Approved' && r.effective && r.effective<=t) || null;
+}
+function sopctlStatusLabel(d, r){
+  if(!d||!r) return '—';
+  if(d.obsolete) return 'Obsolete';
+  if(r.status==='Approved'){
+    if(r.effective && r.effective>sopctlToday()) return 'Scheduled';
+    const a=sopctlActive(d);
+    return (a&&a.no===r.no)? 'Approved':'Superseded';
+  }
+  return r.status;
+}
+function sopctlIsAuthor(me){ return me && ['Admin','Author'].includes(me.role); }
+function sopctlLoad(after){
+  if(!window.HEM_AUTH) return;
+  SOPCTL.loading=true; SOPCTL.err=null;
+  window.HEM_AUTH.rpc('hem_sop_state').then(({data,error})=>{
+    SOPCTL.loading=false;
+    if(error){ SOPCTL.err=error.message; render(); return; }
+    SOPCTL.state=data; if(after) after(); render();
+  }).catch(e=>{ SOPCTL.loading=false; SOPCTL.err=String((e&&e.message)||e); render(); });
+}
+function sopctlApply(action, payload, okMsg, after){
+  if(!window.HEM_AUTH) return toast('Not connected to the document control database','bad');
+  window.HEM_AUTH.rpc('hem_sop_apply', {p_action:action, p_payload:payload||{}}).then(({data,error})=>{
+    if(error){ toast(error.message,'bad'); return; }
+    if(data && data.id){
+      SOPCTL.state.documents = SOPCTL.state.documents||[];
+      const idx=SOPCTL.state.documents.findIndex(x=>x.id===data.id);
+      if(idx>=0) SOPCTL.state.documents[idx]=data; else SOPCTL.state.documents.push(data);
+    }
+    if(action==='member' || action==='deactivate_member') sopctlLoad();
+    toast(okMsg||'Saved','ok');
+    if(after) after(data); else render();
+  }).catch(e=>toast('Could not reach the document control database: '+((e&&e.message)||e),'bad'));
+}
+ACT['sopctl-reload'] = ()=> sopctlLoad();
+
+/* ---------- master list ---------- */
+function V_sopctl(){
+  if(!window.HEM_AUTH) return '<div class="banner bad">This module needs a live database connection that is not available on this page.</div>';
+  if(!SOPCTL.state){
+    if(!SOPCTL.loading) sopctlLoad();
+    return '<div class="banner info">Loading SOP Document Control…</div>';
+  }
+  if(SOPCTL.err) return '<div class="banner bad">Could not load: '+esc(SOPCTL.err)+'</div>'+btn('Retry','sopctl-reload',null,'btn');
+  const me=sopctlMe();
+  const docs=(SOPCTL.state.documents||[]).slice().sort((a,b)=>String(a.number).localeCompare(String(b.number)));
+  const q=F('q'), dept=F('dept'), status=F('status');
+  const depts=Array.from(new Set(docs.map(d=>(sopctlLatest(d)||{}).department).filter(Boolean))).sort();
+  const rows=docs.filter(d=>{
+    const r=sopctlLatest(d)||{};
+    if(dept && r.department!==dept) return false;
+    if(status && sopctlStatusLabel(d,r)!==status) return false;
+    return match(d.number,q)||match(r.title,q);
+  });
+  const draftCount=docs.filter(d=>{const r=sopctlLatest(d); return r&&r.status==='Draft'&&!d.obsolete;}).length;
+  const reviewCount=docs.filter(d=>{const r=sopctlLatest(d); return r&&r.status==='Review'&&!d.obsolete;}).length;
+  const dueTraining=docs.reduce((n,d)=>n+(d.training||[]).filter(t=>!t.ackAt && t.due<sopctlToday()).length,0);
+
+  return KPI([
+    {k:'SOPs under control', v:nf(docs.length), d:'draft → review → approve → revise, server-enforced'},
+    {k:'In draft', v:nf(draftCount), d:'being authored', cls:draftCount?'warn':'ok'},
+    {k:'Awaiting review/approval', v:nf(reviewCount), d:'in the Review stage', cls:reviewCount?'warn':'ok'},
+    {k:'Acknowledgements overdue', v:nf(dueTraining), d:'training assignments past due date', cls:dueTraining?'bad':'ok'}
+  ])
+  + '<div class="banner info">Signed in to this module as <b>'+esc(me.email)+'</b> — role: <b>'+esc(me.role||'not added yet')+'</b>.'
+    + (me.role? '' : ' Ask an administrator to add you under "Manage staff &amp; roles" before you can act on any SOP.')
+    + ' Every action below is checked and recorded by the database itself, not just by this screen.</div>'
+  + sect('SOP master list',
+      filterBar([searchCtl('q',q,'Doc no. or title'),
+        selCtl('dept', depts, dept, 'All departments'),
+        selCtl('status', ['Draft','Review','Approved','Scheduled','Superseded','Obsolete'], status, 'Any status'),
+        btn('New SOP','sopctl-new',null,'btn primary'),
+        btn('Manage staff & roles','sopctl-members',null,'btn'),
+        btn('Export list (CSV)','sopctl-export',null,'btn')])
+    + T([
+        {h:'Doc No.', f:d=>'<b class="mono">'+esc(d.number)+'</b>'},
+        {h:'Title', f:d=>{const r=sopctlLatest(d)||{}; return '<b>'+esc(r.title||'—')+'</b><div class="sub">'+esc(r.department||'')+(r.category?' · '+esc(r.category):'')+'</div>';}},
+        {h:'Rev', c:'num', f:d=>{const a=sopctlActive(d), r=sopctlLatest(d); const x=(a||r||{}).no; return '<span class="mono">'+esc(String(x!=null?x:'—'))+'</span>';}},
+        {h:'Effective', c:'num', f:d=>{const a=sopctlActive(d); return a? '<span class="mono">'+esc(a.effective)+'</span>' : '<span class="sub">—</span>';}},
+        {h:'Status', f:d=>{const r=sopctlLatest(d); const st=sopctlStatusLabel(d,r);
+          return '<span class="tag '+(st==='Approved'?'t-ok':st==='Obsolete'?'t-bad':st==='Review'?'t-warn':st==='Draft'?'t-mute':'t-warn')+'">'+esc(st)+'</span>';}},
+        {h:'Training due', c:'num', f:d=>{const n=(d.training||[]).filter(t=>!t.ackAt&&t.due<sopctlToday()).length; return n? '<span class="tag t-bad">'+n+' overdue</span>' : '—';}},
+        {h:'', f:d=>btn('Open','sopctl-open',d.id)}
+      ], rows, {emptyTitle:'No SOPs match this filter', empty:'Clear the filters above, or create the first one.'})
+    );
+}
+ACT['sopctl-export'] = ()=>{
+  const docs=(SOPCTL.state&&SOPCTL.state.documents)||[];
+  const esc2=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const rows=[['Doc No','Title','Department','Category','ISO','Status','Revision','Effective date','Prepared by','Reviewer','Approver'].map(esc2).join(',')];
+  docs.forEach(d=>{ const r=sopctlLatest(d)||{}; const st=sopctlStatusLabel(d,r);
+    rows.push([d.number,r.title,r.department,r.category,r.standard,st,r.no,r.effective,r.prepared,r.reviewer,r.approver].map(esc2).join(',')); });
+  download('sop-document-control-'+sopctlToday()+'.csv', rows.join('\n'), 'text/csv');
+};
+
+/* ---------- staff & roles (Admin only — also enforced server-side) ---------- */
+ACT['sopctl-members'] = ()=>{
+  const me=sopctlMe(); const members=sopctlMembers();
+  modal('SOP Document Control — staff & roles',
+    (me.role!=='Admin'? '<div class="banner info">Only an administrator can add or change staff here — you can still see the current list.</div>':'')
+    + T([
+      {h:'Name', f:m=>esc(m.name)}, {h:'Email', f:m=>'<span class="mono">'+esc(m.email)+'</span>'},
+      {h:'Role', f:m=>tag(m.role)}, {h:'Status', f:m=>m.active? '<span class="tag t-ok">active</span>':'<span class="tag t-mute">deactivated</span>'},
+      {h:'', f:m=>(me.role==='Admin'&&m.email!==me.email)? btn('Change role','sopctl-member-edit',m.email,'btn sm')+(m.active?btn('Deactivate','sopctl-member-off',m.email,'btn sm danger'):''):''}
+    ], members, {empty:'No one has been added yet — the first person to open this module became Admin automatically.'}),
+    me.role==='Admin'? btn('Add staff member','sopctl-member-new',null,'btn primary') : '', true);
+};
+ACT['sopctl-member-new'] = ()=>{
+  formModal({title:'Add staff to Document Control', wide:false,
+    fields:[{k:'email',label:'Work email',req:true,full:true},{k:'name',label:'Name',req:true,full:true},
+      {k:'role',label:'Role',type:'select',opts:['Admin','Author','Reviewer','Approver','Reader'],req:true}],
+    saveLabel:'Add', onSave:v=>{
+      if(!v.email||!v.name||!v.role) return toast('Email, name and role are required','bad');
+      sopctlApply('member', v, 'Staff member added', ()=>{ closeModal(); sopctlLoad(); });
+    }});
+};
+ACT['sopctl-member-edit'] = a=>{
+  const m=sopctlMembers().find(x=>x.email===a); if(!m) return;
+  formModal({title:'Change role — '+esc(m.name), values:m,
+    fields:[{k:'email',label:'Email',type:'static',full:true,html:'<span class="mono">'+esc(m.email)+'</span>'},
+      {k:'name',label:'Name',req:true,full:true},
+      {k:'role',label:'Role',type:'select',opts:['Admin','Author','Reviewer','Approver','Reader'],req:true}],
+    saveLabel:'Save', onSave:v=>{
+      sopctlApply('member', {email:m.email,name:v.name,role:v.role}, 'Role updated', ()=>{ closeModal(); sopctlLoad(); });
+    }});
+};
+ACT['sopctl-member-off'] = a=>{
+  if(!confirm('Deactivate '+a+'? They will no longer be able to act on any SOP until re-added.')) return;
+  sopctlApply('deactivate_member', {email:a}, 'Deactivated', ()=>{ closeModal(); sopctlLoad(); });
+};
+
+/* ---------- header block matching SOP_FORMAT_template.docx: logo + company/title,
+   then Document No. / Revision No. / Effective Date in three equal cells ---------- */
+function sopctlHeaderTable(d, r){
+  r = r||{};
+  return '<table style="width:100%;border-collapse:collapse;margin-bottom:14px" class="mono">'
+    + '<tr>'
+      + '<td rowspan="2" style="width:70px;border:1px solid var(--ink);padding:6px;text-align:center;vertical-align:middle">'
+        + '<img src="'+SOPCTL_LOGO+'" alt="HE Manufacturing" style="width:56px;height:56px;object-fit:contain">'
+      + '</td>'
+      + '<td colspan="3" style="border:1px solid var(--ink);padding:8px 10px;text-align:center;font-family:var(--disp)">'
+        + '<div style="font-weight:700;font-size:14px">H E MANUFACTURING (M) SDN BHD</div>'
+        + '<div style="font-size:12.5px;margin-top:2px">'+esc(r.title||'(untitled)')+'</div>'
+      + '</td>'
+    + '</tr>'
+    + '<tr>'
+      + '<td style="border:1px solid var(--ink);padding:6px 10px;font-size:11.5px;width:33%"><b>Document No:</b><br>'+esc(d.number)+'</td>'
+      + '<td style="border:1px solid var(--ink);padding:6px 10px;font-size:11.5px;width:33%"><b>Revision No:</b><br>'+esc(r.no!=null?r.no:'—')+'</td>'
+      + '<td style="border:1px solid var(--ink);padding:6px 10px;font-size:11.5px;width:34%"><b>Effective Date:</b><br>'+esc(r.effective||'—')+'</td>'
+    + '</tr>'
+    + '</table>';
+}
+
+/* ---------- detail page ---------- */
+function sopctlToolbarBtn(cmd,label,arg){ return '<button type="button" class="btn sm" data-sopdocact="'+cmd+'"'+(arg?' data-sopdocarg="'+esc(arg)+'"':'')+'>'+esc(label)+'</button>'; }
+function sopctlEditFieldsHtml(r, members){
+  const active=(members||[]).filter(m=>m.active);
+  const reviewers=active.filter(m=>['Reviewer','Admin'].includes(m.role));
+  const approvers=active.filter(m=>['Approver','Admin'].includes(m.role));
+  return '<div class="fgrid">'
+    + fieldHtml({k:'title',label:'Title',req:true,full:true}, r.title)
+    + fieldHtml({k:'department',label:'Department',req:true}, r.department)
+    + fieldHtml({k:'category',label:'Category'}, r.category)
+    + fieldHtml({k:'standard',label:'ISO relevance',type:'select',opts:['ISO 9001','ISO 22716','Both'],req:true,blank:false}, r.standard||'Both')
+    + fieldHtml({k:'effective',label:'Effective date',type:'date',req:true}, r.effective)
+    + fieldHtml({k:'reviewer',label:'Reviewer',type:'select',opts:reviewers.map(m=>({v:m.email,t:m.name+' — '+m.email})),req:true}, r.reviewer)
+    + fieldHtml({k:'approver',label:'Approver',type:'select',opts:approvers.map(m=>({v:m.email,t:m.name+' — '+m.email})),req:true}, r.approver)
+    + fieldHtml({k:'change',label:'Change description',full:true,req:true,hint:'What changed in this revision and why — becomes part of the permanent revision history.'}, r.change)
+    + '</div>';
+}
+function sopctlActionButtons(d, me, r){
+  const btns=[];
+  const canAuthor=sopctlIsAuthor(me);
+  if(d.obsolete){
+    if(me.role==='Admin') btns.push(btn('Reactivate','sopctl-reactivate',d.id,'btn'));
+    return btns;
+  }
+  if(r.status==='Draft' && canAuthor){
+    btns.push(btn('Submit for review','sopctl-submit',d.id,'btn primary'));
+  }
+  if(r.status==='Review'){
+    if(r.reviewer===me.email && !r.reviewedAt && ['Reviewer','Admin'].includes(me.role)) btns.push(btn('Complete review','sopctl-review',d.id,'btn primary'));
+    if(r.reviewedAt && r.approver===me.email && ['Approver','Admin'].includes(me.role)) btns.push(btn('Approve','sopctl-approve',d.id,'btn primary'));
+    if((r.reviewer===me.email && ['Reviewer','Admin'].includes(me.role)) || (r.approver===me.email && ['Approver','Admin'].includes(me.role)))
+      btns.push(btn('Return to draft','sopctl-return',d.id,'btn danger'));
+  }
+  if(r.status==='Approved' && canAuthor && r.effective && r.effective<=sopctlToday()) btns.push(btn('Create next revision','sopctl-revise',d.id,'btn'));
+  if(['Admin','Approver'].includes(me.role)) btns.push(btn('Mark obsolete','sopctl-obsolete',d.id,'btn danger'));
+  if(sopctlActive(d) && ['Admin','Author','Reviewer','Approver'].includes(me.role)){
+    btns.push(btn('Assign training','sopctl-assign',d.id,'btn'));
+    btns.push(btn('Issue controlled copy','sopctl-copy',d.id,'btn'));
+  }
+  return btns;
+}
+function sopctlDetailHtml(d){
+  const me=sopctlMe(), r=sopctlLatest(d)||{}, active=sopctlActive(d), members=sopctlMembers();
+  const canEditBody = !d.obsolete && r.status==='Draft' && sopctlIsAuthor(me);
+  let body = sopctlHeaderTable(d, r);
+  body += '<div style="margin:10px 0"><span class="tag '+(sopctlStatusLabel(d,r)==='Approved'?'t-ok':sopctlStatusLabel(d,r)==='Obsolete'?'t-bad':sopctlStatusLabel(d,r)==='Review'?'t-warn':'t-mute')+'">'+esc(sopctlStatusLabel(d,r))+'</span>'
+    + ' <span class="sub">prepared by '+esc(r.prepared||'—')+(r.reviewer?' · reviewer '+esc(r.reviewer):'')+(r.approver?' · approver '+esc(r.approver):'')+'</span></div>';
+  if(d.obsolete) body += '<div class="banner bad">Obsolete since '+esc((d.obsolete.at||'').slice(0,10))+' by '+esc(d.obsolete.by)+' — '+esc(d.obsolete.reason)+'. Read-only.</div>';
+
+  if(canEditBody){
+    body += sopctlEditFieldsHtml(r, members)
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 8px">'
+        + sopctlToolbarBtn('formatBlock','H2','H2')+sopctlToolbarBtn('formatBlock','H3','H3')+sopctlToolbarBtn('formatBlock','P','P')
+        + sopctlToolbarBtn('bold','Bold')+sopctlToolbarBtn('italic','Italic')+sopctlToolbarBtn('underline','Underline')
+        + sopctlToolbarBtn('insertUnorderedList','• List')+sopctlToolbarBtn('insertOrderedList','1. List')+sopctlToolbarBtn('table','Insert table')
+      + '</div>'
+      + '<div id="sopctlBodyArea" class="docbody" contenteditable="true" style="border:1px solid var(--line);border-radius:8px;padding:14px;min-height:260px">'+(r.body||'')+'</div>'
+      + '<div class="pillrow" style="margin-top:12px">'+btn('Save draft','sopctl-save',d.id,'btn primary')+'</div>';
+  } else {
+    body += '<div class="docbody" style="border:1px solid var(--line);border-radius:8px;padding:14px">'+(r.body||'<p class="sub">No content yet.</p>')+'</div>';
+  }
+
+  const revs=(d.revisions||[]).slice().reverse();
+  body += sect('Revision history', T([
+      {h:'Rev', c:'num', f:x=>'<span class="mono">'+esc(x.no)+'</span>'},
+      {h:'Status', f:x=>tag(sopctlStatusLabel(d,x))},
+      {h:'Effective', c:'num', f:x=>esc(x.effective||'—')},
+      {h:'Prepared / reviewed / approved', f:x=>esc(x.prepared||'—')+'<div class="sub">'+esc(x.reviewedBy||'—')+' → '+esc(x.approvedBy||'—')+'</div>'},
+      {h:'Change', f:x=>'<span class="sub">'+esc(x.change||'—')+'</span>'},
+      {h:'', f:x=>x.no!==r.no? btn('View','sopctl-view-rev',d.id+'|'+x.no,'btn sm') : ''}
+    ], revs, {empty:'No revisions.'}));
+
+  const training=d.training||[];
+  body += sect('Training & acknowledgement — revision '+(active&&active.no!=null?active.no:'—'), T([
+      {h:'Staff', f:t=>esc(t.email)}, {h:'Rev', c:'num', f:t=>esc(t.revision)},
+      {h:'Due', c:'num', f:t=>{const overdue=!t.ackAt&&t.due<sopctlToday(); return '<span class="mono'+(overdue?' t-bad':'')+'">'+esc(t.due)+'</span>';}},
+      {h:'Acknowledged', f:t=>t.ackAt? '<span class="tag t-ok">'+esc((t.ackAt||'').slice(0,10))+'</span>':'<span class="tag t-warn">pending</span>'},
+      {h:'', f:t=>(!t.ackAt && t.email===me.email)? btn('Acknowledge','sopctl-ack',d.id+'|'+t.id,'btn sm primary') : ''}
+    ], training, {empty:'No training assigned yet.'}));
+
+  const copies=d.copies||[];
+  body += sect('Controlled copy register', T([
+      {h:'Copy ID', f:c=>'<span class="mono">'+esc(c.id.slice(0,8))+'</span>'}, {h:'Rev', c:'num', f:c=>esc(c.revision)},
+      {h:'Recipient / location', f:c=>esc(c.recipient)}, {h:'Issued', f:c=>esc((c.at||'').slice(0,10))+' by '+esc(c.by)},
+      {h:'', f:c=>btn('Print this copy','sopctl-print',d.id+'|'+c.id,'btn sm')}
+    ], copies, {empty:'No controlled copies issued yet.'}));
+
+  return body;
+}
+ACT['sopctl-open'] = a=>{
+  const d=sopctlDoc(a); if(!d) return;
+  const me=sopctlMe(), r=sopctlLatest(d)||{};
+  modal(esc(d.number)+' — '+esc(r.title||''), sopctlDetailHtml(d),
+    sopctlActionButtons(d,me,r).join('')+btn('Print (uncontrolled)','sopctl-print',d.id,'btn'), true);
+  setTimeout(()=>{
+    document.querySelectorAll('#modal-root [data-sopdocact]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const area=document.getElementById('sopctlBodyArea'); if(area) area.focus();
+        const cmd=b.dataset.sopdocact;
+        if(cmd==='table'){
+          document.execCommand('insertHTML', false, '<table><tr><td>Cell</td><td>Cell</td></tr><tr><td>Cell</td><td>Cell</td></tr></table>');
+        } else document.execCommand(cmd, false, b.dataset.sopdocarg||null);
+      });
+    });
+  },0);
+};
+ACT['sopctl-view-rev'] = a=>{
+  const [id,no]=a.split('|'); const d=sopctlDoc(id); if(!d) return;
+  const r=(d.revisions||[]).find(x=>String(x.no)===String(no)); if(!r) return;
+  modal(esc(d.number)+' — Rev '+esc(r.no)+' (read-only)', sopctlHeaderTable(d,r)
+    + '<div class="docbody" style="border:1px solid var(--line);border-radius:8px;padding:14px">'+(r.body||'<p class="sub">No content.</p>')+'</div>',
+    btn('Back','sopctl-open',id,'btn'), true);
+};
+ACT['sopctl-save'] = a=>{
+  const d=sopctlDoc(a); if(!d) return;
+  const v=readForm();
+  const area=document.getElementById('sopctlBodyArea');
+  sopctlApply('save', Object.assign({}, v, {id:d.id, version:d.version, body:area?area.innerHTML:''}), 'Draft saved',
+    ()=>ACT['sopctl-open'](d.id));
+};
+ACT['sopctl-submit'] = a=>{ const d=sopctlDoc(a); if(!d) return;
+  sopctlApply('submit', {id:d.id, version:d.version}, 'Submitted for review', ()=>ACT['sopctl-open'](d.id)); };
+ACT['sopctl-review'] = a=>{ const d=sopctlDoc(a); if(!d) return;
+  sopctlApply('review', {id:d.id, version:d.version}, 'Review recorded', ()=>ACT['sopctl-open'](d.id)); };
+ACT['sopctl-approve'] = a=>{ const d=sopctlDoc(a); if(!d) return;
+  sopctlApply('approve', {id:d.id, version:d.version}, 'Approved', ()=>ACT['sopctl-open'](d.id)); };
+ACT['sopctl-return'] = a=>{ const d=sopctlDoc(a); if(!d) return;
+  const reason=prompt('Reason for returning this SOP to draft:'); if(!reason) return;
+  sopctlApply('return', {id:d.id, version:d.version, reason}, 'Returned to draft', ()=>ACT['sopctl-open'](d.id)); };
+ACT['sopctl-revise'] = a=>{ const d=sopctlDoc(a); if(!d) return;
+  const change=prompt('Describe the planned change for the next revision:'); if(!change) return;
+  sopctlApply('revise', {id:d.id, version:d.version, change}, 'New revision drafted', ()=>ACT['sopctl-open'](d.id)); };
+ACT['sopctl-obsolete'] = a=>{ const d=sopctlDoc(a); if(!d) return;
+  const reason=prompt('Reason for making this SOP obsolete:'); if(!reason) return;
+  sopctlApply('obsolete', {id:d.id, version:d.version, reason}, 'Marked obsolete', ()=>ACT['sopctl-open'](d.id)); };
+ACT['sopctl-reactivate'] = a=>{ const d=sopctlDoc(a); if(!d) return;
+  sopctlApply('reactivate', {id:d.id, version:d.version}, 'Reactivated', ()=>ACT['sopctl-open'](d.id)); };
+ACT['sopctl-assign'] = a=>{ const d=sopctlDoc(a); if(!d) return; const active=sopctlActive(d);
+  if(!active) return toast('No currently effective revision to assign training for','bad');
+  formModal({title:'Assign training — '+esc(d.number)+' rev '+active.no,
+    fields:[{k:'email',label:'Staff member',type:'select',opts:sopctlMembers().filter(m=>m.active).map(m=>({v:m.email,t:m.name+' — '+m.email})),req:true},
+      {k:'due',label:'Due date',type:'date',req:true}],
+    saveLabel:'Assign', onSave:v=>{
+      if(!v.email||!v.due) return toast('Staff member and due date are required','bad');
+      sopctlApply('assign', {id:d.id, version:d.version, revision:active.no, email:v.email, due:v.due}, 'Training assigned', ()=>{ closeModal(); ACT['sopctl-open'](d.id); });
+    }});
+};
+ACT['sopctl-ack'] = a=>{ const [id,trainingId]=a.split('|'); const d=sopctlDoc(id); if(!d) return;
+  if(!confirm('Confirm that you have read and understood this revision?')) return;
+  sopctlApply('ack', {id:d.id, version:d.version, trainingId, confirm:true}, 'Acknowledged', ()=>ACT['sopctl-open'](d.id)); };
+ACT['sopctl-copy'] = a=>{ const d=sopctlDoc(a); if(!d) return; const active=sopctlActive(d);
+  if(!active) return toast('No currently effective revision to issue','bad');
+  formModal({title:'Issue controlled copy — '+esc(d.number)+' rev '+active.no,
+    fields:[{k:'recipient',label:'Recipient / location',req:true,full:true}],
+    saveLabel:'Issue copy', onSave:v=>{
+      if(!v.recipient) return toast('Enter a recipient or location','bad');
+      sopctlApply('copy', {id:d.id, version:d.version, revision:active.no, recipient:v.recipient}, 'Controlled copy issued', ()=>{ closeModal(); ACT['sopctl-open'](d.id); });
+    }});
+};
+ACT['sopctl-new'] = ()=>{
+  formModal({title:'New SOP',
+    fields:[{k:'number',label:'Document number',req:true,full:true,hint:'Letters, numbers, slashes or dashes — e.g. PR/20A'},
+      {k:'title',label:'Title',req:true,full:true},
+      {k:'department',label:'Department',req:true},
+      {k:'category',label:'Category'},
+      {k:'standard',label:'ISO relevance',type:'select',opts:['ISO 9001','ISO 22716','Both'],blank:false},
+      {k:'revision',label:'Starting revision number',type:'number',def:'0',req:true}],
+    saveLabel:'Create', onSave:v=>{
+      if(!v.number||!v.title||!v.department) return toast('Document number, title and department are required','bad');
+      sopctlApply('create', {number:v.number,title:v.title,department:v.department,category:v.category||'',
+        standard:v.standard||'Both', revision:Number(v.revision)||0}, 'SOP created', (doc)=>{ closeModal(); ACT['sopctl-open'](doc.id); });
+    }});
+};
+
+/* ---------- controlled-copy print layout, matching SOP_FORMAT_template.docx ---------- */
+function sopctlPrintHtml(d, rev, copy){
+  const st=sopctlStatusLabel(d, rev);
+  const banner = d.obsolete? 'OBSOLETE — NOT FOR USE'
+    : rev.status==='Draft'? 'DRAFT — NOT YET APPROVED'
+    : st==='Superseded'? 'SUPERSEDED — SEE CURRENT REVISION'
+    : st==='Scheduled'? 'APPROVED — NOT YET EFFECTIVE'
+    : copy? 'CONTROLLED COPY'
+    : 'UNCONTROLLED COPY — FOR REFERENCE ONLY';
+  const bannerBad = d.obsolete || rev.status==='Draft' || st==='Superseded';
+  return '<div>'
+    + sopctlHeaderTable(d, rev)
+    + '<div style="text-align:center;margin:10px 0 16px"><span style="display:inline-block;padding:4px 14px;border:2px solid '+(bannerBad?'#b42318':'#1c1c1c')+';color:'+(bannerBad?'#b42318':'#1c1c1c')+';font-weight:700;font-size:12px;letter-spacing:.04em">'+esc(banner)+'</span></div>'
+    + (copy? '<div class="sub" style="text-align:center;margin-bottom:10px">Copy ID '+esc(copy.id.slice(0,8))+' · issued to '+esc(copy.recipient)+' · '+esc((copy.at||'').slice(0,10))+' by '+esc(copy.by)+'</div>' : '')
+    + '<div class="docbody">'+(rev.body||'<p class="sub">No content.</p>')+'</div>'
+    + '<div class="sub" style="margin-top:20px;border-top:1px solid var(--line);padding-top:8px">Prepared by '+esc(rev.prepared||'—')
+      + (rev.reviewedBy?' · Reviewed by '+esc(rev.reviewedBy)+' on '+esc((rev.reviewedAt||'').slice(0,10)):'')
+      + (rev.approvedBy?' · Approved by '+esc(rev.approvedBy)+' on '+esc((rev.approvedAt||'').slice(0,10)):'') + '</div>'
+    + '</div>';
+}
+ACT['sopctl-print'] = a=>{
+  const [id,copyId]=a.split('|'); const d=sopctlDoc(id); if(!d) return;
+  const rev = sopctlActive(d) || sopctlLatest(d);
+  const copy = copyId? (d.copies||[]).find(c=>c.id===copyId) : null;
+  printModal(d.number+' — '+(rev.title||''), sopctlPrintHtml(d, rev, copy));
+};
+
+/* ==== end SOP Document Control module ==== */
 
 function pickCopy(poId){
   const inp=document.createElement('input');
