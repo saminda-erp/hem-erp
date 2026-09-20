@@ -1554,6 +1554,7 @@ function save(reason){
   markSaved('saving');
   clearTimeout(pubTimer);
   pubTimer = setTimeout(()=>publish(reason), 1400);
+  scheduleCloudPush();
 }
 async function publish(reason){
   if(!CAP.artifact || !ORIGINAL_DOC){ markSaved('local'); return; }
@@ -1567,6 +1568,139 @@ async function publish(reason){
     if(e && (e.code==='not_writer'||e.code==='not_granted'||e.code==='not_declared'||e.code==='capability_disabled')){ CAP.artifact=null; markSaved('local'); return; }
     console.warn('publish failed', e); markSaved('error');
   }
+}
+
+/* ============================================================
+   CLOUD SYNC — shared cross-device copy of the whole working state.
+   Every collection in S has always lived only in each browser's own
+   localStorage (see 'persistence' above), which is exactly why two devices
+   signed in to the same account can show a different Customer PO Register.
+   This adds one shared row in Supabase (table hem_app_state, id='main') that
+   every signed-in device pulls from and pushes to, so they converge on the
+   same data.
+   Reuses the existing reconcile(a,b) union-by-id merge (not a blind
+   overwrite): anything only on one side survives, and on a genuinely
+   conflicting id, b wins. That merge direction is chosen deliberately,
+   differently, for a push vs. a background pull:
+     - cloudPush(): reconcile(remote, local) — LOCAL wins on conflict, so
+       this device's own just-made edits always survive being pushed, while
+       still folding in any brand-new records another device added.
+     - cloudBackgroundPull(): reconcile(local, remote) — REMOTE wins on
+       conflict, so this device picks up another device's edits to a record
+       it also has, whenever it isn't itself mid-edit.
+   A background pull is skipped whenever a local save is queued to push
+   (CLOUD.pendingPush), so an in-flight local edit is never clobbered by an
+   incoming pull; it will be merged correctly, local-wins, by the push that
+   follows moments later. Two devices editing the very SAME record at the
+   very same instant still resolve last-write-wins (whichever push commits
+   last) — a disclosed, accepted trade-off of this whole-state-sync approach
+   versus a fully normalized per-record database with server-side identity
+   checks (as built for the SOP Document Control module). A `version` column
+   on the shared row adds belt-and-suspenders protection against two pushes
+   landing at the exact same instant: a push whose expected version has
+   moved on is rejected and retried from a fresh pull rather than silently
+   overwriting. */
+let CLOUD = { pulling:false, pushing:false, pendingPush:false, lastSyncAt:null, lastErr:null, everConnected:false };
+function cloudAvailable(){ return !!window.HEM_AUTH; }
+function cloudStatusText(){
+  if(!cloudAvailable()) return {cls:'', text:''};
+  if(CLOUD.pulling||CLOUD.pushing) return {cls:'', text:'syncing…'};
+  if(CLOUD.lastErr) return {cls:'err', text:'cloud sync failed — saved locally only'};
+  if(CLOUD.lastSyncAt) return {cls:'on', text:'synced '+CLOUD.lastSyncAt.toTimeString().slice(0,5)};
+  return {cls:'', text:'connecting…'};
+}
+function cloudMarkStatus(){
+  const c=document.getElementById('cloudchip'); if(!c) return;
+  const st=cloudStatusText(); c.className='savechip'+(st.cls?' '+st.cls:''); c.textContent=st.text;
+}
+/* Pulls the shared row and merges it into local S (remote wins on a shared id — see banner
+   comment above), then persists locally and redraws. Used at boot, on the background timer,
+   and by the manual "Sync now" button. Skips merging (but still clears loading state) when a
+   local push is queued, so it never races an in-flight save of this device's own. */
+function cloudBackgroundPull(after){
+  if(!cloudAvailable()){ if(after) after(false); return; }
+  if(CLOUD.pendingPush){ if(after) after(false); return; }
+  CLOUD.pulling=true; cloudMarkStatus();
+  /* The whole call chain below is wrapped in try/catch, not just the async .then/.catch: a
+     real Supabase client always exposes .from().select().eq().single() as chainable methods
+     returning a thenable, so this never throws synchronously in production — but boot() must
+     never be taken down by a sync layer whose HEM_AUTH turns out to be a different or
+     incomplete shape (e.g. a stub in an embedded/preview context), so this is defensive rather
+     than load-bearing. */
+  try{
+    window.HEM_AUTH.from('hem_app_state').select('data,images,version').eq('id','main').single().then(({data,error})=>{
+      CLOUD.pulling=false;
+      if(error){ CLOUD.lastErr=error.message; cloudMarkStatus(); if(after) after(false); return; }
+      CLOUD.lastErr=null;
+      if(data && data.data && Object.keys(data.data).length){
+        S = reconcile(S, data.data);
+        if(data.images && typeof data.images==='object') IMAGES = Object.assign({}, IMAGES, data.images);
+        COLLECTIONS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
+        writeLocal(); writeImagesLocal();
+        renderNav(); render();
+      }
+      CLOUD.lastSyncAt=new Date(); CLOUD.everConnected=true; cloudMarkStatus();
+      if(after) after(true);
+    }).catch(e=>{ CLOUD.pulling=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); if(after) after(false); });
+  }catch(e){ CLOUD.pulling=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); if(after) after(false); }
+}
+/* Pushes local S to the shared row: pulls the very latest remote copy first (closing the race
+   window to one round-trip), merges with LOCAL winning on a shared id (see banner comment),
+   then writes with an optimistic-concurrency version check. If another device's push landed in
+   between, retries from a fresh pull up to twice before giving up for this cycle (the next
+   scheduled push will try again). */
+function cloudPush(retriesLeft){
+  if(!cloudAvailable()) return;
+  if(retriesLeft==null) retriesLeft=2;
+  CLOUD.pushing=true; CLOUD.pendingPush=true; cloudMarkStatus();
+  /* Defensive try/catch around the whole chain for the same reason as cloudBackgroundPull()
+     above: a real Supabase client never throws synchronously here, but a boot()-time or
+     save()-time crash from an unexpected HEM_AUTH shape would be far worse than a sync that
+     silently doesn't happen this cycle. */
+  try{
+    window.HEM_AUTH.from('hem_app_state').select('data,images,version').eq('id','main').single().then(({data,error})=>{
+      if(error){ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=error.message; cloudMarkStatus(); return; }
+      const remoteVersion = (data && typeof data.version==='number') ? data.version : 0;
+      const remoteData = (data && data.data) || {};
+      const remoteImages = (data && data.images) || {};
+      const merged = (remoteData && Object.keys(remoteData).length) ? reconcile(remoteData, S) : clone(S);
+      const mergedImages = Object.assign({}, remoteImages, IMAGES);
+      try{
+        window.HEM_AUTH.from('hem_app_state').update({
+          data:merged, images:mergedImages, version:remoteVersion+1,
+          updated_at:new Date().toISOString(), updated_by:(window.HEM_USER_EMAIL||UI.user||'')
+        }).eq('id','main').eq('version',remoteVersion).select('version').then(({data:upd,error:err2})=>{
+          CLOUD.pushing=false;
+          if(err2){ CLOUD.pendingPush=false; CLOUD.lastErr=err2.message; cloudMarkStatus(); return; }
+          if(!upd || !upd.length){
+            if(retriesLeft>0){ setTimeout(()=>cloudPush(retriesLeft-1), 300); return; }
+            CLOUD.pendingPush=false;
+            CLOUD.lastErr='Another device saved at the same moment — will retry automatically.';
+            cloudMarkStatus(); return;
+          }
+          CLOUD.pendingPush=false;
+          S = reconcile(S, merged); COLLECTIONS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
+          writeLocal();
+          CLOUD.lastErr=null; CLOUD.lastSyncAt=new Date(); CLOUD.everConnected=true; cloudMarkStatus();
+        }).catch(e=>{ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); });
+      }catch(e){ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); }
+    }).catch(e=>{ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); });
+  }catch(e){ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); }
+}
+let cloudPushTimer=null;
+function scheduleCloudPush(){
+  if(!cloudAvailable()) return;
+  CLOUD.pendingPush=true; cloudMarkStatus();
+  clearTimeout(cloudPushTimer);
+  cloudPushTimer=setTimeout(()=>cloudPush(), 2500);
+}
+let cloudPullInterval=null;
+function startCloudSync(){
+  if(!cloudAvailable()) return;
+  cloudBackgroundPull();
+  clearInterval(cloudPullInterval);
+  cloudPullInterval=setInterval(()=>cloudBackgroundPull(), 25000);
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') cloudBackgroundPull(); });
 }
 async function download(filename, text, mime){
   if(CAP.downloads){
@@ -6489,7 +6623,9 @@ function render(){
   const m=VIEWMETA[UI.view]||{};
   $('#tb-eyebrow').textContent=m.eyebrow||''; $('#tb-title').textContent=m.title||''; $('#tb-sub').textContent=m.sub||'';
   const themeLabel = document.documentElement.getAttribute('data-theme')||'auto';
+  const cloudSt=cloudStatusText();
   $('#tb-acts').innerHTML='<span class="savechip" id="savechip"></span>'
+    + (cloudAvailable()? '<span class="savechip'+(cloudSt.cls?' '+cloudSt.cls:'')+'" id="cloudchip" title="Shared cloud copy — every signed-in device syncs to this">'+esc(cloudSt.text)+'</span>'+btn('Sync now','cloud-sync-now',null,'btn') : '')
     + btn('Trace a batch','go','trace','btn')
     + btn('Theme: '+themeLabel,'theme',null,'btn');
   markSaved(saveState);
@@ -6646,6 +6782,7 @@ function boot(){
     try{ CAP.downloads = await claude.use('downloads'); }catch(e){ CAP.downloads=null; }
     if(!CAP.artifact) markSaved('local');
   })();
+  startCloudSync();
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
@@ -8063,6 +8200,11 @@ function syncPortalLeave(silent){
   }).catch(()=>{ if(!silent) toast('Could not reach the portal database — check the Supabase setup','bad'); });
 }
 ACT['leave-sync'] = ()=> syncPortalLeave(false);
+ACT['cloud-sync-now'] = ()=>{
+  if(!cloudAvailable()) return toast('Cloud sync is not available on this page','bad');
+  toast('Syncing with the shared database…','ok');
+  cloudBackgroundPull(()=>cloudPush());
+};
 /* pushes an approval/rejection decided in the ERP back to the portal record, so the
    employee sees the outcome next time they check their phone — only relevant for
    applications that originated on the portal in the first place */
