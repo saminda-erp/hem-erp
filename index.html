@@ -1363,6 +1363,14 @@ const LS_KEY = 'hem-erp-v1';
    a blanked copy of SEED instead of the real one whenever a factory reset is in effect, so the
    example data can never resurface until 'reset-seed' explicitly asks for it again. */
 const WIPE_FLAG = 'hem-factory-reset-v1';
+/* The cloud sync layer's reconcile() merge (below) has the same "can only ADD, never remove"
+   limitation across devices as WIPE_FLAG solves locally — see the CLOUD SYNC banner comment
+   further down for the full mechanism. This key caches, per browser, the newest reset_at the
+   cloud row is known to carry so this device knows when to wholesale-adopt a reset (skip the
+   merge and replace S entirely) instead of merging its own possibly-stale data back in. */
+const RESET_MARKER_KEY = 'hem-cloud-reset-marker';
+function getLocalResetMarker(){ try{ return localStorage.getItem(RESET_MARKER_KEY)||''; }catch(e){ return ''; } }
+function setLocalResetMarker(v){ try{ localStorage.setItem(RESET_MARKER_KEY, v||''); }catch(e){} }
 let S = null, UI = {view:'dashboard', filters:{}, sel:{}};
 let CAP = {artifact:null, downloads:null};
 let dirty = false, saveState = 'idle';
@@ -1536,7 +1544,7 @@ function markSaved(kind){ saveState=kind; const c=$('#savechip'); if(c){ c.class
    is the ONLY persistence there is. A refresh after a failed write reverts to whatever last
    truly made it into storage — this is what previously showed up as "my new PO disappeared
    on refresh" with no warning at all. */
-function save(reason){
+function save(reason, opts){
   pruneImages();
   lastSaveErr = null;
   const okState = writeLocal();
@@ -1554,7 +1562,10 @@ function save(reason){
   markSaved('saving');
   clearTimeout(pubTimer);
   pubTimer = setTimeout(()=>publish(reason), 1400);
-  scheduleCloudPush();
+  /* factory-reset / reset-seed pass forceCloud:true — a normal merge push can never represent a
+     deletion (see CLOUD SYNC banner below), so a genuine wipe must hard-overwrite the shared row
+     instead of merging into it. */
+  if(opts && opts.forceCloud) cloudForcePush(); else scheduleCloudPush();
 }
 async function publish(reason){
   if(!CAP.artifact || !ORIGINAL_DOC){ markSaved('local'); return; }
@@ -1599,7 +1610,19 @@ async function publish(reason){
    on the shared row adds belt-and-suspenders protection against two pushes
    landing at the exact same instant: a push whose expected version has
    moved on is rejected and retried from a fresh pull rather than silently
-   overwriting. */
+   overwriting.
+   One thing this merge can never do is represent a DELETION: if a device
+   clears a collection to [] (Factory Reset / Reset to seed) and then merges,
+   there are no local entries left to "win," so 100% of whatever the other
+   side has survives the union — the wipe would be silently undone by the
+   very next sync, on this device or any other still holding the old data.
+   Factory Reset and Reset to seed therefore never merge at all: they call
+   cloudForcePush() (below), which hard-overwrites the shared row and stamps
+   it with a fresh reset_at, and every device (this one and any other,
+   already open or not) compares that reset_at against a small local marker
+   before its own next merge, adopting the reset wholesale instead of
+   merging whenever the shared row's reset is newer than what it has
+   locally applied. */
 let CLOUD = { pulling:false, pushing:false, pendingPush:false, lastSyncAt:null, lastErr:null, everConnected:false };
 function cloudAvailable(){ return !!window.HEM_AUTH; }
 function cloudStatusText(){
@@ -1628,11 +1651,22 @@ function cloudBackgroundPull(after){
      incomplete shape (e.g. a stub in an embedded/preview context), so this is defensive rather
      than load-bearing. */
   try{
-    window.HEM_AUTH.from('hem_app_state').select('data,images,version').eq('id','main').single().then(({data,error})=>{
+    window.HEM_AUTH.from('hem_app_state').select('data,images,version,reset_at').eq('id','main').single().then(({data,error})=>{
       CLOUD.pulling=false;
       if(error){ CLOUD.lastErr=error.message; cloudMarkStatus(); if(after) after(false); return; }
       CLOUD.lastErr=null;
-      if(data && data.data && Object.keys(data.data).length){
+      const remoteReset = (data && data.reset_at) || '';
+      const isNewerReset = remoteReset && remoteReset > getLocalResetMarker();
+      if(isNewerReset){
+        /* Another device performed a reset since we last checked in: adopt its data wholesale
+           rather than merging, so our own stale local records don't survive the union. */
+        S = clone(data.data || {});
+        COLLECTIONS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
+        IMAGES = (data.images && typeof data.images==='object') ? clone(data.images) : {};
+        setLocalResetMarker(remoteReset);
+        writeLocal(); writeImagesLocal();
+        renderNav(); render();
+      }else if(data && data.data && Object.keys(data.data).length){
         S = reconcile(S, data.data);
         if(data.images && typeof data.images==='object') IMAGES = Object.assign({}, IMAGES, data.images);
         COLLECTIONS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
@@ -1658,11 +1692,27 @@ function cloudPush(retriesLeft){
      save()-time crash from an unexpected HEM_AUTH shape would be far worse than a sync that
      silently doesn't happen this cycle. */
   try{
-    window.HEM_AUTH.from('hem_app_state').select('data,images,version').eq('id','main').single().then(({data,error})=>{
+    window.HEM_AUTH.from('hem_app_state').select('data,images,version,reset_at').eq('id','main').single().then(({data,error})=>{
       if(error){ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=error.message; cloudMarkStatus(); return; }
       const remoteVersion = (data && typeof data.version==='number') ? data.version : 0;
       const remoteData = (data && data.data) || {};
       const remoteImages = (data && data.images) || {};
+      const remoteReset = (data && data.reset_at) || '';
+      if(remoteReset && remoteReset > getLocalResetMarker()){
+        /* Another device reset the shared row since we last checked in. Our own S may be the
+           very stale data that reset was meant to clear — pushing it now (even merged) would
+           resurrect it. Adopt the reset wholesale instead of pushing, exactly as a background
+           pull would, then let the next scheduled push (if any real local edit is still
+           pending) go through against the now-current version. */
+        S = clone(remoteData); COLLECTIONS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
+        IMAGES = (remoteImages && typeof remoteImages==='object') ? clone(remoteImages) : {};
+        setLocalResetMarker(remoteReset);
+        writeLocal(); writeImagesLocal();
+        renderNav(); render();
+        CLOUD.pushing=false; CLOUD.pendingPush=false;
+        CLOUD.lastErr=null; CLOUD.lastSyncAt=new Date(); CLOUD.everConnected=true; cloudMarkStatus();
+        return;
+      }
       const merged = (remoteData && Object.keys(remoteData).length) ? reconcile(remoteData, S) : clone(S);
       const mergedImages = Object.assign({}, remoteImages, IMAGES);
       try{
@@ -1681,6 +1731,42 @@ function cloudPush(retriesLeft){
           CLOUD.pendingPush=false;
           S = reconcile(S, merged); COLLECTIONS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
           writeLocal();
+          CLOUD.lastErr=null; CLOUD.lastSyncAt=new Date(); CLOUD.everConnected=true; cloudMarkStatus();
+        }).catch(e=>{ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); });
+      }catch(e){ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); }
+    }).catch(e=>{ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); });
+  }catch(e){ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); }
+}
+/* Used only by Factory Reset and Reset to seed. Unlike cloudPush(), this never merges with
+   whatever the shared row currently holds — a wipe has nothing to "win" a union against, since
+   reconcile() can only add. Instead it hard-overwrites the row with this device's just-cleared S
+   and stamps a fresh reset_at, so every other device (see the reset-marker checks in
+   cloudBackgroundPull()/cloudPush() above) adopts the wipe wholesale on its own next sync instead
+   of resurrecting its old data into it. Same optimistic-concurrency retry as cloudPush(). */
+function cloudForcePush(retriesLeft){
+  if(!cloudAvailable()) return;
+  if(retriesLeft==null) retriesLeft=2;
+  CLOUD.pushing=true; CLOUD.pendingPush=true; cloudMarkStatus();
+  try{
+    window.HEM_AUTH.from('hem_app_state').select('version').eq('id','main').single().then(({data,error})=>{
+      if(error){ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=error.message; cloudMarkStatus(); return; }
+      const remoteVersion = (data && typeof data.version==='number') ? data.version : 0;
+      const resetAt = new Date().toISOString();
+      try{
+        window.HEM_AUTH.from('hem_app_state').update({
+          data:clone(S), images:clone(IMAGES), version:remoteVersion+1, reset_at:resetAt,
+          updated_at:resetAt, updated_by:(window.HEM_USER_EMAIL||UI.user||'')
+        }).eq('id','main').eq('version',remoteVersion).select('version').then(({data:upd,error:err2})=>{
+          CLOUD.pushing=false;
+          if(err2){ CLOUD.pendingPush=false; CLOUD.lastErr=err2.message; cloudMarkStatus(); return; }
+          if(!upd || !upd.length){
+            if(retriesLeft>0){ setTimeout(()=>cloudForcePush(retriesLeft-1), 300); return; }
+            CLOUD.pendingPush=false;
+            CLOUD.lastErr='Another device saved at the same moment — will retry automatically.';
+            cloudMarkStatus(); return;
+          }
+          CLOUD.pendingPush=false;
+          setLocalResetMarker(resetAt);
           CLOUD.lastErr=null; CLOUD.lastSyncAt=new Date(); CLOUD.everConnected=true; cloudMarkStatus();
         }).catch(e=>{ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); });
       }catch(e){ CLOUD.pushing=false; CLOUD.pendingPush=false; CLOUD.lastErr=String((e&&e.message)||e); cloudMarkStatus(); }
@@ -5943,7 +6029,7 @@ const ACT = {
    fields:[{k:'confirm',label:'Type RESET to confirm',full:true}], saveLabel:'Reset',
    onSave:v=>{ if(v.confirm!=='RESET') return toast('Type RESET to confirm','bad');
      try{ localStorage.removeItem(WIPE_FLAG); }catch(e){} /* undo any earlier factory reset so the demo data is allowed back */
-     S=clone(SEED); save(); toast('Reset to seed data','ok'); render(); }}),
+     S=clone(SEED); save(null,{forceCloud:true}); toast('Reset to seed data','ok'); render(); }}),
 
  /* Factory reset — genuinely empties every operational collection (customers, materials,
     products, formulas, prices, orders, batches, receipts, BOMs, COA presets, everything) so
@@ -5968,7 +6054,7 @@ const ACT = {
        try{ localStorage.setItem(WIPE_FLAG,'1'); }catch(e){} /* stops boot() re-merging the shipped example data back in on next load */
        S.audit=[{at:new Date().toISOString().replace('T',' ').slice(0,16), who:UI.user||'SS',
          action:'Factory reset performed', ref:'', detail:'All operational data cleared to zero by '+(UI.userEmail||UI.user||'SS')}];
-       save(); toast('Factory reset complete — every collection is now empty','ok'); closeModal(); go('dashboard');
+       save(null,{forceCloud:true}); toast('Factory reset complete — every collection is now empty','ok'); closeModal(); go('dashboard');
      }});
  },
 
