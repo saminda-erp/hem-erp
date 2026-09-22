@@ -1842,6 +1842,55 @@ function csv(rows){
 
 /* ---------- derived data ---------- */
 function product(code){ return byId('products',code,'code') || {code, name:code, packSize:1, uom:''}; }
+
+/* ---------- SOP for Batch Number Creation (per company SOP, 2026-09-22) ----------
+   Liquid products:  [Product-line letter][3-digit product-type code][Day (DD)][Month letter A–L]
+   e.g. A05313G = C.O. Bigelow (A) + Shampoo (053) + 13th + July (G). 7 characters, no running
+   counter in the SOP itself — genBatchNumber() below adds a hidden "-2","-3"… suffix only if the
+   same 7-character number would otherwise be reused on the same day, so printed/visible batch
+   numbers still follow the SOP exactly in the normal case where that never happens.
+   Soap products use a different format (PO number + 2-digit code + date) — not yet implemented,
+   since there are no soap-type products in the system as of this SOP being added; mfgType:'Soap'
+   products fall back to manual batch numbering (genBatchNumber returns '') until that's built. */
+const BATCH_LINE_LETTERS = { // brand/fragrance line -> SOP letter (only lines actually in use are listed;
+  'WCO':'H',   // Woodbury & Co
+  'WYN':'I', 'TG':'I' // Wyndham Terra Green / Terra Green
+};
+function guessBatchLine(code){
+  const c = String(code||'').toUpperCase();
+  if(c.startsWith('WCO-')) return 'H';
+  if(c.startsWith('WYN-TG-') || c.startsWith('WYNTG-') || c.startsWith('TG-')) return 'I';
+  return '';
+}
+function guessBatchTypeCode(name){
+  const n = String(name||'').toLowerCase();
+  if(/conditioning shampoo|shampoo/.test(n)) return '053';
+  if(/hand and body wash|body wash|shower gel/.test(n)) return '054';
+  if(/conditioner/.test(n)) return '055';
+  if(/lotion|moisturizer|moisturiser/.test(n)) return '056';
+  if(/hand (soap|wash)/.test(n)) return '059'; // check before the generic bar-soap pattern below
+  if(/cleansing bar|\bsoap\b/.test(n)) return '057';
+  return '';
+}
+const BATCH_MONTH_LETTERS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+/* Returns the SOP-format batch number for `code` on `dateStr` (default today), or '' if the
+   product's batch line letter / type code aren't known yet (e.g. a brand-new product line, or a
+   Soap-type product) — callers should fall back to the old manual convention in that case. */
+function genBatchNumber(code, dateStr){
+  const p = product(code); if(!p || !p.code) return '';
+  if(p.mfgType==='Soap') return ''; // soap format not yet implemented — see comment above
+  const letter = p.batchLine || guessBatchLine(code);
+  const typeCode = p.batchTypeCode || guessBatchTypeCode(p.name);
+  if(!letter || !typeCode) return '';
+  const d = dateStr ? new Date(dateStr+'T00:00:00') : new Date();
+  if(isNaN(d)) return '';
+  const day = String(d.getDate()).padStart(2,'0');
+  const month = BATCH_MONTH_LETTERS[d.getMonth()];
+  const base = letter+typeCode+day+month;
+  let candidate = base, n = 2;
+  while(byId('batches',candidate)){ candidate = base+'-'+n; n++; }
+  return candidate;
+}
 function material(code){ return byId('materials',code,'code') || {code, name:code, uom:''}; }
 function formula(id){ return byId('formulas',id); }
 function customerName(c){ const x=byId('customers',c,'code'); return x?x.name:c; }
@@ -5231,7 +5280,7 @@ const ACT = {
  'batch-new': ()=> formModal({title:'New batch', wide:true,
    values:{plannedStart:today(), line:'Line 1 — 2,000 L SS316'},
    groups:[{legend:'Identity', fields:[
-     {k:'id',label:'Batch number',req:true,hint:'Convention: <product prefix>-YYMM-NNN'},
+     {k:'id',label:'Batch number',req:true,hint:'SOP for Batch Number Creation: line letter + 3-digit type code + day + month (e.g. A05313G). Pick the product first and use "Plan a batch" from the Demand screen to have this filled in automatically — otherwise enter it per the SOP by hand.'},
      {k:'product',label:'Product',type:'select',opts:optProducts(),req:true},
      {k:'formula',label:'Formula',type:'select',opts:optFormulas(),req:true},
      {k:'line',label:'Line / vessel'},
@@ -5256,12 +5305,15 @@ const ACT = {
    const p=product(code), f=formula(p.formula)||{density:1};
    const kg = Math.ceil(d.units*(p.fill||0)/1000*(f.density||1));
    const prefix = (p.formula||'X').replace(/^F-/,'').split('-')[0];
+   const sopId = genBatchNumber(code, today());
+   const suggestedId = sopId || (prefix+'-'+today().slice(2,4)+today().slice(5,7)+'-'+String(29+(S.batches||[]).length).padStart(3,'0'));
    formModal({title:'Plan a batch for '+code, wide:true,
-     intro:'Sized from the uncovered demand: <b>'+nf(d.toMake)+' cases</b> = '+nf(d.units)+' pieces at '+nf(p.fill)+' '+esc(p.fillUom)+', density '+nf(f.density,3)+'.',
-     values:{id:prefix+'-'+today().slice(2,4)+today().slice(5,7)+'-'+String(29+(S.batches||[]).length).padStart(3,'0'), product:code, formula:p.formula,
+     intro:'Sized from the uncovered demand: <b>'+nf(d.toMake)+' cases</b> = '+nf(d.units)+' pieces at '+nf(p.fill)+' '+esc(p.fillUom)+', density '+nf(f.density,3)+'.'
+       +(sopId?'':' <b>Batch number could not be auto-generated</b> — set the batch line letter and product type code on this product’s record (Product Register) to enable it.'),
+     values:{id:suggestedId, product:code, formula:p.formula,
        plannedKg:kg, plannedUnits:d.units, plannedStart:today(), line:'Line 1 — 2,000 L SS316'},
      groups:[{legend:'Identity', fields:[
-       {k:'id',label:'Batch number',req:true},{k:'product',label:'Product',type:'select',opts:optProducts()},
+       {k:'id',label:'Batch number',req:true,hint:sopId?'Auto-generated per the SOP for Batch Number Creation (line letter + type code + day + month). Edit if needed.':'Convention: <product prefix>-YYMM-NNN'},{k:'product',label:'Product',type:'select',opts:optProducts()},
        {k:'formula',label:'Formula',type:'select',opts:optFormulas()},{k:'line',label:'Line / vessel'},
        {k:'plannedStart',label:'Planned start',type:'date'}
      ]},{legend:'Size', fields:[
@@ -5698,6 +5750,8 @@ const ACT = {
     {legend:'Manufacturing & packaging detail', fields:[
      {k:'category',label:'Product category'},
      {k:'mfgType',label:'Manufacturing type',type:'select',opts:[{v:'Liquid',t:'Liquid'},{v:'Soap',t:'Soap'},{v:'Powder',t:'Powder'},{v:'Other',t:'Other'}]},
+     {k:'batchLine',label:'Batch no. — product line letter',hint:'SOP for Batch Number Creation: the brand/fragrance-line letter (e.g. Woodbury = H, Terra Green = I). Leave blank to use the system’s best guess from the product code.'},
+     {k:'batchTypeCode',label:'Batch no. — product type code',hint:'SOP for Batch Number Creation: the 3-digit product-type code (Shampoo 053, Body Wash/Shower gel 054, Conditioner 055, Body Lotion 056, Handwash 059…). Leave blank to use the system’s best guess from the product name.'},
      {k:'variant',label:'Variant / fragrance'},
      {k:'netFillWeight',label:'Net fill weight (kg)',type:'number',step:'0.001',hint:'If left blank, calculated from fill volume × density'},
      {k:'density',label:'Density (kg/L)',type:'number',step:'0.001'},
@@ -5730,6 +5784,8 @@ const ACT = {
     {legend:'Manufacturing & packaging detail', fields:[
      {k:'category',label:'Product category'},
      {k:'mfgType',label:'Manufacturing type',type:'select',opts:[{v:'Liquid',t:'Liquid'},{v:'Soap',t:'Soap'},{v:'Powder',t:'Powder'},{v:'Other',t:'Other'}]},
+     {k:'batchLine',label:'Batch no. — product line letter',hint:'SOP for Batch Number Creation: the brand/fragrance-line letter (e.g. Woodbury = H, Terra Green = I). Leave blank to use the system’s best guess from the product code.'},
+     {k:'batchTypeCode',label:'Batch no. — product type code',hint:'SOP for Batch Number Creation: the 3-digit product-type code (Shampoo 053, Body Wash/Shower gel 054, Conditioner 055, Body Lotion 056, Handwash 059…). Leave blank to use the system’s best guess from the product name.'},
      {k:'variant',label:'Variant / fragrance'},
      {k:'netFillWeight',label:'Net fill weight (kg)',type:'number',step:'0.001',hint:'If left blank, calculated from fill volume × density'},
      {k:'density',label:'Density (kg/L)',type:'number',step:'0.001'},
