@@ -6906,6 +6906,16 @@ function boot(){
   IMAGES = Object.assign({}, embImg||{}, locImg||{});
   const emb=readEmbedded(), loc=readLocal();
   let wiped=false; try{ wiped = localStorage.getItem(WIPE_FLAG)==='1'; }catch(e){}
+  /* WIPE_FLAG alone only covers the ONE browser that actually clicked Factory Reset. Any other
+     browser — a second device, or the same browser after clearing/never setting that flag —
+     fell through to clone(SEED) on every single boot, silently re-merging the full demo
+     customer/order/product set into S before the cloud pull even runs, and that demo data then
+     rides the very next auto-save back out to the shared cloud row. This is the actual reason
+     sample data kept reappearing after every cleanup, on every refresh, regardless of how many
+     times the shared row was cleaned directly. A browser that already has its own cached data
+     (`loc`) or has ever recorded a cloud reset marker is not a fresh install and must never have
+     the demo SEED re-injected — treat that the same as WIPE_FLAG. */
+  if(!wiped && (loc || getLocalResetMarker())) wiped = true;
   const seedBase = wiped ? blankedSeed() : clone(SEED);
   S = reconcile(reconcile(seedBase, emb), loc) ;
   if(!emb && !loc) S = seedBase;
