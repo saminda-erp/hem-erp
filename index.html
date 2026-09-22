@@ -1383,6 +1383,8 @@ const uid = p => p+'-'+Math.random().toString(36).slice(2,7).toUpperCase();
 const today = () => new Date().toISOString().slice(0,10);
 const nf = (n,d=0)=> (n==null||isNaN(n))?'—':Number(n).toLocaleString('en-MY',{minimumFractionDigits:d,maximumFractionDigits:d});
 const money = n => (n==null||isNaN(n))?'—':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const rm = n => (n==null||isNaN(n))?'—':'RM '+Number(n).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+const round4 = n => Math.round((Number(n)||0)*10000)/10000;
 const dt = d => d? d : '—';
 function daysBetween(a,b){ if(!a||!b) return null; return Math.round((new Date(b)-new Date(a))/864e5); }
 function daysFromToday(d){ return daysBetween(today(), d); }
@@ -1495,7 +1497,7 @@ function pruneImages(){
 function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); return true; }catch(e){ lastSaveErr = e; return false; } }
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
-const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs','bmrForms'];
+const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs','bmrForms','stockAdj','stockTakes'];
 /* clone(SEED) with every operational collection emptied — settings/company config untouched.
    Used only when WIPE_FLAG is set, so a post-factory-reset boot never re-merges the shipped
    example data back in (see WIPE_FLAG comment above).
@@ -1926,9 +1928,13 @@ function lotStock(){
   map.forEach(r=> r.balance = (Number(r.received)||0) - r.issued);
   return [...map.values()];
 }
+/* net qty adjustment posted against a material from all its (posted) stock-take reconciliations —
+   see the STOCK CARD / STOCK TAKE section below */
+function materialAdjTotal(code){ return (S.stockAdj||[]).filter(a=>a.code===code).reduce((s,a)=>s+(Number(a.qty)||0),0); }
 function materialStock(){
   const lots = lotStock(); const map = new Map();
-  (S.materials||[]).forEach(m=> map.set(m.code, {code:m.code, name:m.name, type:m.type, uom:m.uom, reorder:m.reorder, released:0, quarantine:0, rejected:0, lots:0, nearest:''}));
+  (S.materials||[]).forEach(m=> map.set(m.code, {code:m.code, name:m.name, type:m.type, uom:m.uom, reorder:m.reorder,
+    unitCost:Number(m.unitCost)||0, released:0, quarantine:0, rejected:0, adjusted:0, lots:0, nearest:''}));
   lots.forEach(l=>{
     const r = map.get(l.code); if(!r) return;
     if(l.balance<=0) return;
@@ -1938,7 +1944,40 @@ function materialStock(){
     else r.rejected += l.balance;
     if(l.exp && (!r.nearest || l.exp < r.nearest)) r.nearest = l.exp;
   });
+  /* A posted stock-take reconciliation corrects the RELEASED (usable) balance going forward —
+     it does not target any one lot, since counting is done per material, not per lot (see the
+     Stock Take screen). Folding it in here means every downstream calculation that already reads
+     `released` (reorder alerts, availability, requirement checks) picks up the correction
+     automatically, with no other call site needing to know adjustments exist. */
+  map.forEach(r=>{ r.adjusted = materialAdjTotal(r.code); r.released += r.adjusted; });
   return [...map.values()];
+}
+/* Full transaction history for one material's stock card: every receipt, issue and posted
+   stock-take adjustment, oldest first, with a running balance. */
+function materialLedger(code){
+  const rows=[];
+  (S.grns||[]).filter(g=>g.code===code).forEach(g=>{
+    rows.push({date:g.date||'', type:'Receipt', ref:g.id, qty:Number(g.qty)||0,
+      note:'Lot '+(g.lot||'—')+' from '+supplierName(g.supplier)+' — '+(g.status||'')});
+  });
+  (S.issues||[]).filter(i=>i.code===code).forEach(i=>{
+    rows.push({date:i.date||'', type:'Issued', ref:i.id||i.batch||'', qty:-(Number(i.qty)||0),
+      note:'Lot '+(i.lot||'—')+(i.batch?' to batch '+i.batch:'')});
+  });
+  (S.stockAdj||[]).filter(a=>a.code===code).forEach(a=>{
+    rows.push({date:a.date||'', type:'Adjustment', ref:a.ref||a.id, qty:Number(a.qty)||0,
+      note:(Number(a.qty)>=0?'Stock take surplus':'Stock take shortage')+(a.notes?' — '+a.notes:'')});
+  });
+  rows.sort((a,b)=> String(a.date).localeCompare(String(b.date)) || (a.type==='Receipt'?-1:1));
+  let bal=0;
+  rows.forEach(r=>{ bal+=r.qty; r.balance=bal; });
+  return rows;
+}
+/* Balances as they stood at the end of a given ISO date (inclusive) — used to compute a month's
+   opening balance (end of the day before the 1st) and closing balance (end of its last day) for
+   the month-end stock report, without needing a separate running-snapshot table. */
+function materialBalanceAsOf(code, asOfDate){
+  return materialLedger(code).filter(r=>!asOfDate || r.date<=asOfDate).reduce((s,r)=>s+r.qty,0);
 }
 /* open demand by product code from POs not yet shipped */
 function openDemand(){
@@ -3344,7 +3383,16 @@ function V_shipping(){
 }
 
 /* ============================ INVENTORY ============================ */
+const INV_TABS = [{k:'summary', t:'Stock Summary'}, {k:'stocktake', t:'Stock Take'}];
 function V_inventory(){
+  const tab=F('tab','summary');
+  let h = '<div class="subtabs">'+INV_TABS.map(t=>'<button class="subtab'+(tab===t.k?' on':'')+'" data-chip="tab" data-val="'+t.k+'" type="button">'
+      +esc(t.t)+(t.k==='stocktake'&&(S.stockTakes||[]).some(x=>x.status==='draft')? ' <b class="warnpip">'+(S.stockTakes||[]).filter(x=>x.status==='draft').length+'</b>':'')
+      +'</button>').join('')+'</div>';
+  h += tab==='stocktake' ? V_inv_stocktake() : V_inv_summary();
+  return h;
+}
+function V_inv_summary(){
   const q=F('q'), ty=F('type'), only=F('only');
   const availMap=new Map(materialAvailability().map(a=>[a.code,a]));
   let rows=materialStock().filter(m=>(!ty||m.type===ty)&&(match(m.code,q)||match(m.name,q)));
@@ -3380,8 +3428,30 @@ function V_inventory(){
         return nf(m.reorder,0)+'<div class="meter"><i class="'+cls+'" style="width:'+Math.min(100,p)+'%"></i></div>';}},
       {h:'Lots', c:'num', f:m=>nf(m.lots)},
       {h:'First expiry', c:'num', f:m=>m.nearest?'<span class="mono">'+esc(m.nearest)+'</span>':'<span class="sub">—</span>'},
-      {h:'', f:m=>btn('Lots','mat-lots',m.code)}
+      {h:'', f:m=>btn('Lots','mat-lots',m.code)+btn('Stock card','mat-card',m.code)}
     ], rows, {empty:'No materials match this filter.'});
+}
+function V_inv_stocktake(){
+  const takes=sortBy((S.stockTakes||[]).slice(),'date').reverse();
+  const drafts=takes.filter(t=>t.status==='draft');
+  return '<div class="note" style="margin-bottom:14px">Count what is physically on the shelf for each material, submit it, and review every variance against the system balance before anything is reconciled. Posting a stock take creates a permanent adjustment record on the affected materials\' stock cards — nothing is corrected silently.</div>'
+   + '<div class="pillrow" style="margin-bottom:16px">'
+     + btn('Start stock take — all materials','stocktake-new','','btn primary')
+     + btn('Raw materials only','stocktake-new','RM','btn')
+     + btn('Packaging only','stocktake-new','PM','btn')
+   + '</div>'
+   + (drafts.length? '<div class="banner warn"><span class="tag t-warn" style="flex:none">Open</span><span style="flex:1">'
+     + drafts.length+' stock take'+(drafts.length>1?'s are':' is')+' counted but not yet posted — nothing on the stock cards has changed until it is.</span></div>':'')
+   + T([
+      {h:'Stock take', f:t=>'<b class="mono">'+esc(t.id)+'</b><div class="sub">'+esc(t.date)+'</div>'},
+      {h:'Scope', f:t=>esc(t.type==='RM'?'Raw materials':t.type==='PM'?'Packaging':'All materials')},
+      {h:'Counted by', f:t=>esc(person(t.countedBy)||t.countedBy||'—')},
+      {h:'Materials counted', c:'num', f:t=>nf((t.lines||[]).length)},
+      {h:'Variances', c:'num', f:t=>{const n=(t.lines||[]).filter(l=>Number(l.variance)!==0).length;
+        return n? '<span style="color:var(--warn)">'+n+'</span>' : '<span style="color:var(--ok)">0</span>';}},
+      {h:'Status', f:t=>tag(t.status)},
+      {h:'', f:t=>btn(t.status==='draft'?'Review':'View','stocktake-view',t.id)}
+    ], takes, {emptyTitle:'No stock takes recorded yet', empty:'Start one above whenever you are ready to cross-check physical stock against the system.'});
 }
 
 /* ============================================================
@@ -4596,6 +4666,7 @@ function V_reports(){
     {t:'Certificate of analysis', d:'Customer-facing COA built from the recorded release tests, with batch, manufacturing and expiry dates and the releasing signature.', a:'rep-coa'},
     {t:'Traceability report', d:'One batch from customer order to container — the document a recall or an inspection asks for.', a:'rep-trace'},
     {t:'Shipment load report', d:'Load plan by FG lot with cases, pallets and gross weight, plus seal and vessel details — from a Shipment record. For the official customer Packing List, use Customer PO Register → Packing List instead.', a:'rep-packing'},
+    {t:'Month-end stock report', d:'Opening balance, receipts, issues, adjustments and closing balance/value for every material over one month — pulled from each material’s stock card.', a:'rep-stocktake'},
     {t:'Production plan (CSV)', d:'Open demand consolidated by product with the bulk requirement and blank planned/actual columns for the floor.', a:'export-plan'},
     {t:'Material requirement (CSV)', d:'Requirement against every planned batch versus released stock, with shortages flagged.', a:'export-mrp'},
     {t:'Inventory by lot (CSV)', d:'Every material lot with received, issued and balance quantities, status and expiry.', a:'export-lots'},
@@ -5598,6 +5669,121 @@ const ACT = {
    ], lots, {empty:'No lots received for this material.'}), '', true);
  },
 
+ /* --- stock card / stock take / reconciliation ---
+    Per-material stock card (materialLedger), a stock-take workflow to enter physical
+    counts and cross-check against system quantities, and a posting step that turns
+    any variance into a permanent stockAdj record on that material's stock card —
+    exactly the flow requested: "cross check physical and actual and submit actual
+    and need to reconciliation. and end of the month need to take stock report." */
+ 'mat-card': code=>{
+   const m = byId('materials', code, 'code'); if(!m) return;
+   const stock = materialStock().find(r=>r.code===code) || {released:0,quarantine:0,rejected:0,adjusted:0};
+   const uom = m.uom||'';
+   const cost = Number(m.unitCost)||0;
+   const rows = materialLedger(code);
+   modal('Stock card — '+esc(code)+' '+esc(m.name),
+     '<div class="cols2" style="margin-bottom:14px">'
+     +'<div class="card"><h3>Balance</h3><dl class="dl">'
+     +'<dt>Released</dt><dd class="mono"><b>'+nf(stock.released,uom==='kg'?2:0)+'</b> '+esc(uom)+'</dd>'
+     +'<dt>Quarantine</dt><dd class="mono">'+nf(stock.quarantine,uom==='kg'?2:0)+' '+esc(uom)+'</dd>'
+     +'<dt>Rejected</dt><dd class="mono">'+nf(stock.rejected,uom==='kg'?2:0)+' '+esc(uom)+'</dd>'
+     +'<dt>From stock takes</dt><dd class="mono">'+(stock.adjusted?nf(stock.adjusted,uom==='kg'?2:0)+' '+esc(uom):'—')+'</dd></dl></div>'
+     +'<div class="card"><h3>Valuation</h3><dl class="dl">'
+     +'<dt>Unit cost</dt><dd class="mono">'+(cost?rm(cost)+' / '+esc(uom):'<span class="tag t-warn">not set</span>')+'</dd>'
+     +'<dt>Value of released stock</dt><dd class="mono"><b>'+(cost?rm(stock.released*cost):'—')+'</b></dd></dl>'
+     +'<div style="margin-top:10px">'+btn('Edit material / unit cost','mat-open',code,'btn sm')+'</div></div></div>'
+     + T([
+         {h:'Date', f:r=>'<span class="mono">'+esc(r.date)+'</span>'},
+         {h:'Type', f:r=>tag(r.type)},
+         {h:'Reference', f:r=>'<span class="mono">'+esc(r.ref)+'</span>'},
+         {h:'Detail', f:r=>esc(r.note)},
+         {h:'Qty', c:'num', f:r=>'<span class="mono" style="color:'+(r.qty<0?'var(--bad)':'var(--ok)')+'">'+(r.qty>=0?'+':'')+nf(r.qty,uom==='kg'?2:0)+'</span>'},
+         {h:'Balance', c:'num', f:r=>'<b class="mono">'+nf(r.balance,uom==='kg'?2:0)+'</b>'}
+       ], rows, {emptyTitle:'No transactions yet', empty:'Receipts, issues and posted stock-take adjustments for this material will appear here.'}),
+     '', true);
+ },
+ 'stocktake-new': scope=>{
+   const mats = sortBy((S.materials||[]).filter(m=> !scope || m.type===scope), 'code');
+   if(!mats.length) return toast('No materials in scope for this stock take','bad');
+   const stockMap = new Map(materialStock().map(r=>[r.code,r]));
+   formModal({title:'Stock take — '+(scope==='RM'?'Raw materials':scope==='PM'?'Packaging':'All materials'), wide:true,
+     intro:'Enter the physical quantity counted for each material. Leave a material blank to skip it for now — it can be counted in a later stock take.',
+     values:{date:today()},
+     groups:[
+       {legend:'Details', fields:[
+         {k:'date',label:'Count date',type:'date',req:true},
+         {k:'countedBy',label:'Counted by',type:'select',opts:optPeople(),req:true}
+       ]},
+       {legend:'Physical count', fields: mats.map(m=>{
+         const r = stockMap.get(m.code)||{released:0};
+         return {k:'q_'+m.code, label:m.code+' — '+m.name+'  (system: '+nf(r.released, m.uom==='kg'?2:0)+' '+m.uom+')', type:'number', step:m.uom==='kg'?'0.01':'1'};
+       })}
+     ],
+     saveLabel:'Submit count',
+     onSave:v=>{
+       if(!v.countedBy) return toast('Counted by is required','bad');
+       const lines=[];
+       mats.forEach(m=>{
+         const val=v['q_'+m.code];
+         if(val===null||val===undefined||val==='') return;
+         const r = stockMap.get(m.code)||{released:0};
+         const physical = Number(val)||0;
+         lines.push({code:m.code, uom:m.uom, systemQty:r.released, physicalQty:physical, variance: round4(physical - r.released)});
+       });
+       if(!lines.length) return toast('Enter at least one physical count','bad');
+       const id = uid('ST');
+       S.stockTakes = S.stockTakes||[];
+       S.stockTakes.unshift({id, date:v.date||today(), type:scope||'', countedBy:v.countedBy, status:'draft', createdAt:today(), lines});
+       logAudit('Stock take counted', id, lines.length+' material(s), '+lines.filter(l=>l.variance!==0).length+' with variance');
+       save(); closeModal(); toast(id+' — counted. Review before posting.','ok'); render();
+     }});
+ },
+ 'stocktake-view': id=>{
+   const t = byId('stockTakes', id); if(!t) return;
+   const draft = t.status==='draft';
+   const rows = (t.lines||[]).map(l=> Object.assign({name: material(l.code).name, cost:Number(material(l.code).unitCost)||0}, l));
+   modal((draft?'Review':'View')+' stock take — '+esc(t.id),
+     '<div class="note" style="margin-bottom:12px">'+esc(t.date)+' · counted by '+esc(person(t.countedBy)||t.countedBy||'—')
+       +' · '+esc(t.type==='RM'?'Raw materials':t.type==='PM'?'Packaging':'All materials')
+       +(t.status==='posted'? ' · posted '+esc(t.postedAt||'')+' by '+esc(person(t.postedBy)||t.postedBy||'') : '')+'</div>'
+     + T([
+         {h:'Material', f:r=>'<b class="mono">'+esc(r.code)+'</b><div class="sub">'+esc(r.name)+'</div>'},
+         {h:'System qty', c:'num', f:r=>nf(r.systemQty, r.uom==='kg'?2:0)+' '+esc(r.uom)},
+         {h:'Physical count', c:'num', f:r=>'<b>'+nf(r.physicalQty, r.uom==='kg'?2:0)+'</b> '+esc(r.uom)},
+         {h:'Variance', c:'num', f:r=>{ if(!r.variance) return '<span style="color:var(--ok)">0</span>';
+           const valTag = r.cost? ' <span class="sub">('+rm(r.variance*r.cost)+')</span>':'';
+           return '<span style="color:'+(r.variance<0?'var(--bad)':'var(--warn)')+'"><b>'+(r.variance>0?'+':'')+nf(r.variance,r.uom==='kg'?2:0)+'</b></span>'+valTag; }}
+       ], rows, {empty:'No materials counted.'})
+     + (draft? '<div class="field full" style="margin-top:12px"><label>Notes (optional — carried onto every adjustment posted)</label><textarea data-f="stNotes" rows="2"></textarea></div>'
+       : (t.notes? '<div class="note" style="margin-top:12px"><b>Notes:</b> '+esc(t.notes)+'</div>':''))
+     + (t.status==='posted'? '<div class="banner ok" style="margin-top:12px">Reconciled — every variance above was posted as a stock adjustment on the affected material’s stock card.</div>':''),
+     draft? (btn('Discard','stocktake-discard',t.id,'btn danger')+btn('Post reconciliation','stocktake-post',t.id,'btn primary')) : '', true);
+ },
+ 'stocktake-post': id=>{
+   const t = byId('stockTakes', id); if(!t || t.status!=='draft') return;
+   const notesEl = document.querySelector('#modal-root [data-f="stNotes"]');
+   const notes = notesEl ? notesEl.value : '';
+   let adjCount=0;
+   S.stockAdj = S.stockAdj||[];
+   (t.lines||[]).forEach(l=>{
+     if(!l.variance) return;
+     S.stockAdj.push({id:uid('ADJ'), code:l.code, date:today(), qty:l.variance, uom:l.uom,
+       reason:'Stock take reconciliation', ref:t.id, postedBy:t.countedBy, notes:notes||''});
+     adjCount++;
+   });
+   t.status='posted'; t.postedAt=today(); t.postedBy=t.countedBy; t.notes=notes||'';
+   logAudit('Stock take posted', t.id, adjCount+' adjustment(s) posted to stock cards');
+   save(); closeModal(); toast(t.id+' — reconciled, '+adjCount+' adjustment(s) posted','ok'); render();
+ },
+ 'stocktake-discard': id=>{
+   const idx = (S.stockTakes||[]).findIndex(t=>t.id===id);
+   if(idx<0) return;
+   if(S.stockTakes[idx].status!=='draft') return toast('Only a draft stock take can be discarded','bad');
+   S.stockTakes.splice(idx,1);
+   logAudit('Stock take discarded', id, '');
+   save(); closeModal(); toast('Discarded','ok'); render();
+ },
+
  /* --- quality system --- */
  'dev-new': ()=> formModal({title:'Raise a deviation', wide:true,
    values:{date:today(), severity:'minor', status:'open', raisedBy:'AK', owner:'NR'},
@@ -5932,6 +6118,7 @@ const ACT = {
      {k:'type',label:'Type',type:'select',opts:[{v:'RM',t:'Raw material'},{v:'PM',t:'Packaging'},{v:'CONS',t:'Consumable'}],blank:false},
      {k:'uom',label:'Unit'},{k:'status',label:'Active',type:'select',opts:[{v:'active',t:'Active'},{v:'inactive',t:'Inactive'}],blank:false},
      {k:'retest',label:'Retest period (months)',type:'number'},
+     {k:'unitCost',label:'Unit cost (RM)',type:'number',step:'0.0001',hint:'Used to value the stock card and the month-end stock report. Leave blank if not yet costed.'},
      {k:'spec',label:'Specification',type:'textarea',full:true}]},
     {legend:'Sourcing & planning', fields:[
      {k:'supplier',label:'Approved supplier',type:'select',opts:optSuppliers()},
@@ -5947,6 +6134,7 @@ const ACT = {
     {legend:'Identity', fields:[{k:'code',label:'Material code',req:true},{k:'name',label:'Material name',req:true,full:true},
      {k:'inci',label:'INCI name'},{k:'type',label:'Type',type:'select',opts:[{v:'RM',t:'Raw material'},{v:'PM',t:'Packaging'},{v:'CONS',t:'Consumable'}],blank:false},
      {k:'uom',label:'Unit'},{k:'retest',label:'Retest (months)',type:'number'},
+     {k:'unitCost',label:'Unit cost (RM)',type:'number',step:'0.0001',hint:'Used to value the stock card and the month-end stock report. Leave blank if not yet costed.'},
      {k:'spec',label:'Specification',type:'textarea',full:true}]},
     {legend:'Sourcing & planning', fields:[
      {k:'supplier',label:'Approved supplier',type:'select',opts:optSuppliers()},
@@ -6093,6 +6281,40 @@ const ACT = {
    formModal({title:'Shipment load report', fields:[{k:'shp',label:'Shipment',type:'select',opts:(S.shipments||[]).map(s=>({v:s.id,t:s.id+' — '+customerName(s.customer)})),req:true,full:true}],
      saveLabel:'Build', onSave:v=>{ const s=byId('shipments',v.shp); if(s) printModal('Shipment load report '+s.id, packingHtml(s)); }});
  },
+ 'rep-stocktake': ()=> formModal({title:'Month-end stock report', fields:[
+     {k:'month',label:'Month',type:'month',req:true,full:true}
+   ], saveLabel:'Build', onSave:v=>{
+     if(!v.month) return toast('Pick a month','bad');
+     const first = v.month+'-01';
+     const [y,mo] = v.month.split('-').map(Number);
+     const last = new Date(y, mo, 0).toISOString().slice(0,10);
+     const prevLast = new Date(y, mo-1, 0).toISOString().slice(0,10);
+     const mats = sortBy((S.materials||[]).slice(),'code');
+     const rows = mats.map(m=>{
+       const opening = materialBalanceAsOf(m.code, prevLast);
+       const closing = materialBalanceAsOf(m.code, last);
+       const ledger = materialLedger(m.code).filter(r=>r.date>=first && r.date<=last);
+       const receipts = ledger.filter(r=>r.type==='Receipt').reduce((s,r)=>s+r.qty,0);
+       const issued = -ledger.filter(r=>r.type==='Issued').reduce((s,r)=>s+r.qty,0);
+       const adj = ledger.filter(r=>r.type==='Adjustment').reduce((s,r)=>s+r.qty,0);
+       const cost = Number(m.unitCost)||0;
+       return {code:m.code, name:m.name, uom:m.uom, opening, receipts, issued, adj, closing, cost, value:closing*cost};
+     });
+     const totalValue = rows.reduce((s,r)=>s+(r.cost?r.value:0),0);
+     printModal('Stock report — '+v.month,
+       '<h2 style="font-family:var(--disp);margin-bottom:12px">Month-end stock report · '+esc(v.month)+'</h2>'
+       + T([
+           {h:'Material', f:r=>'<b class="mono">'+esc(r.code)+'</b><div class="sub">'+esc(r.name)+'</div>'},
+           {h:'Opening', c:'num', f:r=>nf(r.opening, r.uom==='kg'?2:0)},
+           {h:'Receipts', c:'num', f:r=>nf(r.receipts, r.uom==='kg'?2:0)},
+           {h:'Issued', c:'num', f:r=>nf(r.issued, r.uom==='kg'?2:0)},
+           {h:'Adjustments', c:'num', f:r=>r.adj?nf(r.adj, r.uom==='kg'?2:0):'—'},
+           {h:'Closing', c:'num', f:r=>'<b>'+nf(r.closing, r.uom==='kg'?2:0)+'</b> '+esc(r.uom)},
+           {h:'Unit cost', c:'num', f:r=>r.cost?rm(r.cost):'—'},
+           {h:'Value', c:'num', f:r=>r.cost?'<b>'+rm(r.value)+'</b>':'—'}
+         ], rows, {empty:'No materials on file.'})
+       + '<div style="margin-top:14px;text-align:right;font-size:14px"><b>Total closing inventory value: '+rm(totalValue)+'</b></div>');
+   }}),
 
  /* --- exports --- */
  'export-compliance': ()=> download('hem-compliance-register.csv', csv([['Standard','Clause','Title','Requirement','Status','Owner','Evidence','Gap','Last reviewed']]
