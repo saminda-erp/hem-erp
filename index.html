@@ -1672,6 +1672,20 @@ function cloudBackgroundPull(after){
     window.HEM_AUTH.from('hem_app_state').select('data,images,version,reset_at').eq('id','main').single().then(({data,error})=>{
       CLOUD.pulling=false;
       if(error){ CLOUD.lastErr=error.message; cloudMarkStatus(); if(after) after(false); return; }
+      /* The check at the top of this function only stops a pull from ever being SENT while a
+         push is pending — it says nothing about a pull that was already in flight (request sent,
+         awaiting this very response) at the moment the person made a brand-new local edit and
+         save() called scheduleCloudPush(). Without this second check, that edit — however recent,
+         however genuinely made AFTER the reset this response is about to adopt — sat only in S
+         and got silently discarded a moment later when the reset-adoption branch below replaced S
+         wholesale with this (now-stale) response. That is exactly what "I saved it and it
+         disappeared" looks like: fill in a product right after an admin's Factory Reset, and the
+         routine 25-second background pull that happened to already be in flight wipes the save
+         before its own debounced push ever gets a chance to go out. Bail out here and let the
+         NEXT pull (25s later, by which point the pending push has long since landed) do the
+         reset-adoption instead — the exact same treatment already given to a pull that hadn't
+         been sent yet. */
+      if(CLOUD.pendingPush){ cloudMarkStatus(); if(after) after(false); return; }
       CLOUD.lastErr=null;
       const remoteReset = (data && data.reset_at) || '';
       const isNewerReset = remoteReset && remoteReset > getLocalResetMarker();
