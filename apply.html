@@ -306,6 +306,7 @@ const TX = {
   sigMismatch:{en:'Please type the same full name you entered earlier.', ms:'Sila taip nama penuh yang sama seperti yang dimasukkan tadi.'},
   mustDeclare:{en:'Please tick the declaration.', ms:'Sila tandakan pengakuan.'},
   sendFail:{en:'Could not send — please check the internet connection and try again, or ask reception for help.', ms:'Tidak dapat dihantar — sila semak sambungan internet dan cuba lagi, atau minta bantuan di kaunter.'},
+  sendReject:{en:'The system could not accept this application. Please show this screen to reception.', ms:'Sistem tidak dapat menerima permohonan ini. Sila tunjukkan skrin ini kepada kaunter.'},
 
   doneTitle:{en:'Thank you — application received', ms:'Terima kasih — permohonan diterima'},
   doneRef:{en:'Your reference number', ms:'Nombor rujukan anda'},
@@ -619,7 +620,11 @@ async function submit(){
   }catch(err){
     console.error(err);
     btn.disabled=false; btn.textContent=t('submit');
-    fail(t('sendFail'));
+    // A reply from the server (it has a code/message) is not a connection problem — say so, and
+    // show the code so reception/HR can tell what went wrong. Only a real network failure gets the
+    // "check your internet" message.
+    const offline = !sb || navigator.onLine===false || /fetch|network|load failed/i.test(String((err&&err.message)||err)) && !(err&&err.code);
+    fail(offline? t('sendFail') : t('sendReject')+'  ['+String((err&&(err.code||err.message))||'error').slice(0,60)+']');
   }
 }
 function done(id){
