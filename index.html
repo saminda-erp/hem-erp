@@ -8612,8 +8612,11 @@ const RECRUIT_TESTS = {
   ]
 };
 const RECRUIT_TEST_SECONDS = 300;   // the "about 5 minutes" shown to the candidate
-const CAND_STATUSES = ['new','interviewing','shortlisted','offered','hired','rejected','withdrawn'];
-Object.assign(TAGS, {new:'t-info', interviewing:'t-warn', shortlisted:'t-info', offered:'t-warn', hired:'t-ok', withdrawn:'t-mute'});
+const CAND_STATUSES = ['new','pool','interviewing','shortlisted','offered','hired','rejected','withdrawn'];
+const CAND_STATUS_LABEL = {pool:'In talent pool'};
+const candStatusOpts = ()=> CAND_STATUSES.map(s=>({v:s,t:CAND_STATUS_LABEL[s]||s[0].toUpperCase()+s.slice(1)}));
+const POOL_KEEP_DAYS = 365;   // candidates are told on the form their details are kept up to 12 months
+Object.assign(TAGS, {pool:'t-mute', new:'t-info', interviewing:'t-warn', shortlisted:'t-info', offered:'t-warn', hired:'t-ok', withdrawn:'t-mute'});
 var LAST_CAND_SYNC = 0;
 
 function applyUrl(){ return location.origin+location.pathname.replace(/index\.html$/,'').replace(/[^/]*$/,'')+'apply.html'; }
@@ -8644,7 +8647,14 @@ function safeUrl(u){ return /^https?:\/\/\S+$/i.test(String(u||''))? String(u) :
 
 /* ---- HR → Recruitment tab ---- */
 function recruitTabHtml(){
-  const all=sortBy(liveCandidates(),'submittedAt').reverse();
+  const rv=F('rview','interviews');
+  const views='<div class="pillrow" style="margin-bottom:12px">'
+    +[{k:'interviews',t:'Interviews'},{k:'pool',t:'Talent pool ('+nf(liveCandidates().filter(c=>c.status!=='hired').length)+')'}].map(x=>
+      '<button class="chip'+(rv===x.k?' on':'')+'" data-chip="rview" data-val="'+x.k+'" type="button">'+x.t+'</button>').join('')+'</div>';
+  return views + (rv==='pool'? talentPoolHtml() : interviewsHtml()) + recruitQrHtml();
+}
+function interviewsHtml(){
+  const all=sortBy(liveCandidates().filter(c=>c.status!=='pool'),'submittedAt').reverse();
   const st=F('rstatus','open'), cat=F('rcat',''), q=(F('rq','')||'').toLowerCase().trim();
   const closed=['hired','rejected','withdrawn'];
   const rows=all.filter(c=>{
@@ -8670,7 +8680,7 @@ function recruitTabHtml(){
 
   h+=filterBar([
     searchCtl('rq', F('rq',''), 'Search name, phone, position or ref…'),
-    selCtl('rstatus', [{v:'open',t:'Open (not closed)'},{v:'all',t:'All statuses'}].concat(CAND_STATUSES.map(s=>({v:s,t:s[0].toUpperCase()+s.slice(1)}))), st),
+    selCtl('rstatus', [{v:'open',t:'Open (not closed)'},{v:'all',t:'All statuses'}].concat(candStatusOpts().filter(o=>o.v!=='pool')), st),
     selCtl('rcat', [{v:'general',t:'General / production'},{v:'executive',t:'Executive / office'}], cat, 'All categories')
   ]);
 
@@ -8698,10 +8708,12 @@ function recruitTabHtml(){
     {h:'', f:c=>btn('Open','cand-view',c.id,'btn sm')}
   ], rows, {emptyTitle: all.length?'No candidates match':'No applications yet',
             empty: all.length?'Try another status or clear the search.':'Scan the QR code below with a phone, or open the form on the reception tablet — submitted forms appear here.'}));
-
-  h+=sect('Walk-in application form', '<div class="cols2"><div class="card" style="text-align:center">'
+  return h;
+}
+function recruitQrHtml(){
+  return sect('Walk-in application form', '<div class="cols2"><div class="card" style="text-align:center">'
     +'<div id="recruitQr" style="display:flex;justify-content:center;margin-bottom:10px"></div>'
-    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">Candidates scan this at reception and fill in the form on their own phone before the interview — English or Bahasa Malaysia. It includes a 5-question test: production roles get the general test, executive roles the executive test.</div>'
+    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">Interview candidates and walk-ins looking for work scan this at reception and fill in the form on their own phone — English or Bahasa Malaysia. Walk-ins go straight into the talent pool. It includes a 5-question test: production roles get the general test, executive roles the executive test.</div>'
     +'<div class="pillrow" style="justify-content:center">'
     +'<a class="btn" href="'+esc(applyUrl())+'" target="_blank" rel="noopener">Open form on this device</a>'
     +btn('Check for new applications','cand-sync',null,'btn')+btn('Print QR poster','cand-qr-print',null,'btn')+'</div></div>'
@@ -8712,8 +8724,87 @@ function recruitTabHtml(){
     +'Treat the score as one input alongside the interview, not a pass/fail on its own.</div>'
     +'<div style="font-size:12px;color:var(--muted);margin-top:10px">General: counting, pattern, attention to detail, time, safety judgement.<br>Executive: number series, business maths, logic, verbal reasoning, capacity planning.</div>'
     +'</div></div>');
+}
+
+/* ---- Talent pool: every applicant kept for future openings (walk-ins who came looking for
+   work, plus interviewed candidates not hired), searchable when a vacancy comes up ---- */
+function candAgeDays(c){ const d=(c.submittedAt||'').slice(0,10); return d? -daysFromToday(d) : 0; }
+function candWants(c, pos){ return c.position===pos || ((c.data||{}).alsoInterested||[]).includes(pos); }
+function talentPoolHtml(){
+  const pool=liveCandidates().filter(c=>c.status!=='hired');
+  const q=(F('pq','')||'').toLowerCase().trim(), pos=F('ppos',''), cat=F('pcat',''), min=Number(F('pmin','0'))||0,
+        maxSal=Number(F('psal','0'))||0, src=F('psrc','');
+  const positions=[...new Set(pool.flatMap(c=>[c.position].concat((c.data||{}).alsoInterested||[])).filter(Boolean))].sort();
+  const rows=pool.filter(c=>{
+    const d=c.data||{}, sc=candScore(c);
+    if(pos && !candWants(c,pos)) return false;
+    if(cat && c.category!==cat) return false;
+    if(min && (!sc || sc.right<min)) return false;
+    if(maxSal && Number(d.expectedSalary)>maxSal) return false;
+    if(src==='walkin' && d.purpose!=='future') return false;
+    if(src==='interviewed' && d.purpose==='future' && c.status==='pool') return false;
+    if(q && ![c.id,c.name,c.phone,c.position,d.homeArea,d.job1Title,d.job1Company,d.education,d.field].join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a,b)=>{ const x=(candScore(b)||{pct:-1}).pct-(candScore(a)||{pct:-1}).pct;
+    return x || String(b.submittedAt).localeCompare(String(a.submittedAt)); });
+  const expired=pool.filter(c=>candAgeDays(c)>POOL_KEEP_DAYS);
+  const recent=pool.filter(c=>candAgeDays(c)<=30);
+  const strong=pool.filter(c=>{const s=candScore(c); return s&&s.right>=4;});
+
+  let h=KPI([
+    {k:'In talent pool', v:nf(pool.length), d:'applicants kept for future openings'},
+    {k:'Added last 30 days', v:nf(recent.length), d:nf(recent.filter(c=>(c.data||{}).purpose==='future').length)+' walk-in, looking for work'},
+    {k:'Strong test (4–5 / 5)', v:nf(strong.length), d:'call these first'},
+    {k:'Older than 12 months', v:nf(expired.length), d:expired.length?'past the period promised on the form':'none', cls:expired.length?'warn':'ok'}
+  ]);
+  h+=filterBar([
+    searchCtl('pq', F('pq',''), 'Search name, phone, area, past job, education…'),
+    selCtl('ppos', positions, pos, 'Any position'),
+    selCtl('pcat', [{v:'general',t:'General / production'},{v:'executive',t:'Executive / office'}], cat, 'All categories'),
+    selCtl('pmin', [{v:'3',t:'Test 3+ / 5'},{v:'4',t:'Test 4+ / 5'},{v:'5',t:'Test 5 / 5'}], F('pmin',''), 'Any test score'),
+    selCtl('psal', [{v:'1800',t:'Expects ≤ RM 1,800'},{v:'2500',t:'Expects ≤ RM 2,500'},{v:'3500',t:'Expects ≤ RM 3,500'},{v:'5000',t:'Expects ≤ RM 5,000'}], F('psal',''), 'Any salary'),
+    selCtl('psrc', [{v:'walkin',t:'Walk-ins (looking for work)'},{v:'interviewed',t:'Came for interview'}], src, 'All sources')
+  ]);
+  h+=sect('Talent pool'+(pos?' — '+pos:''), T([
+    {h:'Ref', f:c=>'<b class="mono">'+esc(c.id)+'</b><div class="sub mono">'+esc((c.submittedAt||'').slice(0,10))+'</div>'
+      +'<div class="sub">'+(candAgeDays(c)<1?'today':nf(candAgeDays(c))+'d ago')+'</div>'},
+    {h:'Candidate', f:c=>{ const a=candAge((c.data||{}).dob);
+      return '<b>'+esc(c.name||'—')+'</b><div class="sub"><a href="tel:'+esc(String(c.phone||'').replace(/[^\d+]/g,''))+'">'+esc(c.phone||'')+'</a>'+(a!=null?' · '+a+' yrs':'')+'</div>'; }},
+    {h:'Wants', f:c=>{ const also=(c.data||{}).alsoInterested||[];
+      return esc(c.position||'—')+(also.length?'<div class="sub">also: '+esc(also.join(', '))+'</div>':'')
+        +'<div class="sub"><span class="tag '+((c.data||{}).purpose==='future'?'t-mute':'t-info')+'">'+((c.data||{}).purpose==='future'?'walk-in':'interviewed')+'</span></div>'; }},
+    {h:'Test', f:c=>{ const s=candScore(c); if(!s) return '<span class="sub">—</span>';
+      return '<b class="mono">'+s.right+' / '+s.total+'</b> <span class="sub">'+s.band+'</span><div class="meter" style="width:80px"><i class="'+s.cls+'" style="width:'+Math.max(4,s.pct)+'%"></i></div>'; }},
+    {h:'Expected', c:'num', f:c=>'<b class="mono">'+rm((c.data||{}).expectedSalary)+'</b>'},
+    {h:'Experience', f:c=>{ const d=c.data||{};
+      return (d.years!=null&&d.years!==''? '<b>'+esc(d.years)+'</b> yrs':'<span class="sub">first job</span>')
+        +'<div class="sub">'+esc(d.job1Title||'')+'</div><div class="sub">'+esc(d.education||'')+'</div>'; }},
+    {h:'Lives', f:c=>{ const d=c.data||{};
+      return esc(d.homeArea||'—')+'<div class="sub mono">'+esc(d.distanceKm!=null?d.distanceKm:'?')+' km</div>'
+        +candFlags(c).map(x=>'<span class="tag '+x.cls+'">'+esc(x.t)+'</span>').join(' '); }},
+    {h:'Status', f:c=>tag(CAND_STATUS_LABEL[c.status]? 'pool' : c.status)+(candAgeDays(c)>POOL_KEEP_DAYS?'<div class="sub"><span class="tag t-warn">&gt; 12 months</span></div>':'')},
+    {h:'', f:c=>btn('Open','cand-view',c.id,'btn sm')}
+  ], rows, {emptyTitle: pool.length?'Nobody matches':'Talent pool is empty',
+     empty: pool.length?'Loosen a filter — e.g. any test score or any salary.':'Walk-ins who choose "keep my details for future jobs" on the form, and interviewed candidates you did not hire, collect here.'}),
+    expired.length? btn('Delete '+nf(expired.length)+' record(s) older than 12 months','cand-purge-expired',null,'btn') : '');
   return h;
 }
+ACT['cand-purge-expired'] = ()=>{
+  const list=liveCandidates().filter(c=>c.status!=='hired' && candAgeDays(c)>POOL_KEEP_DAYS);
+  if(!list.length) return toast('Nothing older than 12 months','ok');
+  formModal({title:'Delete '+list.length+' expired application(s)',
+    intro:'The form tells applicants their details are kept for up to 12 months. This removes the personal details, salary and test answers of every non-hired applicant who applied more than 12 months ago — here and in the online table. Reference numbers stay so they are not imported again.',
+    fields:[{k:'confirm',label:'Type DELETE to confirm',full:true}], saveLabel:'Delete',
+    onSave:v=>{
+      if(v.confirm!=='DELETE') return toast('Type DELETE to confirm','bad');
+      list.forEach(c=>{ const i=S.candidates.indexOf(c);
+        S.candidates[i]={id:c.id, deleted:true, deletedAt:new Date().toISOString(), deletedBy:UI.user||'', status:'deleted', submittedAt:c.submittedAt}; });
+      if(window.HEM_AUTH){ try{ window.HEM_AUTH.from('hem_candidates').delete().in('id', list.map(c=>c.id)).then(({error})=>{
+        if(error) toast('Removed here; the online copies could not be deleted — '+error.message,'warn'); }); }catch(e){} }
+      logAudit('Expired candidates deleted', '', list.length+' record(s) older than 12 months');
+      save(); closeModal(); toast(list.length+' expired record(s) deleted','ok'); render();
+    }});
+};
 
 /* ---- pull new submissions from the public form ---- */
 function syncCandidates(silent){
@@ -8729,7 +8820,8 @@ function syncCandidates(silent){
         if(have.has(r.id)) return;          // already imported (or deliberately deleted here)
         S.candidates.push({id:r.id, submittedAt:r.submitted_at||new Date().toISOString(), position:r.position||'',
           category:r.category||'', name:r.full_name||'', phone:r.phone||'', data:r.data||{}, answers:r.answers||{},
-          testVersion:r.test_version||'', testSeconds:r.test_seconds||0, status:'new', source:'portal', interview:{}});
+          testVersion:r.test_version||'', testSeconds:r.test_seconds||0,
+          status:(r.data&&r.data.purpose==='future')?'pool':'new', source:'portal', interview:{}});
         added++;
       });
       if(added){ logAudit('Candidate applications synced', '', added+' new'); save(); render(); }
@@ -8758,6 +8850,8 @@ function candDetailHtml(c, forPrint){
       ['Heard via', e(d.howHeard)+(d.referredBy?' — referred by '+e(d.referredBy):'')]
     ])+'</div>'
     +'<div class="card"><h3>Position & salary</h3>'+dl([
+      ['Came for', d.purpose==='future'? 'Looking for work — keep for future jobs' : 'Interview'],
+      ['Also open to', (d.alsoInterested||[]).length? e(d.alsoInterested.join(', ')) : null],
       ['Applying for','<b>'+e(c.position)+'</b> <span class="tag '+(c.category==='executive'?'t-info':'t-mute')+'">'+(c.category==='executive'?'Executive':'General')+'</span>'],
       ['Present salary', d.presentSalary!=null&&d.presentSalary!==''? '<span class="mono">'+rm(d.presentSalary)+'</span>':''],
       ['Expected salary','<b class="mono">'+rm(d.expectedSalary)+'</b>'+(j!=null?' <span class="tag '+(j>30?'t-warn':'t-mute')+'">'+(j>=0?'+':'')+j+'% on present</span>':'')],
@@ -8805,7 +8899,7 @@ function candDetailHtml(c, forPrint){
     +'</div>');
 
   h+=sect('Interview outcome', dl([
-      ['Status', tag(c.status)],
+      ['Status', tag(c.status)+(CAND_STATUS_LABEL[c.status]?' <span class="sub">'+esc(CAND_STATUS_LABEL[c.status])+'</span>':'')],
       ['Interview date', iv.date?'<span class="mono">'+esc(iv.date)+'</span>':''],
       ['Interviewed by', esc(iv.by||'')],
       ['Rating', iv.rating? esc(iv.rating)+' / 5':''],
@@ -8834,10 +8928,10 @@ ACT['cand-outcome'] = id=>{
   const iv=c.interview||{};
   formModal({title:'Interview outcome — '+(c.name||c.id),
     intro:'Recorded against '+esc(c.id)+'. Agreed salary and starting date replace the boxes at the bottom of the old paper form.',
-    values:{status:c.status==='new'?'interviewing':c.status, date:iv.date||today(), by:iv.by||UI.user||'', rating:iv.rating||'',
+    values:{status:(c.status==='new'||c.status==='pool')?'interviewing':c.status, date:iv.date||today(), by:iv.by||UI.user||'', rating:iv.rating||'',
       agreedSalary:iv.agreedSalary, startDate:iv.startDate||'', notes:iv.notes||''},
     fields:[
-      {k:'status', label:'Status', type:'select', blank:false, opts:CAND_STATUSES.map(s=>({v:s,t:s[0].toUpperCase()+s.slice(1)})), req:true},
+      {k:'status', label:'Status', type:'select', blank:false, opts:candStatusOpts(), req:true, hint:'Choose "In talent pool" to keep someone for a future opening.'},
       {k:'date', label:'Interview date', type:'date'},
       {k:'by', label:'Interviewed by'},
       {k:'rating', label:'Interview rating', type:'select', opts:[{v:'5',t:'5 — Outstanding'},{v:'4',t:'4 — Strong'},{v:'3',t:'3 — Acceptable'},{v:'2',t:'2 — Weak'},{v:'1',t:'1 — Unsuitable'}]},
@@ -8872,8 +8966,8 @@ ACT['cand-delete'] = id=>{
 };
 ACT['cand-qr-print'] = ()=>{
   printModal('Walk-in application QR', '<div style="text-align:center;padding:30px 10px">'
-    +'<div style="font-family:var(--disp);font-size:26px;font-weight:600;margin-bottom:6px">Here for an interview?</div>'
-    +'<div style="font-size:15px;color:var(--ink2);margin-bottom:22px">Scan to fill in your application — about 10 minutes.<br>Datang untuk temu duga? Imbas untuk isi borang permohonan.</div>'
+    +'<div style="font-family:var(--disp);font-size:26px;font-weight:600;margin-bottom:6px">We are hiring — apply here</div>'
+    +'<div style="font-size:15px;color:var(--ink2);margin-bottom:22px">Here for an interview, or looking for work? Scan to fill in your application — about 10 minutes.<br>Datang untuk temu duga atau mencari kerja? Imbas untuk isi borang permohonan.</div>'
     +'<div id="recruitQrPrint" style="display:flex;justify-content:center;margin-bottom:18px"></div>'
     +'<div class="mono" style="font-size:12px;color:var(--muted)">'+esc(applyUrl())+'</div>'
     +'<div style="margin-top:22px;font-size:13px">HE Manufacturing (M) Sdn Bhd</div></div>');

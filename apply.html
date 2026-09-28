@@ -214,7 +214,7 @@ const TESTS = {
 
 /* ------------------------------------------------------------------ text */
 const TX = {
-  appTitle:{en:'Job application — please complete before your interview', ms:'Permohonan kerja — sila lengkapkan sebelum temu duga'},
+  appTitle:{en:'Job application form', ms:'Borang permohonan kerja'},
   back:{en:'Back', ms:'Kembali'}, next:{en:'Next', ms:'Seterusnya'}, submit:{en:'Submit application', ms:'Hantar permohonan'},
   sending:{en:'Sending…', ms:'Menghantar…'},
   s1:{en:'Position', ms:'Jawatan'}, s2:{en:'About you', ms:'Maklumat diri'}, s3:{en:'Work & salary', ms:'Kerja & gaji'},
@@ -223,6 +223,11 @@ const TX = {
   required:{en:'Please fill in the highlighted fields.', ms:'Sila isi ruangan yang ditandakan.'},
 
   posTitle:{en:'Which job are you applying for?', ms:'Jawatan apakah yang anda mohon?'},
+  purpose:{en:'Why are you here today?', ms:'Apakah tujuan anda hari ini?'},
+  purposeInterview:{en:'I have an interview today', ms:'Saya ada temu duga hari ini'},
+  purposeFuture:{en:'I am looking for work — keep my details for future jobs', ms:'Saya sedang mencari kerja — simpan maklumat saya untuk kerja akan datang'},
+  alsoInterested:{en:'Other jobs you would also accept — optional', ms:'Kerja lain yang anda juga sanggup terima — pilihan'},
+  poolNote:{en:'We keep your details for up to 12 months and will contact you when a suitable job opens.', ms:'Kami menyimpan maklumat anda sehingga 12 bulan dan akan menghubungi anda apabila ada kerja yang sesuai.'},
   posLead:{en:'This takes about 10 minutes. Your answers go straight to our HR team.', ms:'Ini mengambil masa kira-kira 10 minit. Jawapan anda terus dihantar kepada pasukan HR kami.'},
   position:{en:'Position', ms:'Jawatan'}, choose:{en:'— Choose —', ms:'— Pilih —'},
   positionOther:{en:'Please state the position', ms:'Sila nyatakan jawatan'},
@@ -310,6 +315,7 @@ const TX = {
 
   doneTitle:{en:'Thank you — application received', ms:'Terima kasih — permohonan diterima'},
   doneRef:{en:'Your reference number', ms:'Nombor rujukan anda'},
+  doneBodyPool:{en:'Your details have been saved. We will contact you by phone when a suitable job opens. You may return this device to reception.', ms:'Maklumat anda telah disimpan. Kami akan menghubungi anda melalui telefon apabila ada kerja yang sesuai. Anda boleh memulangkan peranti ini ke kaunter.'},
   doneBody:{en:'Please give this device back to reception, or show this number. We will call you for the interview shortly.', ms:'Sila pulangkan peranti ini ke kaunter, atau tunjukkan nombor ini. Kami akan memanggil anda untuk temu duga sebentar lagi.'},
   restart:{en:'Start a new application', ms:'Mulakan permohonan baharu'},
   resetIn:{en:'This screen clears itself in {s} seconds.', ms:'Skrin ini akan dikosongkan dalam {s} saat.'},
@@ -372,6 +378,9 @@ function stepHtml(){
           ? fld('positionOther', t('positionOther'), {req:true})
             + radios('category', t('category'), ['general','executive'], [t('catGeneral'), t('catExec')], {req:true})
           : '')
+      + radios('purpose', t('purpose'), ['interview','future'], [t('purposeInterview'), t('purposeFuture')], {req:true})
+      + (D.purpose==='future'? '<div class="note">'+esc(t('poolNote'))+'</div>' : '')
+      + checks('alsoInterested', t('alsoInterested'), POSITIONS.map(p=>p.v).filter(v=>v!=='Other' && v!==D.position))
       + fld('howHeard', t('howHeard'), {type:'select', values:canon('hh'), labels:listOf('hh')})
       + fld('referredBy', t('referredBy'))
       +'</div>';
@@ -499,7 +508,7 @@ document.addEventListener('input', e=>{
 document.addEventListener('change', e=>{
   const n=e.target.dataset.n;
   // fields that change which other fields appear
-  if(['position','category','nationality','workStatus'].includes(n)){
+  if(['position','category','nationality','workStatus','purpose'].includes(n)){
     D[n]=e.target.value;
     // a test already taken for the other category no longer applies — take the right one
     if(TEST.cat && TEST.cat!==category()) TEST={started:false, finished:false, startAt:0, seconds:0, answers:{}};
@@ -517,7 +526,7 @@ function need(names){
 function validate(){
   const ws=canon('ws');
   let bad=[];
-  if(step===1){ bad=need(['position']); if(D.position==='Other') bad=bad.concat(need(['positionOther','category'])); }
+  if(step===1){ bad=need(['position','purpose']); if(D.position==='Other') bad=bad.concat(need(['positionOther','category'])); }
   if(step===2){ bad=need(['fullName','phone','dob','gender','nationality','address']);
     if(D.nationality==='Other') bad=bad.concat(need(['nationalityOther']));
     if(D.phone && String(D.phone).replace(/\D/g,'').length<9) bad.push('phone');
@@ -611,6 +620,7 @@ function buildPayload(){
 async function submit(){
   const btn=$('nextBtn'); btn.disabled=true; btn.textContent=t('sending');
   const row=buildPayload();
+  LAST_PURPOSE = D.purpose||'interview';
   try{
     if(!sb) throw new Error('no client');
     let { error } = await sb.from('hem_candidates').insert(row);
@@ -627,9 +637,12 @@ async function submit(){
     fail(offline? t('sendFail') : t('sendReject')+'  ['+String((err&&(err.code||err.message))||'error').slice(0,60)+']');
   }
 }
+let LAST_PURPOSE='interview';
 function done(id){
   $('formWrap').hidden=true; $('navBar').hidden=true; $('doneWrap').hidden=false;
   $('doneId').textContent=id; window.scrollTo(0,0);
+  document.querySelector('#doneWrap [data-t="doneBody"], #doneWrap [data-t="doneBodyPool"]').dataset.t = LAST_PURPOSE==='future'? 'doneBodyPool':'doneBody';
+  document.querySelectorAll('#doneWrap [data-t]').forEach(el=>{ el.textContent=t(el.dataset.t); });
   let s=RESET_AFTER_SEC;
   const upd=()=>{ $('resetNote').textContent=t('resetIn',{s}); };
   upd(); clearInterval(resetHandle);
