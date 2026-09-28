@@ -556,6 +556,9 @@ users:[],
    collection, since they only ever make sense attached to one customer. */
 customerFeedback:[],
 
+/* Walk-in job applications from apply.html — see RECRUITMENT block */
+candidates:[],
+
 /* Machinery / Production Resource Master — separate from the QA Equipment/Calibration
    register (equipment[] above), which stays untouched. This is for production capacity
    planning: what can make a product, how fast, and with how much labour. A machine can
@@ -1497,7 +1500,7 @@ function pruneImages(){
 function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); return true; }catch(e){ lastSaveErr = e; return false; } }
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
-const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs','bmrForms','stockAdj','stockTakes'];
+const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs','bmrForms','stockAdj','stockTakes','candidates'];
 /* clone(SEED) with every operational collection emptied — settings/company config untouched.
    Used only when WIPE_FLAG is set, so a post-factory-reset boot never re-merges the shipped
    example data back in (see WIPE_FLAG comment above).
@@ -4273,11 +4276,13 @@ function leaveDayMap(year, empNo){
 
 function V_people(){
   const tab=F('ptab','training');
-  const tabs=[{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'}].map(x=>
+  const tabs=[{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'},{k:'recruit',t:'Recruitment'}].map(x=>
     '<button class="chip'+(tab===x.k?' on':'')+'" data-chip="ptab" data-val="'+x.k+'" type="button">'+x.t
     +(x.k==='leave' && (S.leaveApplications||[]).filter(a=>a.status==='pending').length? ' ('+(S.leaveApplications||[]).filter(a=>a.status==='pending').length+')':'')
+    +(x.k==='recruit' && (S.candidates||[]).filter(c=>c.status==='new').length? ' ('+(S.candidates||[]).filter(c=>c.status==='new').length+')':'')
     +'</button>').join('');
   if(tab==='leave') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+leaveTabHtml();
+  if(tab==='recruit') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+recruitTabHtml();
   if(tab==='equipment'){
     const eq=S.equipment||[];
     const due=eq.filter(e=>e.calDue && daysFromToday(e.calDue)<30);
@@ -7043,6 +7048,13 @@ function render(){
   if(UI.view==='people' && (UI.filters.people||{}).ptab==='leave' && Date.now()-LAST_LEAVE_SYNC>8000){
     LAST_LEAVE_SYNC=Date.now(); syncPortalLeave(true);
   }
+  const rqEl=document.getElementById('recruitQr');
+  if(rqEl && window.QRCode){ rqEl.innerHTML='';
+    try{ new QRCode(rqEl, {text:applyUrl(), width:150, height:150, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){}
+  }
+  if(UI.view==='people' && (UI.filters.people||{}).ptab==='recruit' && Date.now()-LAST_CAND_SYNC>8000){
+    LAST_CAND_SYNC=Date.now(); syncCandidates(true);
+  }
 }
 
 /* ---------------- events ---------------- */
@@ -8565,6 +8577,308 @@ ACT['leave-report']=a=>{
    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:14px">Every employee\'s leave taken and remaining balance for '+year+'. Print or export this at year end and forward it on — the system doesn\'t send email itself.</div>'
    + T(cols, rows, {empty:'No employees on file.'});
   printModal('Annual Leave Report '+year, body);
+};
+
+/* ============================================================
+   RECRUITMENT — walk-in candidate applications
+   ------------------------------------------------------------
+   Candidates fill apply.html (QR below, or a reception tablet) before their interview.
+   That page can only INSERT into Supabase table hem_candidates (recruitment-setup.sql) — it
+   cannot read anything back. This screen pulls new rows into S.candidates, where they then
+   travel with the rest of the ERP through the normal shared cloud copy.
+
+   The aptitude-test answer key lives ONLY here, never in apply.html (whose source anyone can
+   view). apply.html sends the option index chosen per question id; candScore() marks it.
+   If a question is changed in apply.html, change the same id here — ids are the contract.
+
+   Deleting a candidate is a soft delete (personal fields wiped, id kept with deleted:true)
+   because reconcile() is union-by-id: a hard-removed record would simply come back on the
+   next merge. Keeping the id also stops the portal sync from importing it a second time.
+   ============================================================ */
+const RECRUIT_TESTS = {
+  general:[
+    {id:'g1', skill:'Counting', q:'A carton holds 12 bottles. How many bottles are in 5 cartons?', opts:['50','60','62','72'], ans:1},
+    {id:'g2', skill:'Pattern', q:'What number comes next? 5, 10, 15, 20, ...', opts:['21','22','25','30'], ans:2},
+    {id:'g3', skill:'Attention to detail', q:'Which batch code is EXACTLY the same as HE-4071-B?', opts:['HE-4017-B','HF-4071-B','HE-4071-8','HE-4071-B'], ans:3},
+    {id:'g4', skill:'Time / numeracy', q:'Shift 8:00 am – 5:00 pm with a 1-hour lunch break. Hours worked?', opts:['7 hours','8 hours','9 hours','10 hours'], ans:1},
+    {id:'g5', skill:'Safety judgement', q:'Liquid spilled on the factory floor — what first?', opts:['Walk around it and carry on','Warn people nearby and tell the supervisor','Wait until end of shift','Nothing — not my job'], ans:1}
+  ],
+  executive:[
+    {id:'e1', skill:'Number series', q:'What number comes next? 3, 6, 12, 24, ...', opts:['36','42','48','60'], ans:2},
+    {id:'e2', skill:'Business maths', q:'Cost RM 40, sells for RM 50. Profit as % of selling price?', opts:['10%','20%','25%','40%'], ans:1},
+    {id:'e3', skill:'Logical reasoning', q:'All mixers are machines. Some machines are noisy. Which MUST be true?', opts:['All mixers are noisy','Some mixers are noisy','No mixer is noisy','None of these must be true'], ans:3},
+    {id:'e4', skill:'Verbal reasoning', q:'Invoice is to Payment as Purchase Order is to ...', opts:['Customer','Delivery','Price','Factory'], ans:1},
+    {id:'e5', skill:'Capacity planning', q:'Machine fills 1,200 bottles/hour; order 9,000 bottles; 8 hours/day. Working days?', opts:['1 day','2 days','7.5 days','8 days'], ans:0}
+  ]
+};
+const RECRUIT_TEST_SECONDS = 300;   // the "about 5 minutes" shown to the candidate
+const CAND_STATUSES = ['new','interviewing','shortlisted','offered','hired','rejected','withdrawn'];
+Object.assign(TAGS, {new:'t-info', interviewing:'t-warn', shortlisted:'t-info', offered:'t-warn', hired:'t-ok', withdrawn:'t-mute'});
+var LAST_CAND_SYNC = 0;
+
+function applyUrl(){ return location.origin+location.pathname.replace(/index\.html$/,'').replace(/[^/]*$/,'')+'apply.html'; }
+function liveCandidates(){ return (S.candidates||[]).filter(c=>!c.deleted); }
+function candidate(id){ return (S.candidates||[]).find(c=>c.id===id); }
+function candScore(c){
+  const qs=RECRUIT_TESTS[c.category]; if(!qs || !c.answers) return null;
+  const detail=qs.map(q=>{ const ch=c.answers[q.id]; const has=ch!=null && ch!=='';
+    return {q, chosen:has?Number(ch):null, ok:has && Number(ch)===q.ans}; });
+  const right=detail.filter(d=>d.ok).length, total=qs.length, pct=Math.round(right/total*100);
+  const band = pct>=100?'Excellent':pct>=80?'Good':pct>=60?'Fair':'Weak';
+  const cls  = pct>=80?'ok':pct>=60?'warn':'bad';
+  return {right,total,pct,band,cls,detail};
+}
+function fmtSecs(s){ s=Number(s)||0; return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function candAge(dob){ if(!dob) return null; const d=new Date(dob); if(isNaN(d)) return null;
+  const n=new Date(); let a=n.getFullYear()-d.getFullYear(); if(n<new Date(n.getFullYear(), d.getMonth(), d.getDate())) a--; return a; }
+function candFlags(c){
+  const d=c.data||{}, f=[];
+  if(/company transport/i.test(d.transport||'')) f.push({t:'needs company transport', cls:'t-warn'});
+  if(Number(d.distanceKm)>30 || Number(d.travelMin)>60) f.push({t:'long commute', cls:'t-warn'});
+  if(d.ownVehicle==='No' && !/bus|train|walk|lift/i.test(d.transport||'')) f.push({t:'no own vehicle', cls:'t-mute'});
+  return f;
+}
+function salaryJump(c){ const d=c.data||{}, p=Number(d.presentSalary), e=Number(d.expectedSalary);
+  if(!p||!e) return null; return Math.round((e-p)/p*100); }
+function safeUrl(u){ return /^https?:\/\/\S+$/i.test(String(u||''))? String(u) : ''; }
+
+/* ---- HR → Recruitment tab ---- */
+function recruitTabHtml(){
+  const all=sortBy(liveCandidates(),'submittedAt').reverse();
+  const st=F('rstatus','open'), cat=F('rcat',''), q=(F('rq','')||'').toLowerCase().trim();
+  const closed=['hired','rejected','withdrawn'];
+  const rows=all.filter(c=>{
+    if(st==='open' && closed.includes(c.status)) return false;
+    if(st && st!=='open' && st!=='all' && c.status!==st) return false;
+    if(cat && c.category!==cat) return false;
+    if(q && ![c.id,c.name,c.phone,c.position].join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const newOnes=all.filter(c=>c.status==='new');
+  const todays=all.filter(c=>(c.submittedAt||'').slice(0,10)===today());
+  const recent=all.filter(c=>daysFromToday((c.submittedAt||'').slice(0,10))>=-30).map(candScore).filter(Boolean);
+  const avg=recent.length? Math.round(recent.reduce((s,x)=>s+x.pct,0)/recent.length) : null;
+  const yr=String(new Date().getFullYear());
+  const hired=all.filter(c=>c.status==='hired' && String(c.submittedAt||'').startsWith(yr)).length;
+
+  let h=KPI([
+    {k:'Waiting for interview', v:nf(newOnes.length), d:newOnes.length?'filled the form, not yet seen':'nobody waiting', cls:newOnes.length?'warn':'ok'},
+    {k:'Applied today', v:nf(todays.length), d:'walk-in forms received'},
+    {k:'Avg test score (30 days)', v:avg==null?'—':avg+'%', d:recent.length? nf(recent.length)+' candidate(s) tested':'no tests yet'},
+    {k:'Hired this year', v:nf(hired), d:'from '+nf(all.filter(c=>String(c.submittedAt||'').startsWith(yr)).length)+' applications'}
+  ]);
+
+  h+=filterBar([
+    searchCtl('rq', F('rq',''), 'Search name, phone, position or ref…'),
+    selCtl('rstatus', [{v:'open',t:'Open (not closed)'},{v:'all',t:'All statuses'}].concat(CAND_STATUSES.map(s=>({v:s,t:s[0].toUpperCase()+s.slice(1)}))), st),
+    selCtl('rcat', [{v:'general',t:'General / production'},{v:'executive',t:'Executive / office'}], cat, 'All categories')
+  ]);
+
+  h+=sect('Candidates', T([
+    {h:'Ref', f:c=>'<b class="mono">'+esc(c.id)+'</b><div class="sub mono">'+esc((c.submittedAt||'').slice(0,16).replace('T',' '))+'</div>'},
+    {h:'Candidate', f:c=>{ const a=candAge((c.data||{}).dob);
+      return '<b>'+esc(c.name||'—')+'</b><div class="sub">'+esc(c.phone||'')+(a!=null?' · '+a+' yrs':'')+'</div>'; }},
+    {h:'Position', f:c=>esc(c.position||'—')+'<div class="sub"><span class="tag '+(c.category==='executive'?'t-info':'t-mute')+'">'+(c.category==='executive'?'Executive':'General')+'</span></div>'},
+    {h:'Test', f:c=>{ const s=candScore(c); if(!s) return '<span class="sub">not taken</span>';
+      return '<b class="mono">'+s.right+' / '+s.total+'</b> <span class="sub">'+s.band+'</span>'
+        +'<div class="meter" style="width:90px"><i class="'+s.cls+'" style="width:'+Math.max(4,s.pct)+'%"></i></div>'
+        +(c.testSeconds?'<div class="sub mono">'+fmtSecs(c.testSeconds)+(c.testSeconds>RECRUIT_TEST_SECONDS?' · over time':'')+'</div>':''); }},
+    {h:'Expected', c:'num', f:c=>{ const d=c.data||{}, j=salaryJump(c);
+      return '<b class="mono">'+rm(d.expectedSalary)+'</b>'
+        +'<div class="sub mono">now '+(d.presentSalary!=null&&d.presentSalary!==''?rm(d.presentSalary):'—')+'</div>'
+        +(j!=null?'<div class="sub"><span class="tag '+(j>30?'t-warn':'t-mute')+'">'+(j>=0?'+':'')+j+'%</span></div>':''); }},
+    {h:'Experience', f:c=>{ const d=c.data||{};
+      return d.years!=null&&d.years!==''? '<b>'+esc(d.years)+'</b> yrs<div class="sub">'+esc(d.job1Title||'')+(d.job1Company?' · '+esc(d.job1Company):'')+'</div>'
+        : '<span class="sub">'+esc(d.workStatus||'—')+'</span>'; }},
+    {h:'Getting to work', f:c=>{ const d=c.data||{};
+      return '<span class="mono">'+esc(d.distanceKm!=null?d.distanceKm:'?')+' km · '+esc(d.travelMin!=null?d.travelMin:'?')+' min</span>'
+        +'<div class="sub">'+esc(d.transport||'')+'</div>'
+        +candFlags(c).map(x=>'<span class="tag '+x.cls+'" style="margin-top:3px">'+esc(x.t)+'</span>').join(' '); }},
+    {h:'Status', f:c=>tag(c.status)},
+    {h:'', f:c=>btn('Open','cand-view',c.id,'btn sm')}
+  ], rows, {emptyTitle: all.length?'No candidates match':'No applications yet',
+            empty: all.length?'Try another status or clear the search.':'Scan the QR code below with a phone, or open the form on the reception tablet — submitted forms appear here.'}));
+
+  h+=sect('Walk-in application form', '<div class="cols2"><div class="card" style="text-align:center">'
+    +'<div id="recruitQr" style="display:flex;justify-content:center;margin-bottom:10px"></div>'
+    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">Candidates scan this at reception and fill in the form on their own phone before the interview — English or Bahasa Malaysia. It includes a 5-question test: production roles get the general test, executive roles the executive test.</div>'
+    +'<div class="pillrow" style="justify-content:center">'
+    +'<a class="btn" href="'+esc(applyUrl())+'" target="_blank" rel="noopener">Open form on this device</a>'
+    +btn('Check for new applications','cand-sync',null,'btn')+btn('Print QR poster','cand-qr-print',null,'btn')+'</div></div>'
+    +'<div class="card"><h3>How scoring works</h3>'
+    +'<div style="font-size:12.5px;color:var(--ink2);line-height:1.6">5 multiple-choice questions, one mark each. <b>5/5 Excellent · 4 Good · 3 Fair · 0–2 Weak.</b> '
+    +'The answer key is held only inside this system, so it cannot be looked up on the candidate\'s phone. '
+    +'Time taken is shown next to the score; more than 5 minutes is flagged but not penalised. '
+    +'Treat the score as one input alongside the interview, not a pass/fail on its own.</div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-top:10px">General: counting, pattern, attention to detail, time, safety judgement.<br>Executive: number series, business maths, logic, verbal reasoning, capacity planning.</div>'
+    +'</div></div>');
+  return h;
+}
+
+/* ---- pull new submissions from the public form ---- */
+function syncCandidates(silent){
+  if(!window.HEM_AUTH){ if(!silent) toast('Portal connection not available on this page','bad'); return; }
+  if(!silent) toast('Checking for new applications…','ok');
+  try{
+    window.HEM_AUTH.from('hem_candidates').select('*').order('submitted_at',{ascending:false}).limit(500).then(({data,error})=>{
+      if(error){ if(!silent) toast('Could not reach the applications table — has recruitment-setup.sql been run in Supabase?','bad'); return; }
+      S.candidates=S.candidates||[];
+      const have=new Set(S.candidates.map(c=>c.id));
+      let added=0;
+      (data||[]).forEach(r=>{
+        if(have.has(r.id)) return;          // already imported (or deliberately deleted here)
+        S.candidates.push({id:r.id, submittedAt:r.submitted_at||new Date().toISOString(), position:r.position||'',
+          category:r.category||'', name:r.full_name||'', phone:r.phone||'', data:r.data||{}, answers:r.answers||{},
+          testVersion:r.test_version||'', testSeconds:r.test_seconds||0, status:'new', source:'portal', interview:{}});
+        added++;
+      });
+      if(added){ logAudit('Candidate applications synced', '', added+' new'); save(); render(); }
+      if(!silent) toast(added? added+' new application(s) pulled in':'No new applications waiting','ok');
+      else if(added) toast(added+' new candidate application(s) just came in','ok');
+    }).catch(()=>{ if(!silent) toast('Could not reach the applications table','bad'); });
+  }catch(e){ if(!silent) toast('Could not reach the applications table','bad'); }
+}
+ACT['cand-sync'] = ()=> syncCandidates(false);
+
+/* ---- one candidate, in full ---- */
+function candDetailHtml(c, forPrint){
+  const d=c.data||{}, s=candScore(c), a=candAge(d.dob), j=salaryJump(c), iv=c.interview||{};
+  const dl=pairs=>'<dl class="dl">'+pairs.filter(p=>p[1]!==null).map(p=>'<dt>'+esc(p[0])+'</dt><dd>'+(p[1]===''||p[1]==null?'<span class="sub">—</span>':p[1])+'</dd>').join('')+'</dl>';
+  const e=v=>esc(v==null?'':v);
+  const cv=safeUrl(d.cvLink);
+  let h='<div class="cols2" style="margin-bottom:14px">'
+    +'<div class="card"><h3>Candidate</h3>'+dl([
+      ['Name','<b>'+e(c.name)+'</b>'],
+      ['Mobile', forPrint? e(c.phone) : '<a href="tel:'+e(String(c.phone||'').replace(/[^\d+]/g,''))+'">'+e(c.phone)+'</a>'],
+      ['Email', e(d.email)],
+      ['Date of birth', d.dob? '<span class="mono">'+e(d.dob)+'</span>'+(a!=null?' · '+a+' yrs':'') : ''],
+      ['Gender', e(d.gender)], ['Nationality', e(d.nationality)], ['Marital status', e(d.marital)],
+      ['Address', e(d.address).replace(/\n/g,'<br>')],
+      ['Languages', e((d.languages||[]).join(', '))],
+      ['Heard via', e(d.howHeard)+(d.referredBy?' — referred by '+e(d.referredBy):'')]
+    ])+'</div>'
+    +'<div class="card"><h3>Position & salary</h3>'+dl([
+      ['Applying for','<b>'+e(c.position)+'</b> <span class="tag '+(c.category==='executive'?'t-info':'t-mute')+'">'+(c.category==='executive'?'Executive':'General')+'</span>'],
+      ['Present salary', d.presentSalary!=null&&d.presentSalary!==''? '<span class="mono">'+rm(d.presentSalary)+'</span>':''],
+      ['Expected salary','<b class="mono">'+rm(d.expectedSalary)+'</b>'+(j!=null?' <span class="tag '+(j>30?'t-warn':'t-mute')+'">'+(j>=0?'+':'')+j+'% on present</span>':'')],
+      ['Notice period', e(d.notice)], ['Earliest start', d.availableFrom?'<span class="mono">'+e(d.availableFrom)+'</span>':''],
+      ['Shifts / overtime', c.category==='general'? e(d.shifts||'—')+' / '+e(d.ot||'—') : null],
+      ['CV', cv? (forPrint? '<span class="mono" style="font-size:11px;word-break:break-all">'+e(cv)+'</span>' : '<a href="'+e(cv)+'" target="_blank" rel="noopener noreferrer">Open CV link ↗</a>') : '<span class="sub">none given — ask for a printed copy</span>']
+    ])+'</div></div>'
+    +'<div class="cols2" style="margin-bottom:14px">'
+    +'<div class="card"><h3>Experience & education</h3>'+dl([
+      ['Working now', e(d.workStatus)],
+      ['Total experience', d.years!=null&&d.years!==''? e(d.years)+' years':''],
+      ['Current / last job', d.job1Company? '<b>'+e(d.job1Title)+'</b>, '+e(d.job1Company)+'<div class="sub mono">'+e(d.job1From||'?')+' → '+e(d.job1To||'now')+'</div>'
+          +(d.job1Duties?'<div class="sub">'+e(d.job1Duties)+'</div>':'')+(d.job1Reason?'<div class="sub">Left: '+e(d.job1Reason)+'</div>':'') : ''],
+      ['Previous job', d.job2Company? '<b>'+e(d.job2Title)+'</b>, '+e(d.job2Company)+'<div class="sub mono">'+e(d.job2From||'?')+' → '+e(d.job2To||'?')+'</div>'
+          +(d.job2Reason?'<div class="sub">Left: '+e(d.job2Reason)+'</div>':'') : ''],
+      ['Education', e(d.education)+(d.field?'<div class="sub">'+e(d.field)+'</div>':'')+(d.institution?'<div class="sub">'+e(d.institution)+'</div>':'')]
+    ])+'</div>'
+    +'<div class="card"><h3>Getting to work</h3>'+dl([
+      ['Lives in', e(d.homeArea)],
+      ['Distance', '<span class="mono">'+e(d.distanceKm!=null?d.distanceKm:'?')+' km · '+e(d.travelMin!=null?d.travelMin:'?')+' min one way</span>'],
+      ['Transport', e(d.transport)], ['Own vehicle', e(d.ownVehicle)], ['Licence', e(d.licence)],
+      ['Flags', candFlags(c).map(x=>'<span class="tag '+x.cls+'">'+esc(x.t)+'</span>').join(' ') || '<span class="tag t-ok">none</span>']
+    ])+'</div></div>';
+
+  if(s){
+    h+=sect('Aptitude test — '+(c.category==='executive'?'executive':'general'),
+      '<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px">'
+      +'<span style="font-family:var(--disp);font-size:30px;font-weight:600">'+s.right+' / '+s.total+'</span>'
+      +'<span class="tag t-'+s.cls+'" style="font-size:13px">'+s.band+' · '+s.pct+'%</span>'
+      +(c.testSeconds?'<span class="sub mono">time '+fmtSecs(c.testSeconds)+(c.testSeconds>RECRUIT_TEST_SECONDS?' (over the 5:00 guide)':'')+'</span>':'')
+      +'</div>'
+      + T([
+        {h:'#', f:(x,i)=>'<span class="mono">'+(i+1)+'</span>'},
+        {h:'Skill / question', f:x=>'<b>'+esc(x.q.skill)+'</b><div class="sub">'+esc(x.q.q)+'</div>'},
+        {h:'Their answer', f:x=>x.chosen==null?'<span class="sub">no answer</span>':esc(x.q.opts[x.chosen]!=null?x.q.opts[x.chosen]:'?')},
+        {h:'Correct', f:x=>esc(x.q.opts[x.q.ans])},
+        {h:'', f:x=>x.ok?'<span class="tag t-ok">✓</span>':'<span class="tag t-bad">✗</span>'}
+      ], s.detail));
+  } else {
+    h+=sect('Aptitude test', '<div class="note">No test answers on this application.</div>');
+  }
+  if(d.why) h+=sect('Why they want to join', '<div class="note">'+esc(d.why)+'</div>');
+  h+=sect('Declaration', '<div style="font-size:12.5px;color:var(--ink2)">'
+    +(d.declared? 'Candidate ticked the truth-and-consent declaration and typed <b>'+esc(d.signature||c.name)+'</b> as signature on <span class="mono">'+esc(String(d.declaredAt||c.submittedAt||'').slice(0,16).replace('T',' '))+'</span>.' : 'Not declared.')
+    +'</div>');
+
+  h+=sect('Interview outcome', dl([
+      ['Status', tag(c.status)],
+      ['Interview date', iv.date?'<span class="mono">'+esc(iv.date)+'</span>':''],
+      ['Interviewed by', esc(iv.by||'')],
+      ['Rating', iv.rating? esc(iv.rating)+' / 5':''],
+      ['Agreed salary', iv.agreedSalary!=null&&iv.agreedSalary!==''? '<b class="mono">'+rm(iv.agreedSalary)+'</b>':''],
+      ['Starting date', iv.startDate?'<span class="mono">'+esc(iv.startDate)+'</span>':''],
+      ['Notes', iv.notes? esc(iv.notes).replace(/\n/g,'<br>'):'']
+    ])
+    + (forPrint? '<div class="cols2" style="margin-top:28px;font-size:12px;color:var(--ink2)">'
+        +'<div>Interviewer: ______________________<br><br>Date: __________</div>'
+        +'<div>Approved by: ______________________<br><br>Date: __________</div></div>' : ''));
+  return h;
+}
+ACT['cand-view'] = id=>{
+  const c=candidate(id); if(!c||c.deleted) return toast('Candidate not found','bad');
+  modal(esc(c.id+' — '+(c.name||'Candidate')), candDetailHtml(c,false),
+    btn('Delete','cand-delete',c.id,'btn')+btn('Print','cand-print',c.id,'btn')+btn('Record interview outcome','cand-outcome',c.id,'btn primary'), true);
+};
+ACT['cand-print'] = id=>{
+  const c=candidate(id); if(!c) return;
+  printModal('Candidate '+c.id, '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px">'
+    +'<div><h2 style="font-family:var(--disp);margin:0">Candidate application</h2><div class="sub">HE Manufacturing (M) Sdn Bhd — completed by the candidate on '+esc(String(c.submittedAt||'').slice(0,10))+'</div></div>'
+    +'<b class="mono" style="font-size:16px">'+esc(c.id)+'</b></div>' + candDetailHtml(c,true));
+};
+ACT['cand-outcome'] = id=>{
+  const c=candidate(id); if(!c) return;
+  const iv=c.interview||{};
+  formModal({title:'Interview outcome — '+(c.name||c.id),
+    intro:'Recorded against '+esc(c.id)+'. Agreed salary and starting date replace the boxes at the bottom of the old paper form.',
+    values:{status:c.status==='new'?'interviewing':c.status, date:iv.date||today(), by:iv.by||UI.user||'', rating:iv.rating||'',
+      agreedSalary:iv.agreedSalary, startDate:iv.startDate||'', notes:iv.notes||''},
+    fields:[
+      {k:'status', label:'Status', type:'select', blank:false, opts:CAND_STATUSES.map(s=>({v:s,t:s[0].toUpperCase()+s.slice(1)})), req:true},
+      {k:'date', label:'Interview date', type:'date'},
+      {k:'by', label:'Interviewed by'},
+      {k:'rating', label:'Interview rating', type:'select', opts:[{v:'5',t:'5 — Outstanding'},{v:'4',t:'4 — Strong'},{v:'3',t:'3 — Acceptable'},{v:'2',t:'2 — Weak'},{v:'1',t:'1 — Unsuitable'}]},
+      {k:'agreedSalary', label:'Agreed salary (RM / month)', type:'number', step:'0.01'},
+      {k:'startDate', label:'Starting date', type:'date'},
+      {k:'notes', label:'Notes', type:'textarea', rows:4, full:true}
+    ],
+    saveLabel:'Save outcome',
+    onSave:v=>{
+      const was=c.status;
+      c.status=v.status||c.status;
+      c.interview={date:v.date||'', by:v.by||'', rating:v.rating||'', agreedSalary:v.agreedSalary, startDate:v.startDate||'', notes:v.notes||'',
+        updatedAt:new Date().toISOString(), updatedBy:UI.user||''};
+      logAudit('Candidate outcome recorded', c.id, (c.name||'')+' — '+was+' → '+c.status);
+      save(); toast('Saved','ok'); ACT['cand-view'](c.id); render();
+    }});
+};
+ACT['cand-delete'] = id=>{
+  const c=candidate(id); if(!c) return;
+  formModal({title:'Delete candidate '+c.id,
+    intro:'Permanently removes '+esc(c.name||'this candidate')+'\'s personal details, salary and test answers from this system and from the online applications table. Only the reference number stays, so the record is not imported again. Use this when a candidate asks to be removed, or when you no longer need an unsuccessful application.',
+    fields:[{k:'confirm',label:'Type DELETE to confirm',full:true}], saveLabel:'Delete',
+    onSave:v=>{
+      if(v.confirm!=='DELETE') return toast('Type DELETE to confirm','bad');
+      const i=S.candidates.indexOf(c);
+      S.candidates[i]={id:c.id, deleted:true, deletedAt:new Date().toISOString(), deletedBy:UI.user||'', status:'deleted', submittedAt:c.submittedAt};
+      if(window.HEM_AUTH){ try{ window.HEM_AUTH.from('hem_candidates').delete().eq('id',c.id).then(({error})=>{
+        if(error) toast('Removed here; the online copy could not be deleted — '+error.message,'warn'); }); }catch(e){} }
+      logAudit('Candidate deleted', c.id, 'personal data removed');
+      save(); closeModal(); toast('Candidate deleted','ok'); render();
+    }});
+};
+ACT['cand-qr-print'] = ()=>{
+  printModal('Walk-in application QR', '<div style="text-align:center;padding:30px 10px">'
+    +'<div style="font-family:var(--disp);font-size:26px;font-weight:600;margin-bottom:6px">Here for an interview?</div>'
+    +'<div style="font-size:15px;color:var(--ink2);margin-bottom:22px">Scan to fill in your application — about 10 minutes.<br>Datang untuk temu duga? Imbas untuk isi borang permohonan.</div>'
+    +'<div id="recruitQrPrint" style="display:flex;justify-content:center;margin-bottom:18px"></div>'
+    +'<div class="mono" style="font-size:12px;color:var(--muted)">'+esc(applyUrl())+'</div>'
+    +'<div style="margin-top:22px;font-size:13px">HE Manufacturing (M) Sdn Bhd</div></div>');
+  const el=document.getElementById('recruitQrPrint');
+  if(el && window.QRCode){ try{ new QRCode(el,{text:applyUrl(), width:260, height:260, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){} }
 };
 
 /* ============================================================

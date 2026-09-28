@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>HE Manufacturing — Job Application</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!--
+  HE Manufacturing — Candidate Application (walk-in, before interview)
+  ---------------------------------------------------------------------
+  Opened from the QR code on HR → Recruitment in the ERP, on the candidate's own phone or a
+  reception tablet. No login. Each submission is INSERTED into Supabase table hem_candidates
+  (see recruitment-setup.sql). The anonymous key can only insert — it can never read back any
+  application, so one candidate cannot see another's salary or details.
+
+  The aptitude test answer key is deliberately NOT in this file (anyone can view page source).
+  Only the chosen option index per question is sent; the ERP marks it with the key held in
+  index.html (RECRUIT_TESTS). If you change a question here, change the same id there too.
+-->
+<style>
+  :root{
+    --wine:#522B39; --wine-dk:#3c1f29; --wine-soft:#f4eeee; --brass:#9C7434; --brass-soft:#f6efe3;
+    --ink:#231a1c; --ink2:#5c4b51; --paper:#faf8f6; --card:#ffffff; --field:#ffffff;
+    --line:#e7dfdb; --muted:#8a7b76; --on-wine:#f7f0ee;
+    --ok:#2f6b46; --ok-bg:#e4f0e7; --bad:#a3312c; --bad-bg:#fbe4e2; --warn:#a86a10; --warn-bg:#fbeed9;
+    --r:10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --wine:#b9788d; --wine-dk:#2a161d; --wine-soft:#2d2226; --brass:#c9a063; --brass-soft:#2e2619;
+      --ink:#f1e9e6; --ink2:#c9bab5; --paper:#171214; --card:#211a1d; --field:#1b1517;
+      --line:#3a2f33; --muted:#9a8b86; --on-wine:#fff;
+      --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15;
+    }
+  }
+  :root[data-theme="dark"]{
+    --wine:#b9788d; --wine-dk:#2a161d; --wine-soft:#2d2226; --brass:#c9a063; --brass-soft:#2e2619;
+    --ink:#f1e9e6; --ink2:#c9bab5; --paper:#171214; --card:#211a1d; --field:#1b1517;
+    --line:#3a2f33; --muted:#9a8b86; --on-wine:#fff;
+    --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;font-size:15.5px;line-height:1.5}
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;background:#522B39;color:#f7f0ee;position:sticky;top:0;z-index:5}
+  .crest{width:34px;height:34px;border-radius:8px;background:#9C7434;display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-weight:600;color:#3c1f29;font-size:13px;flex:none}
+  .topbar .name{font-family:'Fraunces',serif;font-size:15px;font-weight:600;line-height:1.2}
+  .topbar .sub{font-size:11.5px;color:rgba(247,240,238,.7)}
+  .lang{display:flex;border:1px solid rgba(255,255,255,.3);border-radius:20px;overflow:hidden;flex:none}
+  .lang button{background:transparent;color:#f7f0ee;border:0;padding:6px 11px;font:600 12px 'Archivo',sans-serif;cursor:pointer;width:auto}
+  .lang button.on{background:#f7f0ee;color:#522B39}
+  .wrap{max-width:620px;margin:0 auto;padding:18px 16px 90px}
+  .steps{display:flex;gap:4px;margin:4px 0 6px}
+  .steps span{flex:1;height:5px;border-radius:3px;background:var(--line)}
+  .steps span.past{background:var(--brass)} .steps span.on{background:var(--wine)}
+  .stepname{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
+  .card h2{font-size:19px;margin-bottom:4px}
+  .lead{color:var(--ink2);font-size:13.5px;margin:0 0 16px}
+  label.l{display:block;font-size:13px;color:var(--ink2);margin-bottom:5px;font-weight:600}
+  .req{color:var(--bad)}
+  .hint{font-size:12px;color:var(--muted);margin:-8px 0 14px}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);
+    font-family:'Archivo',sans-serif;font-size:16px;background:var(--field);color:var(--ink);margin-bottom:14px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--wine);outline-offset:1px}
+  .bad-field{border-color:var(--bad)!important;background:var(--bad-bg)!important}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:420px){ .row2{grid-template-columns:1fr} }
+  .choices{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .choices label{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:22px;padding:8px 13px;
+    font-size:14px;cursor:pointer;background:var(--field);user-select:none}
+  .choices input{width:auto;margin:0;accent-color:var(--wine)}
+  .choices label:has(input:checked){border-color:var(--wine);background:var(--wine-soft);font-weight:600}
+  .choices.bad-group label{border-color:var(--bad)}
+  .money{position:relative} .money input{padding-left:44px}
+  .money::before{content:'RM';position:absolute;left:12px;top:11px;font-size:14px;color:var(--muted);font-weight:600}
+  fieldset{border:1px dashed var(--line);border-radius:var(--r);padding:12px 12px 0;margin:0 0 14px}
+  legend{font-size:12.5px;font-weight:700;color:var(--brass);padding:0 6px;text-transform:uppercase;letter-spacing:.04em}
+  button{font-family:'Archivo',sans-serif;font-weight:600;font-size:15px;border:none;border-radius:var(--r);
+    padding:13px 16px;cursor:pointer}
+  .btn-primary{background:#522B39;color:#f7f0ee}
+  .btn-primary:disabled{opacity:.5}
+  .btn-ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
+  .nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;z-index:5}
+  .nav .in{max-width:620px;margin:0 auto;display:flex;gap:10px}
+  .nav .btn-primary{flex:1}
+  .err{background:var(--bad-bg);color:var(--bad);border-radius:var(--r);padding:10px 12px;font-size:13.5px;margin-bottom:14px}
+  .note{background:var(--brass-soft);border-radius:var(--r);padding:11px 13px;font-size:13.5px;color:var(--ink2);margin-bottom:14px}
+  .q{border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:12px;background:var(--card)}
+  .q .qn{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--brass);font-weight:500}
+  .q .qt{font-weight:600;margin:3px 0 10px}
+  .q .opt{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:7px;cursor:pointer;background:var(--field)}
+  .q .opt input{width:auto;margin:0;accent-color:var(--wine)}
+  .q .opt:has(input:checked){border-color:var(--wine);background:var(--wine-soft);font-weight:600}
+  .q.bad-group{border-color:var(--bad)}
+  .timer{position:sticky;top:62px;z-index:4;display:flex;justify-content:space-between;align-items:center;background:var(--wine-soft);
+    border:1px solid var(--line);border-radius:var(--r);padding:9px 13px;margin-bottom:12px;font-size:13.5px}
+  .timer b{font-family:'IBM Plex Mono',monospace;font-size:16px}
+  .timer.late{background:var(--warn-bg);color:var(--warn)}
+  .review dt{font-size:12px;color:var(--muted);margin-top:8px}
+  .review dd{margin:0;font-weight:500}
+  .done{text-align:center;padding:40px 18px}
+  .done .cid{font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:500;color:var(--wine);letter-spacing:.04em;margin:10px 0 4px}
+  .tick{width:64px;height:64px;border-radius:50%;background:var(--ok-bg);color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 12px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="crest">HE</div>
+  <div style="flex:1;min-width:0">
+    <div class="name">HE Manufacturing (M) Sdn Bhd</div>
+    <div class="sub" data-t="appTitle"></div>
+  </div>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" data-lang="en" class="on">EN</button>
+    <button type="button" data-lang="ms">BM</button>
+  </div>
+</div>
+
+<div class="wrap" id="formWrap">
+  <div class="steps" id="stepBar"></div>
+  <div class="stepname" id="stepName"></div>
+  <div id="errBox" class="err" hidden></div>
+  <div id="stepHost"></div>
+</div>
+
+<div class="nav" id="navBar">
+  <div class="in">
+    <button type="button" class="btn-ghost" id="backBtn" data-t="back"></button>
+    <button type="button" class="btn-primary" id="nextBtn"></button>
+  </div>
+</div>
+
+<div class="wrap" id="doneWrap" hidden>
+  <div class="card done">
+    <div class="tick">✓</div>
+    <h2 data-t="doneTitle"></h2>
+    <p class="lead" style="margin:8px 0 0" data-t="doneRef"></p>
+    <div class="cid" id="doneId"></div>
+    <p class="lead" data-t="doneBody"></p>
+    <button type="button" class="btn-ghost" id="restartBtn" data-t="restart" style="width:100%"></button>
+    <p class="lead" style="margin-top:12px;font-size:12px" id="resetNote"></p>
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------ config */
+const SUPABASE_URL = 'https://znxtvkpnwzrzevljdsgx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_3Q-qF58hDO6Q5Tr8Wr8X4A_WTBVR8z5';
+const sb = (window.supabase && window.supabase.createClient)
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:false}}) : null;
+const TEST_MINUTES = 5;
+const RESET_AFTER_SEC = 90;   // reception tablet: wipe the finished screen for the next person
+
+/* Positions offered on the form. cat decides which aptitude test is given. */
+const POSITIONS = [
+  {v:'Production Operator',        cat:'general'},
+  {v:'Filling / Packing Operator', cat:'general'},
+  {v:'Machine Operator',           cat:'general'},
+  {v:'Store / Warehouse Assistant',cat:'general'},
+  {v:'Lab / QC Assistant',         cat:'general'},
+  {v:'General Worker',             cat:'general'},
+  {v:'Driver / Despatch',          cat:'general'},
+  {v:'Production Executive / Supervisor', cat:'executive'},
+  {v:'QA / QC Executive',          cat:'executive'},
+  {v:'R&D Chemist / Formulator',   cat:'executive'},
+  {v:'Purchasing Executive',       cat:'executive'},
+  {v:'Accounts / Finance Executive',cat:'executive'},
+  {v:'HR / Admin Executive',       cat:'executive'},
+  {v:'Sales / Customer Service Executive', cat:'executive'},
+  {v:'Other',                      cat:''}
+];
+
+/* Aptitude questions — NO answer key here (see banner comment). Keep ids in step with
+   RECRUIT_TESTS in index.html. */
+const TESTS = {
+  general: [
+    {id:'g1', q:{en:'A carton holds 12 bottles. How many bottles are in 5 cartons?', ms:'Satu karton mengandungi 12 botol. Berapakah jumlah botol dalam 5 karton?'},
+     o:[{en:'50',ms:'50'},{en:'60',ms:'60'},{en:'62',ms:'62'},{en:'72',ms:'72'}]},
+    {id:'g2', q:{en:'What number comes next?  5, 10, 15, 20, ...', ms:'Apakah nombor seterusnya?  5, 10, 15, 20, ...'},
+     o:[{en:'21',ms:'21'},{en:'22',ms:'22'},{en:'25',ms:'25'},{en:'30',ms:'30'}]},
+    {id:'g3', q:{en:'Which batch code is EXACTLY the same as  HE-4071-B ?', ms:'Kod kelompok manakah yang SAMA SEPENUHNYA dengan  HE-4071-B ?'},
+     o:[{en:'HE-4017-B',ms:'HE-4017-B'},{en:'HF-4071-B',ms:'HF-4071-B'},{en:'HE-4071-8',ms:'HE-4071-8'},{en:'HE-4071-B',ms:'HE-4071-B'}]},
+    {id:'g4', q:{en:'A shift starts at 8:00 am and ends at 5:00 pm, with a 1-hour lunch break. How many hours are worked?', ms:'Syif bermula 8:00 pagi dan tamat 5:00 petang, dengan rehat makan tengah hari 1 jam. Berapa jam bekerja?'},
+     o:[{en:'7 hours',ms:'7 jam'},{en:'8 hours',ms:'8 jam'},{en:'9 hours',ms:'9 jam'},{en:'10 hours',ms:'10 jam'}]},
+    {id:'g5', q:{en:'You see liquid spilled on the factory floor. What should you do first?', ms:'Anda nampak cecair tumpah di lantai kilang. Apakah tindakan pertama anda?'},
+     o:[{en:'Walk around it and carry on working',ms:'Elakkan dan teruskan bekerja'},
+        {en:'Warn people nearby and tell the supervisor',ms:'Beri amaran kepada orang berdekatan dan maklumkan penyelia'},
+        {en:'Wait until the end of the shift',ms:'Tunggu sehingga tamat syif'},
+        {en:'Nothing — it is not my job',ms:'Tiada — itu bukan kerja saya'}]}
+  ],
+  executive: [
+    {id:'e1', q:{en:'What number comes next?  3, 6, 12, 24, ...', ms:'Apakah nombor seterusnya?  3, 6, 12, 24, ...'},
+     o:[{en:'36',ms:'36'},{en:'42',ms:'42'},{en:'48',ms:'48'},{en:'60',ms:'60'}]},
+    {id:'e2', q:{en:'A product costs RM 40 to make and sells for RM 50. What is the profit as a percentage of the selling price?', ms:'Kos membuat produk ialah RM 40 dan dijual pada RM 50. Berapakah keuntungan sebagai peratus harga jualan?'},
+     o:[{en:'10%',ms:'10%'},{en:'20%',ms:'20%'},{en:'25%',ms:'25%'},{en:'40%',ms:'40%'}]},
+    {id:'e3', q:{en:'All mixers are machines. Some machines are noisy. Which statement MUST be true?', ms:'Semua pengadun ialah mesin. Sesetengah mesin bising. Pernyataan manakah yang PASTI benar?'},
+     o:[{en:'All mixers are noisy',ms:'Semua pengadun bising'},{en:'Some mixers are noisy',ms:'Sesetengah pengadun bising'},
+        {en:'No mixer is noisy',ms:'Tiada pengadun yang bising'},{en:'None of these must be true',ms:'Tiada satu pun yang pasti benar'}]},
+    {id:'e4', q:{en:'Invoice is to Payment as Purchase Order is to ...', ms:'Invois berkait dengan Bayaran, seperti Pesanan Belian berkait dengan ...'},
+     o:[{en:'Customer',ms:'Pelanggan'},{en:'Delivery',ms:'Penghantaran'},{en:'Price',ms:'Harga'},{en:'Factory',ms:'Kilang'}]},
+    {id:'e5', q:{en:'A filling machine fills 1,200 bottles per hour. An order is 9,000 bottles and the line runs 8 hours a day. How many working days are needed?', ms:'Mesin pengisian mengisi 1,200 botol sejam. Pesanan ialah 9,000 botol dan talian beroperasi 8 jam sehari. Berapa hari bekerja diperlukan?'},
+     o:[{en:'1 day',ms:'1 hari'},{en:'2 days',ms:'2 hari'},{en:'7.5 days',ms:'7.5 hari'},{en:'8 days',ms:'8 hari'}]}
+  ]
+};
+
+/* ------------------------------------------------------------------ text */
+const TX = {
+  appTitle:{en:'Job application — please complete before your interview', ms:'Permohonan kerja — sila lengkapkan sebelum temu duga'},
+  back:{en:'Back', ms:'Kembali'}, next:{en:'Next', ms:'Seterusnya'}, submit:{en:'Submit application', ms:'Hantar permohonan'},
+  sending:{en:'Sending…', ms:'Menghantar…'},
+  s1:{en:'Position', ms:'Jawatan'}, s2:{en:'About you', ms:'Maklumat diri'}, s3:{en:'Work & salary', ms:'Kerja & gaji'},
+  s4:{en:'Getting to work', ms:'Perjalanan ke tempat kerja'}, s5:{en:'Short test', ms:'Ujian ringkas'}, s6:{en:'Review & submit', ms:'Semak & hantar'},
+  stepOf:{en:'Step {n} of 6 — {name}', ms:'Langkah {n} daripada 6 — {name}'},
+  required:{en:'Please fill in the highlighted fields.', ms:'Sila isi ruangan yang ditandakan.'},
+
+  posTitle:{en:'Which job are you applying for?', ms:'Jawatan apakah yang anda mohon?'},
+  posLead:{en:'This takes about 10 minutes. Your answers go straight to our HR team.', ms:'Ini mengambil masa kira-kira 10 minit. Jawapan anda terus dihantar kepada pasukan HR kami.'},
+  position:{en:'Position', ms:'Jawatan'}, choose:{en:'— Choose —', ms:'— Pilih —'},
+  positionOther:{en:'Please state the position', ms:'Sila nyatakan jawatan'},
+  category:{en:'Which best describes this job?', ms:'Manakah yang paling sesuai menggambarkan kerja ini?'},
+  catGeneral:{en:'Production / general work', ms:'Pengeluaran / kerja am'},
+  catExec:{en:'Executive / office', ms:'Eksekutif / pejabat'},
+  howHeard:{en:'How did you hear about this job?', ms:'Bagaimana anda tahu tentang kerja ini?'},
+  hh:{en:['Walk-in','Friend / employee referral','JobStreet','Facebook','Indeed','Agent','Other'],
+      ms:['Datang sendiri','Rakan / rujukan pekerja','JobStreet','Facebook','Indeed','Ejen','Lain-lain']},
+  referredBy:{en:'Referred by (name) — optional', ms:'Dirujuk oleh (nama) — pilihan'},
+
+  youTitle:{en:'About you', ms:'Maklumat diri'},
+  fullName:{en:'Full name (as in IC / passport)', ms:'Nama penuh (seperti dalam IC / pasport)'},
+  phone:{en:'Mobile number', ms:'Nombor telefon bimbit'}, email:{en:'Email — optional', ms:'E-mel — pilihan'},
+  dob:{en:'Date of birth', ms:'Tarikh lahir'}, gender:{en:'Gender', ms:'Jantina'},
+  male:{en:'Male', ms:'Lelaki'}, female:{en:'Female', ms:'Perempuan'},
+  nationality:{en:'Nationality', ms:'Warganegara'}, malaysian:{en:'Malaysian', ms:'Malaysia'}, otherNat:{en:'Other', ms:'Lain-lain'},
+  nationalityOther:{en:'Please state nationality', ms:'Sila nyatakan warganegara'},
+  marital:{en:'Marital status — optional', ms:'Status perkahwinan — pilihan'},
+  mar:{en:['Single','Married','Other'], ms:['Bujang','Berkahwin','Lain-lain']},
+  address:{en:'Home address', ms:'Alamat rumah'},
+  languages:{en:'Languages you speak', ms:'Bahasa yang anda tuturkan'},
+
+  workTitle:{en:'Work experience & salary', ms:'Pengalaman kerja & gaji'},
+  workStatus:{en:'Are you working now?', ms:'Adakah anda sedang bekerja sekarang?'},
+  ws:{en:['Yes, working now','Not now, but I have worked before','No, this is my first job'],
+      ms:['Ya, sedang bekerja','Tidak sekarang, tetapi pernah bekerja','Tidak, ini kerja pertama saya']},
+  years:{en:'Total years of work experience', ms:'Jumlah tahun pengalaman kerja'},
+  lastJob:{en:'Current / most recent job', ms:'Kerja semasa / terakhir'},
+  prevJob:{en:'Previous job — optional', ms:'Kerja sebelumnya — pilihan'},
+  company:{en:'Company', ms:'Syarikat'}, jobTitle:{en:'Position held', ms:'Jawatan'},
+  from:{en:'From', ms:'Dari'}, to:{en:'To', ms:'Hingga'},
+  duties:{en:'Main duties', ms:'Tugas utama'}, reason:{en:'Reason for leaving', ms:'Sebab berhenti'},
+  education:{en:'Highest education', ms:'Pendidikan tertinggi'},
+  edu:{en:['No formal education','Primary (UPSR)','PT3 / SRP','SPM','SKM / Certificate','STPM / Diploma','Degree','Master / PhD'],
+       ms:['Tiada pendidikan formal','Rendah (UPSR)','PT3 / SRP','SPM','SKM / Sijil','STPM / Diploma','Ijazah','Sarjana / PhD']},
+  institution:{en:'School / college / university', ms:'Sekolah / kolej / universiti'},
+  field:{en:'Field of study / qualification', ms:'Bidang pengajian / kelayakan'},
+  presentSalary:{en:'Present (or last) monthly salary', ms:'Gaji bulanan semasa (atau terakhir)'},
+  expectedSalary:{en:'Expected monthly salary', ms:'Gaji bulanan yang diharapkan'},
+  salaryHint:{en:'Basic salary in RM, before deductions.', ms:'Gaji pokok dalam RM, sebelum potongan.'},
+  notice:{en:'Notice period', ms:'Tempoh notis'},
+  np:{en:['Can start immediately','1 week','2 weeks','1 month','2 months','3 months'],
+      ms:['Boleh mula segera','1 minggu','2 minggu','1 bulan','2 bulan','3 bulan']},
+  availableFrom:{en:'Earliest start date', ms:'Tarikh paling awal boleh mula'},
+  shifts:{en:'Willing to work shifts?', ms:'Sanggup bekerja syif?'},
+  ot:{en:'Willing to work overtime?', ms:'Sanggup bekerja lebih masa?'},
+  yes:{en:'Yes', ms:'Ya'}, no:{en:'No', ms:'Tidak'},
+  cvLink:{en:'Link to your CV — optional', ms:'Pautan CV anda — pilihan'},
+  cvHint:{en:'Google Drive, LinkedIn or Dropbox link. You can also bring a printed copy.', ms:'Pautan Google Drive, LinkedIn atau Dropbox. Anda juga boleh bawa salinan bercetak.'},
+
+  commuteTitle:{en:'Getting to work', ms:'Perjalanan ke tempat kerja'},
+  commuteLead:{en:'This helps us plan shifts and transport. It does not decide the result on its own.', ms:'Ini membantu kami merancang syif dan pengangkutan. Ia tidak menentukan keputusan dengan sendirinya.'},
+  homeArea:{en:'Town / area you live in, and postcode', ms:'Bandar / kawasan tempat tinggal, dan poskod'},
+  distanceKm:{en:'Distance from home to our factory (km)', ms:'Jarak dari rumah ke kilang kami (km)'},
+  distHint:{en:'An estimate is fine — check Google Maps or Waze.', ms:'Anggaran sudah memadai — semak Google Maps atau Waze.'},
+  travelMin:{en:'Travel time, one way (minutes)', ms:'Masa perjalanan, sehala (minit)'},
+  transport:{en:'How will you come to work?', ms:'Bagaimana anda akan datang bekerja?'},
+  tr:{en:['Own car','Own motorcycle','Bus / train','Lift from family or friend','Grab / taxi','Walk / bicycle','I need company transport'],
+      ms:['Kereta sendiri','Motosikal sendiri','Bas / tren','Tumpang keluarga atau rakan','Grab / teksi','Berjalan / basikal','Saya perlukan pengangkutan syarikat']},
+  ownVehicle:{en:'Do you own a vehicle?', ms:'Adakah anda memiliki kenderaan?'},
+  ov:{en:['Car','Motorcycle','Both','No'], ms:['Kereta','Motosikal','Kedua-duanya','Tiada']},
+  licence:{en:'Driving licence', ms:'Lesen memandu'},
+  lic:{en:['None','Motorcycle (B2 / B)','Car (D)','Car and motorcycle','Lorry / GDL'],
+       ms:['Tiada','Motosikal (B2 / B)','Kereta (D)','Kereta dan motosikal','Lori / GDL']},
+
+  testTitle:{en:'Short test', ms:'Ujian ringkas'},
+  testIntro:{en:'5 short questions. You have about {m} minutes. Choose the best answer for each one. Please answer on your own.', ms:'5 soalan ringkas. Anda ada kira-kira {m} minit. Pilih jawapan terbaik untuk setiap soalan. Sila jawab sendiri.'},
+  testStart:{en:'Start the test', ms:'Mula ujian'},
+  timeLeft:{en:'Time left', ms:'Masa berbaki'}, timeUp:{en:'Time is up — please finish and continue', ms:'Masa tamat — sila selesaikan dan teruskan'},
+  answered:{en:'{a} of 5 answered', ms:'{a} daripada 5 dijawab'},
+  testDone:{en:'Test finished — thank you. You cannot change your answers now.', ms:'Ujian selesai — terima kasih. Jawapan tidak boleh diubah lagi.'},
+  answerAll:{en:'Please answer every question.', ms:'Sila jawab semua soalan.'},
+  startFirst:{en:'Please start the test first.', ms:'Sila mulakan ujian dahulu.'},
+
+  reviewTitle:{en:'Check and submit', ms:'Semak dan hantar'},
+  why:{en:'Why would you like to work with us? — optional', ms:'Mengapa anda ingin bekerja dengan kami? — pilihan'},
+  declare:{en:'I confirm the information I have given is true and complete. I understand that false information may lead to my application being rejected or, if employed, to dismissal. I agree that HE Manufacturing may keep and use this information for recruitment.',
+           ms:'Saya mengesahkan maklumat yang diberikan adalah benar dan lengkap. Saya faham maklumat palsu boleh menyebabkan permohonan ditolak atau, jika diambil bekerja, dibuang kerja. Saya bersetuju HE Manufacturing menyimpan dan menggunakan maklumat ini untuk tujuan pengambilan pekerja.'},
+  signature:{en:'Type your full name as your signature', ms:'Taip nama penuh anda sebagai tandatangan'},
+  sigMismatch:{en:'Please type the same full name you entered earlier.', ms:'Sila taip nama penuh yang sama seperti yang dimasukkan tadi.'},
+  mustDeclare:{en:'Please tick the declaration.', ms:'Sila tandakan pengakuan.'},
+  sendFail:{en:'Could not send — please check the internet connection and try again, or ask reception for help.', ms:'Tidak dapat dihantar — sila semak sambungan internet dan cuba lagi, atau minta bantuan di kaunter.'},
+
+  doneTitle:{en:'Thank you — application received', ms:'Terima kasih — permohonan diterima'},
+  doneRef:{en:'Your reference number', ms:'Nombor rujukan anda'},
+  doneBody:{en:'Please give this device back to reception, or show this number. We will call you for the interview shortly.', ms:'Sila pulangkan peranti ini ke kaunter, atau tunjukkan nombor ini. Kami akan memanggil anda untuk temu duga sebentar lagi.'},
+  restart:{en:'Start a new application', ms:'Mulakan permohonan baharu'},
+  resetIn:{en:'This screen clears itself in {s} seconds.', ms:'Skrin ini akan dikosongkan dalam {s} saat.'},
+
+  rv:{en:{position:'Position', name:'Name', phone:'Phone', expected:'Expected salary', present:'Present salary', commute:'Commute', exp:'Experience', test:'Test'},
+      ms:{position:'Jawatan', name:'Nama', phone:'Telefon', expected:'Gaji diharapkan', present:'Gaji semasa', commute:'Perjalanan', exp:'Pengalaman', test:'Ujian'}},
+  yrs:{en:'years', ms:'tahun'}, completed:{en:'completed', ms:'selesai'}, none:{en:'—', ms:'—'}
+};
+const LANGS=['BM','English','Mandarin','Tamil','Other'];
+
+/* ------------------------------------------------------------------ state */
+let LANG='en';
+let step=1;
+let D={};                    // all answers, keyed by field name (values stored in English/canonical form)
+let TEST={started:false, finished:false, startAt:0, seconds:0, answers:{}};
+let timerHandle=null, resetHandle=null;
+
+const $=id=>document.getElementById(id);
+const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function t(k, vars){ let s=(TX[k]||{})[LANG]; if(s==null) s=(TX[k]||{}).en; if(s==null) s=k;
+  if(vars && typeof s==='string') Object.keys(vars).forEach(x=>{ s=s.replace('{'+x+'}', vars[x]); }); return s; }
+function listOf(k){ return (TX[k]||{})[LANG] || TX[k].en; }        // translated option labels
+function canon(k){ return TX[k].en; }                                // stored values are always English
+function category(){ const p=POSITIONS.find(x=>x.v===D.position); return p&&p.cat? p.cat : (D.category||''); }
+
+/* ------------------------------------------------------------------ field helpers */
+function fld(name, label, o){ o=o||{};
+  const v=D[name]!=null?D[name]:'';
+  const lab='<label class="l" for="f_'+name+'">'+esc(label)+(o.req?' <span class="req">*</span>':'')+'</label>';
+  let ctl;
+  if(o.type==='textarea') ctl='<textarea id="f_'+name+'" data-n="'+name+'" rows="'+(o.rows||2)+'">'+esc(v)+'</textarea>';
+  else if(o.type==='select'){
+    const labels=o.labels||o.values;
+    ctl='<select id="f_'+name+'" data-n="'+name+'"><option value="">'+esc(t('choose'))+'</option>'
+      +o.values.map((val,i)=>'<option value="'+esc(val)+'"'+(String(v)===String(val)?' selected':'')+'>'+esc(labels[i])+'</option>').join('')+'</select>';
+  } else {
+    ctl='<input id="f_'+name+'" data-n="'+name+'" type="'+(o.type||'text')+'" value="'+esc(v)+'"'
+      +(o.inputmode?' inputmode="'+o.inputmode+'"':'')+(o.min!=null?' min="'+o.min+'"':'')+(o.max!=null?' max="'+o.max+'"':'')
+      +(o.step?' step="'+o.step+'"':'')+(o.ph?' placeholder="'+esc(o.ph)+'"':'')+(o.auto?' autocomplete="'+o.auto+'"':'')+'>';
+    if(o.money) ctl='<div class="money">'+ctl+'</div>';
+  }
+  return lab+ctl+(o.hint?'<div class="hint">'+esc(o.hint)+'</div>':'');
+}
+function radios(name, label, values, labels, o){ o=o||{};
+  return '<label class="l">'+esc(label)+(o.req?' <span class="req">*</span>':'')+'</label><div class="choices" data-group="'+name+'">'
+    +values.map((val,i)=>'<label><input type="radio" name="r_'+name+'" data-n="'+name+'" value="'+esc(val)+'"'+(D[name]===val?' checked':'')+'> '+esc(labels[i])+'</label>').join('')+'</div>';
+}
+function checks(name, label, values){
+  const cur=D[name]||[];
+  return '<label class="l">'+esc(label)+'</label><div class="choices">'
+    +values.map(val=>'<label><input type="checkbox" data-multi="'+name+'" value="'+esc(val)+'"'+(cur.includes(val)?' checked':'')+'> '+esc(val)+'</label>').join('')+'</div>';
+}
+
+/* ------------------------------------------------------------------ steps */
+function stepHtml(){
+  if(step===1){
+    return '<div class="card"><h2>'+esc(t('posTitle'))+'</h2><p class="lead">'+esc(t('posLead'))+'</p>'
+      + fld('position', t('position'), {req:true, type:'select', values:POSITIONS.map(p=>p.v)})
+      + (D.position==='Other'
+          ? fld('positionOther', t('positionOther'), {req:true})
+            + radios('category', t('category'), ['general','executive'], [t('catGeneral'), t('catExec')], {req:true})
+          : '')
+      + fld('howHeard', t('howHeard'), {type:'select', values:canon('hh'), labels:listOf('hh')})
+      + fld('referredBy', t('referredBy'))
+      +'</div>';
+  }
+  if(step===2){
+    return '<div class="card"><h2>'+esc(t('youTitle'))+'</h2>'
+      + fld('fullName', t('fullName'), {req:true, auto:'name'})
+      + '<div class="row2"><div>'+fld('phone', t('phone'), {req:true, type:'tel', inputmode:'tel', auto:'tel', ph:'01X-XXX XXXX'})+'</div>'
+      + '<div>'+fld('email', t('email'), {type:'email', auto:'email'})+'</div></div>'
+      + '<div class="row2"><div>'+fld('dob', t('dob'), {req:true, type:'date', max:new Date().toISOString().slice(0,10)})+'</div>'
+      + '<div>'+radios('gender', t('gender'), ['Male','Female'], [t('male'), t('female')], {req:true})+'</div></div>'
+      + radios('nationality', t('nationality'), ['Malaysian','Other'], [t('malaysian'), t('otherNat')], {req:true})
+      + (D.nationality==='Other'? fld('nationalityOther', t('nationalityOther'), {req:true}) : '')
+      + fld('marital', t('marital'), {type:'select', values:canon('mar'), labels:listOf('mar')})
+      + fld('address', t('address'), {req:true, type:'textarea', rows:3})
+      + checks('languages', t('languages'), LANGS)
+      +'</div>';
+  }
+  if(step===3){
+    const ws=canon('ws'), exp=D.workStatus && D.workStatus!==ws[2], cat=category();
+    let h='<div class="card"><h2>'+esc(t('workTitle'))+'</h2>'
+      + radios('workStatus', t('workStatus'), ws, listOf('ws'), {req:true});
+    if(exp){
+      h+= fld('years', t('years'), {req:true, type:'number', inputmode:'decimal', min:0, max:60, step:'0.5'})
+        + '<fieldset><legend>'+esc(t('lastJob'))+'</legend>'
+        + fld('job1Company', t('company'), {req:true}) + fld('job1Title', t('jobTitle'), {req:true})
+        + '<div class="row2"><div>'+fld('job1From', t('from'), {type:'month'})+'</div><div>'+fld('job1To', t('to'), {type:'month'})+'</div></div>'
+        + fld('job1Duties', t('duties'), {type:'textarea'})
+        + (D.workStatus===ws[1]? fld('job1Reason', t('reason')) : '')
+        + '</fieldset>'
+        + '<fieldset><legend>'+esc(t('prevJob'))+'</legend>'
+        + fld('job2Company', t('company')) + fld('job2Title', t('jobTitle'))
+        + '<div class="row2"><div>'+fld('job2From', t('from'), {type:'month'})+'</div><div>'+fld('job2To', t('to'), {type:'month'})+'</div></div>'
+        + fld('job2Reason', t('reason'))
+        + '</fieldset>';
+    }
+    h+= fld('education', t('education'), {req:true, type:'select', values:canon('edu'), labels:listOf('edu')})
+      + '<div class="row2"><div>'+fld('institution', t('institution'))+'</div><div>'+fld('field', t('field'))+'</div></div>'
+      + '<div class="row2"><div>'+fld('presentSalary', t('presentSalary'), {req:!!exp, type:'number', inputmode:'decimal', min:0, money:true})+'</div>'
+      + '<div>'+fld('expectedSalary', t('expectedSalary'), {req:true, type:'number', inputmode:'decimal', min:0, money:true})+'</div></div>'
+      + '<div class="hint" style="margin-top:-6px">'+esc(t('salaryHint'))+'</div>'
+      + '<div class="row2"><div>'+fld('notice', t('notice'), {req:true, type:'select', values:canon('np'), labels:listOf('np')})+'</div>'
+      + '<div>'+fld('availableFrom', t('availableFrom'), {type:'date', min:new Date().toISOString().slice(0,10)})+'</div></div>';
+    if(cat==='general'){
+      h+= '<div class="row2"><div>'+radios('shifts', t('shifts'), ['Yes','No'], [t('yes'), t('no')], {req:true})+'</div>'
+        + '<div>'+radios('ot', t('ot'), ['Yes','No'], [t('yes'), t('no')], {req:true})+'</div></div>';
+    }
+    h+= fld('cvLink', t('cvLink'), {type:'url', inputmode:'url', ph:'https://', hint:t('cvHint')}) + '</div>';
+    return h;
+  }
+  if(step===4){
+    return '<div class="card"><h2>'+esc(t('commuteTitle'))+'</h2><p class="lead">'+esc(t('commuteLead'))+'</p>'
+      + fld('homeArea', t('homeArea'), {req:true, ph:'e.g. Klang, 41200'})
+      + '<div class="row2"><div>'+fld('distanceKm', t('distanceKm'), {req:true, type:'number', inputmode:'decimal', min:0, max:500, step:'0.5'})+'</div>'
+      + '<div>'+fld('travelMin', t('travelMin'), {req:true, type:'number', inputmode:'numeric', min:0, max:600})+'</div></div>'
+      + '<div class="hint">'+esc(t('distHint'))+'</div>'
+      + radios('transport', t('transport'), canon('tr'), listOf('tr'), {req:true})
+      + radios('ownVehicle', t('ownVehicle'), canon('ov'), listOf('ov'), {req:true})
+      + fld('licence', t('licence'), {type:'select', values:canon('lic'), labels:listOf('lic')})
+      +'</div>';
+  }
+  if(step===5){
+    const cat=category(), qs=TESTS[cat]||[];
+    if(TEST.finished) return '<div class="card"><h2>'+esc(t('testTitle'))+'</h2><div class="note" style="margin:10px 0 0">'+esc(t('testDone'))+'</div></div>';
+    if(!TEST.started){
+      return '<div class="card"><h2>'+esc(t('testTitle'))+'</h2><p class="lead">'+esc(t('testIntro',{m:TEST_MINUTES}))+'</p>'
+        +'<button type="button" class="btn-primary" id="startTest" style="width:100%">'+esc(t('testStart'))+'</button></div>';
+    }
+    return '<div class="timer" id="timerBar"><span><span id="timerLbl">'+esc(t('timeLeft'))+'</span> <b id="timerVal">--:--</b></span><span id="ansCount"></span></div>'
+      + qs.map((q,i)=>'<div class="q" data-q="'+q.id+'"><div class="qn">'+(i+1)+' / '+qs.length+'</div><div class="qt">'+esc(q.q[LANG]||q.q.en)+'</div>'
+        + q.o.map((o,j)=>'<label class="opt"><input type="radio" name="q_'+q.id+'" data-q="'+q.id+'" value="'+j+'"'+(TEST.answers[q.id]===j?' checked':'')+'> <span>'+esc(o[LANG]||o.en)+'</span></label>').join('')
+        +'</div>').join('');
+  }
+  if(step===6){
+    const rv=listOf('rv'), cat=category();
+    const pos=D.position==='Other'? (D.positionOther||'Other') : D.position;
+    const row=(k,v)=>'<dt>'+esc(k)+'</dt><dd>'+esc(v||'—')+'</dd>';
+    return '<div class="card"><h2>'+esc(t('reviewTitle'))+'</h2>'
+      +'<dl class="review" style="margin:6px 0 16px">'
+      + row(rv.position, pos+' ('+(cat==='executive'?t('catExec'):t('catGeneral'))+')')
+      + row(rv.name, D.fullName) + row(rv.phone, D.phone)
+      + row(rv.present, D.presentSalary!=null&&D.presentSalary!==''? 'RM '+D.presentSalary : '—')
+      + row(rv.expected, 'RM '+(D.expectedSalary||''))
+      + row(rv.exp, D.years? D.years+' '+t('yrs') : D.workStatus)
+      + row(rv.commute, (D.distanceKm||'?')+' km · '+(D.travelMin||'?')+' min · '+(listOf('tr')[canon('tr').indexOf(D.transport)]||''))
+      + row(rv.test, t('completed'))
+      +'</dl>'
+      + fld('why', t('why'), {type:'textarea', rows:3})
+      + '<label class="opt" style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:14px;cursor:pointer" id="declWrap">'
+      + '<input type="checkbox" id="declare" data-n="declare" style="width:auto;margin:3px 0 0;accent-color:var(--wine)"'+(D.declare?' checked':'')+'>'
+      + '<span style="font-size:13.5px;color:var(--ink2)">'+esc(t('declare'))+'</span></label>'
+      + fld('signature', t('signature'), {req:true})
+      +'</div>';
+  }
+  return '';
+}
+
+function render(){
+  document.documentElement.lang = LANG==='ms'?'ms':'en';
+  document.querySelectorAll('[data-t]').forEach(el=>{ el.textContent=t(el.dataset.t); });
+  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on', b.dataset.lang===LANG));
+  const names=[t('s1'),t('s2'),t('s3'),t('s4'),t('s5'),t('s6')];
+  $('stepBar').innerHTML=names.map((n,i)=>'<span class="'+(i+1<step?'past':i+1===step?'on':'')+'"></span>').join('');
+  $('stepName').textContent=t('stepOf',{n:step, name:names[step-1]});
+  $('stepHost').innerHTML=stepHtml();
+  $('backBtn').hidden = step===1;
+  $('nextBtn').textContent = step===6? t('submit') : t('next');
+  $('nextBtn').hidden = (step===5 && !TEST.started && !TEST.finished);
+  if(step===5 && TEST.started && !TEST.finished) tick();
+  const st=$('startTest'); if(st) st.addEventListener('click', startTest);
+}
+
+/* ------------------------------------------------------------------ input capture */
+document.addEventListener('input', e=>{
+  const el=e.target;
+  if(el.dataset.q){ TEST.answers[el.dataset.q]=Number(el.value); updateCount(); el.closest('.q').classList.remove('bad-group'); return; }
+  if(el.dataset.multi){
+    const n=el.dataset.multi; D[n]=[...document.querySelectorAll('[data-multi="'+n+'"]:checked')].map(x=>x.value); return;
+  }
+  if(!el.dataset.n) return;
+  D[el.dataset.n] = el.type==='checkbox'? el.checked : el.value;
+  el.classList.remove('bad-field');
+  const g=el.closest('.choices'); if(g) g.classList.remove('bad-group');
+});
+document.addEventListener('change', e=>{
+  const n=e.target.dataset.n;
+  // fields that change which other fields appear
+  if(['position','category','nationality','workStatus'].includes(n)){
+    D[n]=e.target.value;
+    // a test already taken for the other category no longer applies — take the right one
+    if(TEST.cat && TEST.cat!==category()) TEST={started:false, finished:false, startAt:0, seconds:0, answers:{}};
+    keepScroll(render);
+  }
+});
+function keepScroll(fn){ const y=window.scrollY; fn(); window.scrollTo(0,y); }
+
+/* ------------------------------------------------------------------ validation */
+function need(names){
+  const bad=[];
+  names.forEach(n=>{ const v=D[n]; if(v==null || String(v).trim()==='') bad.push(n); });
+  return bad;
+}
+function validate(){
+  const ws=canon('ws');
+  let bad=[];
+  if(step===1){ bad=need(['position']); if(D.position==='Other') bad=bad.concat(need(['positionOther','category'])); }
+  if(step===2){ bad=need(['fullName','phone','dob','gender','nationality','address']);
+    if(D.nationality==='Other') bad=bad.concat(need(['nationalityOther']));
+    if(D.phone && String(D.phone).replace(/\D/g,'').length<9) bad.push('phone');
+    if(D.email && !/^\S+@\S+\.\S+$/.test(D.email)) bad.push('email'); }
+  if(step===3){ bad=need(['workStatus','education','expectedSalary','notice']);
+    if(D.workStatus && D.workStatus!==ws[2]) bad=bad.concat(need(['years','job1Company','job1Title','presentSalary']));
+    if(category()==='general') bad=bad.concat(need(['shifts','ot']));
+    if(D.cvLink && !/^https?:\/\/\S+\.\S+/i.test(D.cvLink)) bad.push('cvLink'); }
+  if(step===4){ bad=need(['homeArea','distanceKm','travelMin','transport','ownVehicle']); }
+  if(step===5){
+    if(!TEST.started && !TEST.finished) return fail(t('startFirst'));
+    if(!TEST.finished){
+      const qs=TESTS[category()]||[], miss=qs.filter(q=>TEST.answers[q.id]==null);
+      if(miss.length){ miss.forEach(q=>{ const el=document.querySelector('.q[data-q="'+q.id+'"]'); if(el) el.classList.add('bad-group'); });
+        return fail(t('answerAll')); }
+    }
+  }
+  if(step===6){
+    if(!D.declare){ const w=$('declWrap'); if(w) w.style.borderColor='var(--bad)'; return fail(t('mustDeclare')); }
+    if(!D.signature || !D.signature.trim()) bad.push('signature');
+    else if(norm(D.signature)!==norm(D.fullName)){ mark(['signature']); return fail(t('sigMismatch')); }
+  }
+  if(bad.length){ mark(bad); return fail(t('required')); }
+  $('errBox').hidden=true; return true;
+}
+function norm(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function mark(names){
+  names.forEach(n=>{
+    const el=document.querySelector('[data-n="'+n+'"]:not([type="radio"])'); if(el) el.classList.add('bad-field');
+    const g=document.querySelector('.choices[data-group="'+n+'"]'); if(g) g.classList.add('bad-group');
+  });
+  const first=document.querySelector('.bad-field, .bad-group'); if(first) first.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function fail(msg){ $('errBox').textContent=msg; $('errBox').hidden=false; if(!document.querySelector('.bad-field,.bad-group')) window.scrollTo({top:0,behavior:'smooth'}); return false; }
+
+/* ------------------------------------------------------------------ test timer */
+function startTest(){
+  const cat=category(); if(!TESTS[cat]) { step=1; render(); return; }
+  TEST={started:true, finished:false, startAt:Date.now(), seconds:0, answers:{}, cat};
+  render(); window.scrollTo(0,0);
+  clearInterval(timerHandle); timerHandle=setInterval(tick, 1000);
+}
+function tick(){
+  const el=$('timerVal'); if(!el) return;
+  const used=Math.floor((Date.now()-TEST.startAt)/1000), left=TEST_MINUTES*60-used;
+  const bar=$('timerBar');
+  if(left>=0){ el.textContent=String(Math.floor(left/60)).padStart(2,'0')+':'+String(left%60).padStart(2,'0'); }
+  else { el.textContent='0:00'; if(bar && !bar.classList.contains('late')){ bar.classList.add('late'); $('timerLbl').textContent=t('timeUp'); } }
+  updateCount();
+}
+function updateCount(){ const c=$('ansCount'); if(c) c.textContent=t('answered',{a:Object.keys(TEST.answers).length}); }
+function finishTest(){
+  TEST.seconds=Math.round((Date.now()-TEST.startAt)/1000);
+  TEST.finished=true; TEST.started=false; clearInterval(timerHandle);
+}
+
+/* ------------------------------------------------------------------ navigation */
+$('nextBtn').addEventListener('click', async ()=>{
+  if(!validate()) return;
+  if(step===5 && !TEST.finished) finishTest();
+  if(step<6){ step++; render(); window.scrollTo(0,0); return; }
+  await submit();
+});
+$('backBtn').addEventListener('click', ()=>{
+  $('errBox').hidden=true;
+  if(step===5 && TEST.started && !TEST.finished) return;   // no leaving mid-test
+  if(step>1){ step--; render(); window.scrollTo(0,0); }
+});
+document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click', ()=>{ LANG=b.dataset.lang; keepScroll(render); }));
+
+/* ------------------------------------------------------------------ submit */
+function newId(){
+  const d=new Date(), y=String(d.getFullYear()).slice(2), m=String(d.getMonth()+1).padStart(2,'0');
+  const r=(crypto.getRandomValues? crypto.getRandomValues(new Uint32Array(1))[0] : Math.floor(Math.random()*1e9))%9000+1000;
+  return 'C'+y+m+'-'+r;
+}
+function buildPayload(){
+  const cat=category();
+  const data=Object.assign({}, D);
+  delete data.declare;
+  data.positionTitle = D.position==='Other'? (D.positionOther||'Other') : D.position;
+  data.nationality = D.nationality==='Other'? (D.nationalityOther||'Other') : D.nationality;
+  data.formLang = LANG;
+  data.declared = true;
+  data.declaredAt = new Date().toISOString();
+  ['presentSalary','expectedSalary','years','distanceKm','travelMin'].forEach(k=>{ if(data[k]!=null && data[k]!=='') data[k]=Number(data[k]); });
+  return { id:newId(), position:data.positionTitle, category:cat, status:'new',
+           full_name:String(D.fullName||'').trim(), phone:String(D.phone||'').trim(),
+           data, answers:TEST.answers, test_version:'v1', test_seconds:TEST.seconds };
+}
+async function submit(){
+  const btn=$('nextBtn'); btn.disabled=true; btn.textContent=t('sending');
+  const row=buildPayload();
+  try{
+    if(!sb) throw new Error('no client');
+    let { error } = await sb.from('hem_candidates').insert(row);
+    if(error && /duplicate|unique/i.test(error.message||'')){ row.id=newId(); ({ error } = await sb.from('hem_candidates').insert(row)); }
+    if(error) throw error;
+    done(row.id);
+  }catch(err){
+    console.error(err);
+    btn.disabled=false; btn.textContent=t('submit');
+    fail(t('sendFail'));
+  }
+}
+function done(id){
+  $('formWrap').hidden=true; $('navBar').hidden=true; $('doneWrap').hidden=false;
+  $('doneId').textContent=id; window.scrollTo(0,0);
+  let s=RESET_AFTER_SEC;
+  const upd=()=>{ $('resetNote').textContent=t('resetIn',{s}); };
+  upd(); clearInterval(resetHandle);
+  resetHandle=setInterval(()=>{ s--; if(s<=0) restart(); else upd(); }, 1000);
+}
+function restart(){
+  clearInterval(resetHandle); clearInterval(timerHandle);
+  D={}; TEST={started:false, finished:false, startAt:0, seconds:0, answers:{}}; step=1;
+  $('formWrap').hidden=false; $('navBar').hidden=false; $('doneWrap').hidden=true;
+  $('nextBtn').disabled=false; $('errBox').hidden=true;
+  render(); window.scrollTo(0,0);
+}
+$('restartBtn').addEventListener('click', restart);
+
+/* Nothing is kept in browser storage — a shared reception tablet must not show the previous
+   candidate's details to the next one. Reloading simply starts over. */
+render();
+</script>
+</body>
+</html>
