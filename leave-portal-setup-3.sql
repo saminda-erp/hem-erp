@@ -44,3 +44,9 @@
 
 -- ---- migration "portal_whois_name_lookup" — ALREADY APPLIED ----
 --   portal_whois(emp_no): name + registered flag for an active employee, shown as they type their ID.
+
+-- ---- migration "fix_staff_access_employees_leave_apps" — ALREADY APPLIED ----
+--   BUG FIX: hem_leave_applications had no SELECT policy for the signed-in ERP (the only one was
+--   the public read removed in v2), and hem_employees had no policies at all → the ERP could not
+--   see portal applications and its employee pushes were refused. Added "staff all …" policies
+--   (authenticated only); anon still has no direct access to either table.

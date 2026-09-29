@@ -9363,12 +9363,26 @@ ACT['leave-set-password'] = a=>{
     }});
 };
 let LAST_LEAVE_SYNC=0;
+let PORTAL_HEAL_DONE=false;
+/* check the portal for new leave / HOD decisions every minute while the ERP is open (any screen),
+   not only while HR → Leave is showing */
+setInterval(()=>{ try{ if(window.HEM_AUTH && S && document.visibilityState==='visible'){ LAST_LEAVE_SYNC=Date.now(); syncPortalLeave(true); } }catch(e){} }, 60000);
+setTimeout(()=>{ try{ if(window.HEM_AUTH && S) syncPortalLeave(true); }catch(e){} }, 4000);
 /* who has registered in the portal (and the phone they registered with) → employee records */
 function syncPortalPhones(){
   if(!window.HEM_AUTH) return;
   try{
     window.HEM_AUTH.rpc('hr_portal_status').then(({data,error})=>{
       if(error||!Array.isArray(data)) return; let n=0;
+      /* self-heal: anyone active in the ERP but missing from the portal (or still carrying a
+         placeholder name, or without the IC hash they need to register) is pushed again */
+      const byNo=new Map(data.map(r=>[r.emp_no,r]));
+      const gaps=(S.employees||[]).filter(e=>empActive(e) && (e.leaveScope||'full')!=='none'
+        && (!byNo.has(e.empNo) || (String(e.icNo||'').trim() && !byNo.get(e.empNo).has_ic)));
+      // once per session, when anything is out of step, resend every employee (names, HOD, IC hash…)
+      const missing = gaps.length? (S.employees||[]).filter(e=>byNo.has(e.empNo) || (empActive(e) && (e.leaveScope||'full')!=='none')) : [];
+      if(missing.length && !PORTAL_HEAL_DONE){ PORTAL_HEAL_DONE=true;
+        pushEmployeesToPortal(missing.map(e=>e.empNo), true).then(ok=>{ if(ok) logAudit('Portal employee list repaired','',missing.length+' employee(s) sent'); }); }
       data.forEach(r=>{ const e=(S.employees||[]).find(x=>x.empNo===r.emp_no); if(!e) return;
         const reg=r.registered_at||'';
         if((e.portalRegistered||'')!==reg){ e.portalRegistered=reg; n++; }
