@@ -41,3 +41,6 @@
 --   portal_apply: HOD name + WhatsApp number required; every application starts at stage 'superior'.
 --   hem_portal_settings(hr_whatsapp, hr_name): shown on leave-approve.html so the HOD can inform HR.
 --   hr_portal_status(): registration status for the ERP.
+
+-- ---- migration "portal_whois_name_lookup" — ALREADY APPLIED ----
+--   portal_whois(emp_no): name + registered flag for an active employee, shown as they type their ID.
