@@ -4277,14 +4277,16 @@ function leaveDayMap(year, empNo){
 
 function V_people(){
   const tab=F('ptab','staff');
-  const tabs=[{k:'staff',t:'Employees'},{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'},{k:'recruit',t:'Recruitment'}].map(x=>
+  const tabs=[{k:'staff',t:'Employees'},{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'},{k:'overtime',t:'Overtime'},{k:'recruit',t:'Recruitment'}].map(x=>
     '<button class="chip'+(tab===x.k?' on':'')+'" data-chip="ptab" data-val="'+x.k+'" type="button">'+x.t
     +(x.k==='leave' && (S.leaveApplications||[]).filter(a=>a.status==='pending').length? ' ('+(S.leaveApplications||[]).filter(a=>a.status==='pending').length+')':'')
+    +(x.k==='overtime' && otPendingCount()? ' ('+otPendingCount()+')':'')
     +(x.k==='recruit' && (S.candidates||[]).filter(c=>c.status==='new').length? ' ('+(S.candidates||[]).filter(c=>c.status==='new').length+')':'')
     +'</button>').join('');
   if(tab==='leave') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+leaveTabHtml();
   if(tab==='staff') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+staffTabHtml();
   if(tab==='recruit') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+recruitTabHtml();
+  if(tab==='overtime') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+overtimeTabHtml();
   if(tab==='equipment'){
     const eq=S.equipment||[];
     const due=eq.filter(e=>e.calDue && daysFromToday(e.calDue)<30);
@@ -7080,6 +7082,13 @@ function render(){
   if(UI.view==='people' && (UI.filters.people||{}).ptab==='leave' && Date.now()-LAST_LEAVE_SYNC>8000){
     LAST_LEAVE_SYNC=Date.now(); syncPortalLeave(true);
   }
+  const otEl=document.getElementById('otQr');
+  if(otEl && window.QRCode){ otEl.innerHTML='';
+    try{ new QRCode(otEl, {text:otUrl(), width:150, height:150, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){}
+  }
+  if(UI.view==='people' && (UI.filters.people||{}).ptab==='overtime' && Date.now()-LAST_OT_SYNC>8000){
+    LAST_OT_SYNC=Date.now(); syncOT(true);
+  }
   const rqEl=document.getElementById('recruitQr');
   if(rqEl && window.QRCode){ rqEl.innerHTML='';
     try{ new QRCode(rqEl, {text:applyUrl(), width:150, height:150, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){}
@@ -9056,13 +9065,235 @@ ACT['cand-qr-print'] = ()=>{
   if(el && window.QRCode){ try{ new QRCode(el,{text:applyUrl(), width:260, height:260, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){} }
 };
 
+/* ============================================================
+   OVERTIME (2026-09-29) — HOD requests → HR approves → HR verifies next day
+   ------------------------------------------------------------
+   Heads of Department request overtime from overtime.html (QR on this tab), signing in with their
+   leave-portal login. The request (date, work area, product, work, employees + planned times) lands
+   in Supabase hem_ot_requests and the HOD taps "Send to HR on WhatsApp". Supabase is the source of
+   truth: S.otRequests is only a mirror so the tab works offline and payroll can read it later.
+   HR decisions and the next-day verification are written to Supabase first, then mirrored.
+   ============================================================ */
+const OT_STATUS={pending:{t:'waiting for HR',c:'t-warn'},approved:{t:'approved',c:'t-ok'},rejected:{t:'not approved',c:'t-bad'},cancelled:{t:'withdrawn',c:'t-mute'},verified:{t:'verified',c:'t-info'}};
+const OT_DAYTYPES=[{v:'normal',t:'Normal working day'},{v:'rest',t:'Rest day (Sunday)'},{v:'holiday',t:'Public holiday'}];
+let LAST_OT_SYNC=0;
+function otUrl(){ return location.origin+location.pathname.replace(/[^/]*$/,'')+'overtime.html'; }
+function otHours(a,b){ const m=v=>{ const x=/^(\d{1,2}):(\d{2})/.exec(v||''); return x? (+x[1])*60+(+x[2]) : null; };
+  const s=m(a), e=m(b); if(s==null||e==null||s===e) return 0; return Math.round(((e>s?e-s:e+1440-s)/60)*100)/100; }
+function otFromRow(r){ return {id:r.id, requestedBy:r.requested_by, requesterName:r.requester_name||'', date:r.ot_date, area:r.area, product:r.product||'', work:r.work,
+  lines:Array.isArray(r.lines)? r.lines : [], totalHours:Number(r.total_hours)||0, dayType:r.day_type||'normal', status:r.status, hrComment:r.hr_comment||'',
+  decidedBy:r.decided_by||'', decidedAt:r.decided_at||'', verifiedBy:r.verified_by||'', verifiedAt:r.verified_at||'', verifyNote:r.verify_note||'', createdAt:r.created_at||''}; }
+function otToRow(o){ return {status:o.status, lines:o.lines, day_type:o.dayType, hr_comment:o.hrComment||null, decided_by:o.decidedBy||null, decided_at:o.decidedAt||null,
+  verified_by:o.verifiedBy||null, verified_at:o.verifiedAt||null, verify_note:o.verifyNote||null, total_hours:o.totalHours, updated_at:new Date().toISOString()}; }
+function syncOT(silent){
+  if(!window.HEM_AUTH){ if(!silent) toast('Portal connection not available on this page','bad'); return Promise.resolve(false); }
+  const since=new Date(Date.now()-150*864e5).toISOString().slice(0,10);
+  return window.HEM_AUTH.from('hem_ot_requests').select('*').gte('ot_date', since).then(({data,error})=>{
+    if(error){ if(!silent) toast('Could not load overtime requests — '+error.message,'bad'); return false; }
+    S.otRequests=S.otRequests||[];
+    let fresh=0, changed=false;
+    (data||[]).forEach(r=>{ const o=otFromRow(r), i=S.otRequests.findIndex(x=>x.id===o.id);
+      if(i<0){ S.otRequests.push(o); changed=true; if(o.status==='pending') fresh++; }
+      else if(JSON.stringify(S.otRequests[i])!==JSON.stringify(o)){ S.otRequests[i]=o; changed=true; } });
+    if(changed){ save(); render(); }
+    if(fresh) toast(fresh+' new overtime request(s) from Heads of Department','ok');
+    else if(!silent) toast('Overtime requests up to date','ok');
+    return true;
+  }).catch(()=>{ if(!silent) toast('Could not reach the database','bad'); return false; });
+}
+function otSave(o, msg){
+  if(!window.HEM_AUTH) return toast('Sign in first — overtime decisions are saved to the shared database','bad'), Promise.resolve(false);
+  return window.HEM_AUTH.from('hem_ot_requests').update(otToRow(o)).eq('id', o.id).then(({error})=>{
+    if(error){ toast('Not saved — '+error.message,'bad'); return false; }
+    const i=(S.otRequests||[]).findIndex(x=>x.id===o.id); if(i>=0) S.otRequests[i]=o; else (S.otRequests=S.otRequests||[]).push(o);
+    logAudit(msg, o.id, o.requesterName+' · '+o.date+' · '+o.area); save(); render(); return true; });
+}
+const otFind=id=>(S.otRequests||[]).find(x=>x.id===id);
+const otFmtDate=d=>d? new Date(d+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}) : '';
+function otPeople(o, verified){
+  return (o.lines||[]).map(l=>'<div class="sub"'+(l.approved===false?' style="text-decoration:line-through;opacity:.6"':'')+'>'+esc(l.name)+' <span class="mono">'+esc(l.start)+'–'+esc(l.end)+'</span>'
+    +(verified? (l.attended===false? ' <span class="tag t-bad">absent</span>' : ' <span class="tag t-ok">'+nf(l.actual_hours,2)+' h</span>'+(l.completed&&l.completed!=='yes'?' <span class="tag t-warn">'+esc(l.completed==='partly'?'partly done':'not done')+'</span>':'')) : '')
+    +'</div>').join('');
+}
+function otDueVerify(){ const td=today(); return (S.otRequests||[]).filter(o=>o.status==='approved' && o.date<td); }
+function otPendingCount(){ return (S.otRequests||[]).filter(o=>o.status==='pending').length + otDueVerify().length; }
+
+function overtimeTabHtml(){
+  const all=S.otRequests||[], td=today();
+  const pending=sortBy(all.filter(o=>o.status==='pending'),'date');
+  const due=sortBy(otDueVerify(),'date');
+  const upcoming=sortBy(all.filter(o=>o.status==='approved' && o.date>=td),'date');
+  const month=F('otmonth', td.slice(0,7));
+  const verified=sortBy(all.filter(o=>o.status==='verified' && o.date.slice(0,7)===month),'date','desc');
+  const hrsBy=k=>verified.reduce((s,o)=>s+(o.lines||[]).filter(l=>l.approved!==false && l.attended!==false).reduce((x,l)=>x+(Number(l.actual_hours)||0),0)*(k==null||o.dayType===k?1:0),0);
+  const months=[...new Set(all.map(o=>o.date.slice(0,7)).concat([td.slice(0,7)]))].sort().reverse();
+  let h=KPI([
+    {k:'Waiting for approval', v:nf(pending.length), d:'requests from HODs', cls:pending.length?'warn':''},
+    {k:'To verify', v:nf(due.length), d:'approved overtime already worked — confirm attendance', cls:due.length?'warn':'ok'},
+    {k:'Upcoming approved', v:nf(upcoming.length), d:'today and later'},
+    {k:'Verified hours — '+month, v:nf(hrsBy(null),1), d:nf(hrsBy('normal'),1)+' normal · '+nf(hrsBy('rest'),1)+' rest day · '+nf(hrsBy('holiday'),1)+' holiday'}]);
+  h+=filterBar([btn('Check for new requests','ot-sync',null,'btn'), btn('Print overtime QR poster','leave-qr-poster','ot','btn primary'),
+    btn('Set HR head WhatsApp','ot-hr-set',null,'btn'), btn('HODs who can request','ot-hods',null,'btn')]);
+  if(due.length) h+='<div class="banner warn" style="margin-bottom:12px"><b>'+due.length+' overtime sheet(s) to verify.</b> Check each person attended and finished the work, and enter the actual hours — this is what payroll will pay.</div>';
+  const cols=(extra)=>[
+    {h:'Date', f:o=>'<b class="mono">'+esc(o.date)+'</b><div class="sub">'+esc(otFmtDate(o.date).split(',')[0])+(o.dayType!=='normal'?' · '+esc(o.dayType==='rest'?'rest day':'public holiday'):'')+'</div>'},
+    {h:'Requested by', f:o=>'<b>'+esc(o.requesterName||employee(o.requestedBy).name)+'</b><div class="sub mono">'+esc(o.id)+'</div>'},
+    {h:'Where / work', f:o=>'<b>'+esc(o.area)+'</b>'+(o.product?'<div class="sub">🧴 '+esc(o.product)+'</div>':'')+'<div class="sub">'+esc(o.work)+'</div>'},
+    {h:'People', f:o=>otPeople(o, o.status==='verified')},
+    {h:'Hours', c:'num', f:o=>nf(o.totalHours,2)+'<div class="sub">'+(o.lines||[]).filter(l=>l.approved!==false).length+' ppl</div>'}].concat(extra);
+  if(pending.length) h+=sect('Waiting for HR approval', T(cols([{h:'', f:o=>btn('Approve','ot-approve',o.id,'btn sm primary')+btn('Not approve','ot-reject',o.id,'btn sm danger')+btn('Print','ot-print',o.id,'btn sm')}]), pending));
+  if(due.length) h+=sect('Verify — did they work it?', T(cols([{h:'', f:o=>btn('Verify attendance','ot-verify',o.id,'btn sm primary')+btn('Print','ot-print',o.id,'btn sm')}]), due));
+  if(upcoming.length) h+=sect('Approved — coming up', T(cols([{h:'', f:o=>(o.hrComment?'<div class="sub">“'+esc(o.hrComment)+'”</div>':'')+btn('Tell HOD','ot-notify',o.id,'btn sm')+btn('Print','ot-print',o.id,'btn sm')+(o.date===td?btn('Verify now','ot-verify',o.id,'btn sm'):'')}]), upcoming));
+  h+=sect('Verified overtime — '+month, T(cols([{h:'Verified', f:o=>'<span class="sub">'+esc(o.verifiedBy)+' · '+esc(String(o.verifiedAt).slice(0,10))+'</span>'+(o.verifyNote?'<div class="sub">'+esc(o.verifyNote)+'</div>':'')},
+      {h:'', f:o=>btn('Print','ot-print',o.id,'btn sm')}]), verified, {empty:'No verified overtime in '+month+' yet.'}),
+    selCtl('otmonth', months.map(m=>({v:m,t:m})), month, 'Month')+' '+btn('Excel for payroll','ot-export',month,'btn sm'));
+  const recent=sortBy(all.filter(o=>(o.status==='rejected'||o.status==='cancelled') && o.date>=new Date(Date.now()-30*864e5).toISOString().slice(0,10)),'date','desc');
+  if(recent.length) h+=sect('Not approved / withdrawn — last 30 days', T(cols([{h:'Status', f:o=>'<span class="tag '+OT_STATUS[o.status].c+'">'+esc(OT_STATUS[o.status].t)+'</span>'+(o.hrComment?'<div class="sub">'+esc(o.hrComment)+'</div>':'')}]), recent));
+  h+=sect('Scan to request overtime (Heads of Department)', '<div class="card" style="text-align:center;max-width:280px"><div id="otQr" style="display:flex;justify-content:center;margin-bottom:10px"></div>'
+    +'<div style="font-size:12.5px;color:var(--ink2)">HODs sign in with their leave-portal Employee ID + password. Only people marked “Can request overtime”, or set as someone\'s Superior, can get in.</div>'
+    +'<div class="mono" style="font-size:12px;margin-top:8px">HR head WhatsApp: '+esc((S.settings||{}).otHrWhatsapp||(S.settings||{}).hrWhatsapp||'— not set —')+'</div></div>');
+  return h;
+}
+
+/* ---- decide ---- */
+ACT['ot-sync']=()=>syncOT(false);
+ACT['ot-approve']=id=>{
+  const o=otFind(id); if(!o||o.status!=='pending') return;
+  modal('Approve overtime — '+esc(o.requesterName), '<div class="note" style="margin-bottom:10px"><b>'+esc(otFmtDate(o.date))+' · '+esc(o.area)+'</b>'+(o.product?' · '+esc(o.product):'')+'<br>'+esc(o.work)+'</div>'
+    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:6px">Untick anyone you do not approve.</div>'
+    +(o.lines||[]).map((l,i)=>'<label style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" data-otok="'+i+'" checked> <span style="flex:1"><b>'+esc(l.name)+'</b> <span class="sub mono">'+esc(l.emp_no)+'</span></span><span class="mono">'+esc(l.start)+'–'+esc(l.end)+' · '+nf(l.hours,2)+'h</span></label>').join('')
+    +'<div class="field" style="margin-top:10px"><label>Comment to HOD (optional)</label><input id="otComment" maxlength="300" placeholder="e.g. Approved — max 3 hours"></div>',
+    btn('Approve','ot-approve-save',id,'btn primary'), true);
+};
+ACT['ot-approve-save']=id=>{
+  const cur=otFind(id); if(!cur||cur.status!=='pending') return closeModal();
+  const o=clone(cur); const oks=[...document.querySelectorAll('[data-otok]')];
+  o.lines.forEach((l,i)=>{ const cb=oks.find(c=>+c.dataset.otok===i); l.approved=!cb||cb.checked; });
+  if(!o.lines.some(l=>l.approved)) return toast('Nobody ticked — use “Not approve” instead','bad');
+  o.status='approved'; o.hrComment=(document.getElementById('otComment')||{}).value||''; o.decidedBy=UI.user||'HR'; o.decidedAt=new Date().toISOString();
+  o.totalHours=Math.round(o.lines.filter(l=>l.approved).reduce((s,l)=>s+Number(l.hours||0),0)*100)/100;
+  otSave(o,'Overtime approved').then(ok=>{ if(ok) ACT['ot-notify'](id); });
+};
+ACT['ot-reject']=id=>{
+  const o=otFind(id); if(!o||o.status!=='pending') return;
+  formModal({title:'Not approve overtime — '+o.requesterName, intro:otFmtDate(o.date)+' · '+o.area+' · '+(o.lines||[]).length+' people',
+    fields:[{k:'reason',label:'Reason (sent to the HOD)',type:'textarea',rows:2,req:true,full:true}], saveLabel:'Not approve',
+    onSave:v=>{ if(String(v.reason||'').trim().length<3) return toast('Give a short reason','bad');
+      const cur=otFind(id); if(!cur||cur.status!=='pending') return closeModal();
+      const x=clone(cur); x.status='rejected'; x.hrComment=v.reason.trim(); x.decidedBy=UI.user||'HR'; x.decidedAt=new Date().toISOString();
+      otSave(x,'Overtime not approved').then(ok=>{ if(ok) ACT['ot-notify'](id); }); }});
+};
+ACT['ot-notify']=id=>{
+  const o=otFind(id); if(!o) return;
+  const hod=employee(o.requestedBy), ok=o.status==='approved'||o.status==='verified';
+  const text='HE Manufacturing — OVERTIME '+(ok?'APPROVED ✅':'NOT APPROVED ❌')+'\nRef: '+o.id+'\n📅 '+otFmtDate(o.date)+' · '+o.area+(o.product?' · '+o.product:'')
+    +(ok? '\n\nApproved:\n'+o.lines.filter(l=>l.approved!==false).map(l=>'• '+l.name+' '+l.start+'–'+l.end).join('\n')
+         +(o.lines.some(l=>l.approved===false)? '\n\nNot approved:\n'+o.lines.filter(l=>l.approved===false).map(l=>'• '+l.name).join('\n') : '') : '')
+    +(o.hrComment?'\n\nHR: '+o.hrComment:'')+(ok?'\n\nHR will check attendance the next day.':'');
+  const link=waLink(empWa(hod)||hod.phone, text);
+  modal((ok?'Approved':'Not approved')+' — tell '+esc(o.requesterName),
+    '<div class="note" style="margin-bottom:12px">Saved. The HOD also sees this on the overtime page.</div><pre style="white-space:pre-wrap;font-family:inherit;background:var(--sunk);border-radius:8px;padding:10px 12px;margin:4px 0 12px">'+esc(text)+'</pre>'
+    +(link? '<a class="btn primary" href="'+esc(link)+'" target="_blank" rel="noopener">Send WhatsApp to '+esc(o.requesterName)+'</a>' : '<div class="banner warn">No WhatsApp number on file for '+esc(o.requesterName)+' — add it under Employees.</div>'), '', false);
+};
+
+/* ---- verify the next day ---- */
+ACT['ot-verify']=id=>{
+  const o=otFind(id); if(!o||(o.status!=='approved'&&o.status!=='verified')) return;
+  const rows=(o.lines||[]).map((l,i)=>l.approved===false? '' : '<tr data-otv="'+i+'"><td><b>'+esc(l.name)+'</b><div class="sub mono">'+esc(l.emp_no)+' · planned '+esc(l.start)+'–'+esc(l.end)+'</div></td>'
+      +'<td><select data-v="attended"><option value="yes"'+(l.attended!==false?' selected':'')+'>Yes</option><option value="no"'+(l.attended===false?' selected':'')+'>No</option></select></td>'
+      +'<td><input type="time" data-v="actual_start" value="'+esc(l.actual_start||l.start)+'" style="width:100px"></td><td><input type="time" data-v="actual_end" value="'+esc(l.actual_end||l.end)+'" style="width:100px"></td>'
+      +'<td><select data-v="completed"><option value="yes"'+((l.completed||'yes')==='yes'?' selected':'')+'>Completed</option><option value="partly"'+(l.completed==='partly'?' selected':'')+'>Partly</option><option value="no"'+(l.completed==='no'?' selected':'')+'>Not done</option></select></td>'
+      +'<td><input data-v="remark" value="'+esc(l.remark||'')+'" placeholder="remark" style="width:140px"></td></tr>').join('');
+  modal('Verify overtime — '+esc(otFmtDate(o.date))+' · '+esc(o.area),
+    '<div class="note" style="margin-bottom:10px">Requested by <b>'+esc(o.requesterName)+'</b> · '+esc(o.work)+(o.product?' · '+esc(o.product):'')+'<br>Check against the attendance (iVMS) punches and the HOD. Actual hours are what payroll will pay.</div>'
+    +'<div class="tw"><table><thead><tr><th>Employee</th><th>Attended</th><th>Actual from</th><th>Actual to</th><th>Work</th><th>Remark</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="fgrid" style="margin-top:10px"><div class="field"><label>Day type (pay rate)</label><select id="otDayType">'+OT_DAYTYPES.map(d=>'<option value="'+d.v+'"'+(o.dayType===d.v?' selected':'')+'>'+esc(d.t)+'</option>').join('')+'</select></div>'
+    +'<div class="field"><label>Note (optional)</label><input id="otVNote" value="'+esc(o.verifyNote||'')+'"></div></div>',
+    btn('Save verification','ot-verify-save',id,'btn primary'), true);
+};
+ACT['ot-verify-save']=id=>{
+  const cur=otFind(id); if(!cur) return closeModal();
+  const o=clone(cur);
+  for(const tr of document.querySelectorAll('[data-otv]')){
+    const l=o.lines[+tr.dataset.otv], g=k=>tr.querySelector('[data-v="'+k+'"]').value;
+    l.attended=g('attended')==='yes'; l.actual_start=l.attended?g('actual_start'):''; l.actual_end=l.attended?g('actual_end'):'';
+    l.actual_hours=l.attended? otHours(l.actual_start,l.actual_end) : 0; l.completed=l.attended? g('completed') : 'no'; l.remark=g('remark').trim();
+    if(l.attended && !l.actual_hours) return toast('Check the actual times for '+l.name,'bad');
+  }
+  o.dayType=document.getElementById('otDayType').value; o.verifyNote=document.getElementById('otVNote').value.trim();
+  o.status='verified'; o.verifiedBy=UI.user||'HR'; o.verifiedAt=new Date().toISOString();
+  otSave(o,'Overtime verified').then(ok=>{ if(ok){ closeModal(); toast('Verified — '+nf(o.lines.reduce((s,l)=>s+(Number(l.actual_hours)||0),0),2)+' hours recorded','ok'); } });
+};
+
+/* ---- print / export / settings ---- */
+ACT['ot-print']=id=>{
+  const o=otFind(id); if(!o) return;
+  const cell='border:1px solid #555;padding:5px 7px;font-size:12px;vertical-align:top', v=o.status==='verified';
+  const html='<div style="font-family:Archivo,Arial,sans-serif;color:#111;max-width:980px;margin:0 auto">'
+    +'<div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #522B39;padding-bottom:8px;margin-bottom:10px">'+logoImg(58)
+    +'<div><div style="font:700 15px Fraunces,serif">HE MANUFACTURING (M) SDN BHD</div><div style="font-size:11px;color:#555">Human Resources · Form HR/OT-01</div></div>'
+    +'<div style="margin-left:auto;text-align:right"><div style="font:700 17px Fraunces,serif">OVERTIME REQUEST</div><div style="font-size:11px" class="mono">'+esc(o.id)+'</div></div></div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr><td style="'+cell+'"><b>Requested by (HOD)</b><br>'+esc(o.requesterName)+' ('+esc(o.requestedBy)+')</td><td style="'+cell+'"><b>Date of overtime</b><br>'+esc(otFmtDate(o.date))+' — '+esc((OT_DAYTYPES.find(d=>d.v===o.dayType)||{}).t||'')+'</td></tr>'
+    +'<tr><td style="'+cell+'"><b>Where</b><br>'+esc(o.area)+'</td><td style="'+cell+'"><b>Product / batch</b><br>'+esc(o.product||'—')+'</td></tr>'
+    +'<tr><td colspan="2" style="'+cell+'"><b>Work to be done</b><br>'+esc(o.work)+'</td></tr></table>'
+    +'<table style="width:100%;border-collapse:collapse"><tr>'+['#','Employee','Emp no.','Planned','Hrs','HR approved','Attended','Actual','Actual hrs','Work done','Remark'].map(x=>'<th style="'+cell+';background:#f4eeee;text-align:left">'+x+'</th>').join('')+'</tr>'
+    +(o.lines||[]).map((l,i)=>'<tr><td style="'+cell+'">'+(i+1)+'</td><td style="'+cell+'">'+esc(l.name)+'</td><td style="'+cell+'">'+esc(l.emp_no)+'</td><td style="'+cell+'">'+esc(l.start)+'–'+esc(l.end)+'</td><td style="'+cell+'">'+nf(l.hours,2)+'</td>'
+      +'<td style="'+cell+'">'+(o.status==='pending'?'':l.approved===false?'No':'Yes')+'</td><td style="'+cell+'">'+(v?(l.attended===false?'No':'Yes'):'')+'</td><td style="'+cell+'">'+(v&&l.attended!==false?esc(l.actual_start)+'–'+esc(l.actual_end):'')+'</td>'
+      +'<td style="'+cell+'">'+(v?nf(l.actual_hours||0,2):'')+'</td><td style="'+cell+'">'+(v?esc({yes:'Completed',partly:'Partly',no:'Not done'}[l.completed]||''):'')+'</td><td style="'+cell+'">'+esc(l.remark||'')+'</td></tr>').join('')
+    +'</table>'
+    +'<table style="width:100%;border-collapse:collapse;margin-top:10px"><tr><td style="'+cell+';height:44px"><b>HOD</b><br>'+esc(o.requesterName)+' · '+esc(String(o.createdAt).slice(0,10))+' <span style="font-size:10px;color:#555">(submitted online)</span></td>'
+    +'<td style="'+cell+'"><b>HR approval</b><br>'+(o.decidedBy? esc(o.decidedBy)+' · '+esc(String(o.decidedAt).slice(0,10))+(o.hrComment?' — '+esc(o.hrComment):'') : '')+'</td>'
+    +'<td style="'+cell+'"><b>Verified (attendance)</b><br>'+(o.verifiedBy? esc(o.verifiedBy)+' · '+esc(String(o.verifiedAt).slice(0,10)) : '')+'</td></tr></table></div>';
+  printModal('Overtime '+o.id, html);
+};
+ACT['ot-export']=month=>{
+  const rows=sortBy((S.otRequests||[]).filter(o=>o.status==='verified' && o.date.slice(0,7)===month),'date');
+  if(!rows.length) return toast('No verified overtime in '+month,'bad');
+  const detail=[['Date','Day type','Emp no.','Name','Department','Where','Product','Work','Planned from','Planned to','Actual from','Actual to','Actual hours','Work done','Remark','HOD','Ref']];
+  const per=new Map();
+  rows.forEach(o=>o.lines.filter(l=>l.approved!==false).forEach(l=>{
+    const hrs=l.attended===false?0:Number(l.actual_hours)||0;
+    detail.push([o.date,o.dayType,l.emp_no,l.name,l.department||employee(l.emp_no).department||'',o.area,o.product,o.work,l.start,l.end,l.actual_start||'',l.actual_end||'',hrs,l.attended===false?'Absent':({yes:'Completed',partly:'Partly',no:'Not done'}[l.completed]||''),l.remark||'',o.requesterName,o.id]);
+    const p=per.get(l.emp_no)||{name:l.name,normal:0,rest:0,holiday:0}; p[o.dayType]=(p[o.dayType]||0)+hrs; per.set(l.emp_no,p); }));
+  const sum=[['Emp no.','Name','Normal day OT hrs','Rest day (Sunday) OT hrs','Public holiday OT hrs','Total hrs']];
+  [...per.entries()].sort((a,b)=>a[1].name.localeCompare(b[1].name)).forEach(([k,p])=>sum.push([k,p.name,p.normal,p.rest,p.holiday,Math.round((p.normal+p.rest+p.holiday)*100)/100]));
+  xlsxDownload('HE-Overtime-'+month+'.xlsx',[{name:'Summary by employee',rows:sum,cols:[10,34,16,20,18,10]},{name:'Detail',rows:detail,cols:[11,9,9,30,14,22,20,36,8,8,8,8,8,11,20,20,18]}]);
+  logAudit('Overtime exported', month, rows.length+' requests');
+};
+ACT['ot-hr-set']=()=>{
+  const st=S.settings||{};
+  formModal({title:'HR head WhatsApp for overtime requests', values:{phone:st.otHrWhatsapp||st.hrWhatsapp||'', name:st.otHrName||st.hrName||'HR'},
+    intro:'After a Head of Department submits an overtime request, their page shows a button that sends it to this number.',
+    fields:[{k:'phone',label:'HR head WhatsApp number',type:'tel',req:true,ph:'012-345 6789'},{k:'name',label:'Shown as',ph:'HR Manager'}], saveLabel:'Save',
+    onSave:v=>{ const n=waNumber(v.phone); if(!n) return toast('Enter a valid Malaysian mobile number','bad'); if(!window.HEM_AUTH) return toast('Sign in first','bad');
+      S.settings.otHrWhatsapp=v.phone.trim(); S.settings.otHrName=(v.name||'').trim(); logAudit('HR head WhatsApp for overtime set','',n); save();
+      window.HEM_AUTH.from('hem_portal_settings').upsert([{key:'ot_hr_whatsapp',value:n},{key:'ot_hr_name',value:S.settings.otHrName||'HR'}],{onConflict:'key'})
+        .then(({error})=>toast(error?'Saved here, but not on the server — '+error.message:'Saved — overtime requests will go to +'+n, error?'warn':'ok')); }});
+};
+ACT['ot-hods']=()=>{
+  const sup=new Set((S.employees||[]).map(e=>e.superiorEmpNo).filter(Boolean));
+  const list=sortBy((S.employees||[]).filter(e=>empActive(e)),'name');
+  modal('Who can request overtime', '<div class="note" style="margin-bottom:10px">Tick the Heads of Department / supervisors who may request overtime. Anyone set as another employee\'s Superior can already request. They sign in with their leave-portal password — make sure they have registered.</div>'
+    +'<div style="max-height:52vh;overflow:auto">'+list.map(e=>'<label style="display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)"><input type="checkbox" data-hod="'+esc(e.empNo)+'"'+(e.canRequestOT==='yes'?' checked':'')+'>'
+      +'<span style="flex:1"><b>'+esc(e.name)+'</b> <span class="sub mono">'+esc(e.empNo)+'</span> <span class="sub">'+esc(e.department||'')+'</span></span>'+(sup.has(e.empNo)?'<span class="tag t-info">superior</span>':'')+(e.portalRegistered?'':' <span class="tag t-mute">not registered</span>')+'</label>').join('')+'</div>',
+    btn('Save','ot-hods-save',null,'btn primary'), true);
+};
+ACT['ot-hods-save']=()=>{
+  const changed=[];
+  document.querySelectorAll('[data-hod]').forEach(cb=>{ const e=(S.employees||[]).find(x=>x.empNo===cb.dataset.hod); if(!e) return;
+    const v=cb.checked?'yes':''; if((e.canRequestOT||'')!==v){ e.canRequestOT=v; changed.push(e.empNo); } });
+  closeModal(); if(!changed.length) return toast('No changes','ok');
+  logAudit('Overtime requesters updated','',changed.join(', ')); save(); render(); pushEmployeesToPortal(changed);
+};
+
 /* company seal for printed forms — high-res file next to index.html, falls back to the embedded sidebar crest */
 function crestSrc(){ const i=document.querySelector('.brandbox .crest img, .crest img'); return i? i.src : ''; }
 function logoImg(px){ return '<img src="hem-seal.png" alt="HE Manufacturing" onerror="this.onerror=null;this.src=crestSrc()" style="width:'+px+'px;height:'+px+'px;object-fit:contain;flex:none">'; }
 /* printable QR poster (A4) + four A6 cards to stick around the factory */
-ACT['leave-qr-poster']=()=>{
+ACT['leave-qr-poster']=kind=>{
   if(!window.QRCode) return toast('QR code library not loaded — check the internet connection','bad');
-  const url=window.HEM_PORTAL_URL || (location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-portal.html');
+  const OT=kind==='ot';
+  const url=OT? (window.HEM_OT_URL || otUrl()) : (window.HEM_PORTAL_URL || (location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-portal.html'));
   const qr=(px)=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;left:-9999px'; document.body.appendChild(d);
     new QRCode(d,{text:url,width:px,height:px,colorDark:'#3a1f29',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
     const c=d.querySelector('canvas'), src=c? c.toDataURL('image/png') : (d.querySelector('img')||{}).src; d.remove(); return src; };
@@ -9075,30 +9306,37 @@ ACT['leave-qr-poster']=()=>{
     +'<div style="display:flex;flex-direction:column;align-items:center">'+logoImg(120).replace('style="','style="margin-bottom:6px;')
     +'<div style="font:600 15px Fraunces,Georgia,serif;letter-spacing:.04em">HE MANUFACTURING (M) SDN BHD</div></div>'
     +'<div style="height:2px;background:'+B+';opacity:.6;margin:10px 0 12px"></div>'
-    +'<div style="font:700 34px Fraunces,Georgia,serif;color:'+W+';line-height:1.05">Apply for Leave</div>'
-    +'<div style="font:600 22px Fraunces,Georgia,serif;color:'+B+';margin-top:2px">Mohon Cuti</div>'
+    +'<div style="font:700 34px Fraunces,Georgia,serif;color:'+W+';line-height:1.05">'+(OT?'Overtime Request':'Apply for Leave')+'</div>'
+    +'<div style="font:600 22px Fraunces,Georgia,serif;color:'+B+';margin-top:2px">'+(OT?'Permohonan Kerja Lebih Masa':'Mohon Cuti')+'</div>'
     +'<div style="font-size:14px;margin:8px 0 10px">Scan with your phone camera · <span style="color:#5c4b51">Imbas dengan kamera telefon anda</span></div>'
     +'<div style="display:inline-block;padding:10px;border:3px solid '+W+';border-radius:14px;background:#fff"><img src="'+big+'" alt="QR" style="width:92mm;height:92mm;display:block;image-rendering:pixelated"></div>'
     +'<div style="font:600 13px \'IBM Plex Mono\',monospace;margin:6px 0 14px;color:#5c4b51">'+esc(shortUrl)+'</div>'
     +'<div style="text-align:left;max-width:150mm;margin:0 auto">'
-    +step(1,'First time: tap “Register”. Enter your Employee ID, IC / passport no. and phone, then set your own password.','Kali pertama: tekan “Daftar”. Masukkan ID Pekerja, No. IC / pasport dan telefon, kemudian tetapkan kata laluan anda sendiri.')
+    +(OT? step(1,'For Heads of Department / supervisors only. Sign in with your leave-portal Employee ID + password.','Untuk Ketua Jabatan / penyelia sahaja. Log masuk dengan ID Pekerja + kata laluan portal cuti.')
+      +step(2,'Choose the date, where they will work (line / mixing / QC…), the product and the work to be done. Tick the employees and their times.','Pilih tarikh, tempat kerja (line / campuran / QC…), produk dan kerja yang akan dibuat. Tandakan pekerja dan masa mereka.')
+      +step(3,'Tap “Send to HR on WhatsApp”. HR approves in the system, and checks attendance the next day.','Tekan “Hantar kepada HR melalui WhatsApp”. HR meluluskan dalam sistem dan menyemak kehadiran keesokan hari.') : '')
+    +(OT?'':step(1,'First time: tap “Register”. Enter your Employee ID, IC / passport no. and phone, then set your own password.','Kali pertama: tekan “Daftar”. Masukkan ID Pekerja, No. IC / pasport dan telefon, kemudian tetapkan kata laluan anda sendiri.')
     +step(2,'Sign in with Employee ID + password and fill in the leave form.','Log masuk dengan ID Pekerja + kata laluan dan isi borang cuti.')
-    +step(3,'Tap “Send on WhatsApp” to your Head of Department. After HOD approves, HR gives the final approval.','Tekan “Hantar melalui WhatsApp” kepada Ketua Jabatan. Selepas Ketua Jabatan lulus, HR memberi kelulusan akhir.')
+    +step(3,'Tap “Send on WhatsApp” to your Head of Department. After HOD approves, HR gives the final approval.','Tekan “Hantar melalui WhatsApp” kepada Ketua Jabatan. Selepas Ketua Jabatan lulus, HR memberi kelulusan akhir.'))
     +'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:left;margin-top:12px">'
-    +rule('Annual leave','Apply at least 14 days before.','Mohon sekurang-kurangnya 14 hari lebih awal.')
+    +(OT? rule('Before the overtime','Request and get HR approval before the overtime starts.','Mohon dan dapatkan kelulusan HR sebelum OT bermula.')
+      +rule('Only approved people','Only employees approved by HR will be paid overtime.','Hanya pekerja yang diluluskan HR akan dibayar OT.')
+      +rule('Next day','HR checks attendance and actual hours — this is what is paid.','HR menyemak kehadiran dan jam sebenar — ini yang akan dibayar.') : '')
+    +(OT?'':rule('Annual leave','Apply at least 14 days before.','Mohon sekurang-kurangnya 14 hari lebih awal.')
     +rule('Medical (MC)','Apply on the same day. Upload MC by 12:00 midnight the next day.','Mohon pada hari yang sama. Muat naik MC sebelum 12 tengah malam keesokan hari.')
-    +rule('Emergency (unpaid)','Apply at least 4 hours before work starts, or 1½ days’ salary is deducted.','Mohon sekurang-kurangnya 4 jam sebelum kerja bermula, jika tidak gaji 1½ hari dipotong.')
+    +rule('Emergency (unpaid)','Apply at least 4 hours before work starts, or 1½ days’ salary is deducted.','Mohon sekurang-kurangnya 4 jam sebelum kerja bermula, jika tidak gaji 1½ hari dipotong.'))
     +'</div>'
-    +'<div style="font-size:11px;color:#8a7b76;margin-top:12px">Don’t know your Employee ID or forgot your password? Tap “Forgot password?” or ask HR. · Tidak tahu ID Pekerja? Tanya HR.</div>'
+    +'<div style="font-size:11px;color:#8a7b76;margin-top:12px">'+(OT?'No password yet? Register on the leave portal first. Not allowed in? Ask HR to enable overtime requests for you.':'')+'</div>'
+    +(OT?'':'<div style="font-size:11px;color:#8a7b76;margin-top:4px">Don’t know your Employee ID or forgot your password? Tap “Forgot password?” or ask HR. · Tidak tahu ID Pekerja? Tanya HR.</div>')
     +'</div>';
   const card='<div style="border:1.5px dashed #b9a9a3;border-radius:10px;padding:8mm 6mm;text-align:center;font-family:Archivo,Arial,sans-serif;color:#231a1c;display:flex;flex-direction:column;align-items:center;justify-content:center">'
     +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+logoImg(40)+'<div style="text-align:left"><div style="font:700 17px Fraunces,Georgia,serif;color:'+W+';line-height:1.05">Apply for Leave</div><div style="font:600 13px Fraunces,Georgia,serif;color:'+B+'">Mohon Cuti</div></div></div>'
     +'<img src="'+small+'" alt="QR" style="width:52mm;height:52mm;display:block;image-rendering:pixelated">'
-    +'<div style="font-size:11px;margin-top:5px">Scan · Register · Apply · Send to HOD</div><div style="font-size:10px;color:#5c4b51">Imbas · Daftar · Mohon · Hantar kepada Ketua Jabatan</div></div>';
+    +'<div style="font-size:11px;margin-top:5px">'+(OT?'HODs: scan · sign in · request · send to HR':'Scan · Register · Apply · Send to HOD')+'</div><div style="font-size:10px;color:#5c4b51">'+(OT?'Ketua Jabatan: imbas · log masuk · mohon · hantar kepada HR':'Imbas · Daftar · Mohon · Hantar kepada Ketua Jabatan')+'</div></div>';
   const cards='<div style="page-break-before:always;break-before:page;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:128mm 128mm;gap:6mm;width:186mm;margin:0 auto">'+card+card+card+card+'</div>';
-  logAudit('Leave QR poster printed','',url);
-  printModal('Leave QR poster — A4 + 4 cards', '<style>@page{size:A4 portrait;margin:10mm}@media print{.qr-note{display:none!important}.qr-sheet{padding:0!important}}</style>'
+  logAudit((OT?'Overtime':'Leave')+' QR poster printed','',url);
+  printModal((OT?'Overtime':'Leave')+' QR poster — A4 + 4 cards', '<style>@page{size:A4 portrait;margin:10mm}@media print{.qr-note{display:none!important}.qr-sheet{padding:0!important}}</style>'
     +'<div class="note qr-note" style="margin-bottom:10px">Page 1: A4 poster for the notice board. Page 2: four small cards — cut along the dashed lines and stick them at the time clock, canteen and production lines.</div>'+'<div class="qr-sheet" style="background:#fff;padding:12px 0;border-radius:8px">'+poster+cards+'</div>');
 };
 
@@ -9418,7 +9656,7 @@ let LAST_LEAVE_SYNC=0;
 let PORTAL_HEAL_DONE=false;
 /* check the portal for new leave / HOD decisions every minute while the ERP is open (any screen),
    not only while HR → Leave is showing */
-setInterval(()=>{ try{ if(window.HEM_AUTH && S && document.visibilityState==='visible'){ LAST_LEAVE_SYNC=Date.now(); syncPortalLeave(true); } }catch(e){} }, 60000);
+setInterval(()=>{ try{ if(window.HEM_AUTH && S && document.visibilityState==='visible'){ LAST_LEAVE_SYNC=Date.now(); syncPortalLeave(true); LAST_OT_SYNC=Date.now(); syncOT(true); } }catch(e){} }, 60000);
 setTimeout(()=>{ try{ if(window.HEM_AUTH && S) syncPortalLeave(true); }catch(e){} }, 4000);
 /* who has registered in the portal (and the phone they registered with) → employee records */
 function syncPortalPhones(){
@@ -9504,7 +9742,7 @@ function pushEmployeesToPortal(empNos, quiet){
   const list=(S.employees||[]).filter(e=>!empNos||empNos.includes(e.empNo))
     .map(e=>({emp_no:e.empNo, name:e.name, department:e.department||'', status:e.status||'active',
       leave_scope:e.leaveScope||'full', staff_type:e.staffType||null, position:e.position||null,
-      superior_emp_no:(e.superiorEmpNo && e.superiorEmpNo!==e.empNo)? e.superiorEmpNo : null,
+      superior_emp_no:(e.superiorEmpNo && e.superiorEmpNo!==e.empNo)? e.superiorEmpNo : null, can_request_ot:e.canRequestOT==='yes',
       annual_entitlement:(e.annualEntitlement===''||e.annualEntitlement==null||isNaN(Number(e.annualEntitlement)))? null : Number(e.annualEntitlement)}));
   if(!list.length) return Promise.resolve(true);
   try{
@@ -9756,6 +9994,7 @@ function staffForm(e, isNew){
         {k:'position',label:'Position / designation'},
         {k:'superiorEmpNo',label:'Superior (approves leave first)',type:'select',opts:sortBy((S.employees||[]).filter(o=>empActive(o) && o.empNo!==v.empNo),'name').map(o=>({v:o.empNo,t:o.name+' ('+o.empNo+')'})),
           hint:'Leave goes to this person on WhatsApp before HR. Blank = straight to HR.'},
+        {k:'canRequestOT',label:'Can request overtime (HOD / supervisor)',type:'select',opts:[{v:'yes',t:'Yes'}],hint:'Lets this person request overtime from the Overtime QR. Superiors can already.'},
         {k:'joinDate',label:'Date joined',type:'date'},
         {k:'leaveScope',label:'Leave & portal access',type:'select',blank:false,opts:LEAVE_SCOPES},
         {k:'annualEntitlement',label:'Annual leave days / year',type:'number',step:'0.5',hint:'Blank = company default ('+nf(leaveType('annual').defaultDays)+').'},

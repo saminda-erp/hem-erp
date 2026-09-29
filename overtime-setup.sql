@@ -1,0 +1,17 @@
+-- HE Manufacturing — Overtime requests (applied as migration overtime_requests, 2026-09-29)
+-- Flow: HOD (overtime.html, leave-portal login) → ot_request → HOD taps WhatsApp to HR head
+--       → HR approves / removes people / rejects in the ERP (HR → Overtime) → next day HR verifies
+--       attendance, actual times and work done → verified hours exported to Excel for payroll.
+-- Tables / columns
+--   hem_employees.can_request_ot boolean  (HR ticks HODs; anyone set as someone's Superior can also request)
+--   hem_ot_requests(id 'OT-<digits>', requested_by, requester_name, ot_date, area, product, work,
+--     lines jsonb [{emp_no,name,department,start,end,hours,approved,attended,actual_start,actual_end,actual_hours,completed,remark}],
+--     total_hours, day_type normal|rest|holiday, status pending|approved|rejected|cancelled|verified,
+--     hr_comment, decided_by/at, verified_by/at, verify_note)
+--   RLS: authenticated (ERP staff) full access; anon has no table access — only the RPCs below.
+--   hem_portal_settings: ot_areas (JSON list of work areas), ot_hr_whatsapp / ot_hr_name (falls back to hr_whatsapp)
+-- RPCs (anon, security definer, re-check Employee ID + bcrypt password every call)
+--   ot_data(emp, pw)            → me, areas, HR WhatsApp, active staff list, my requests (45 days)
+--   ot_request(emp, pw, p)      → checks: HOD, date today..+60, area, work ≥10 chars, 1–80 people, valid HH:MM,
+--                                  ≤12 h each (crossing midnight allowed), no person double-booked for overlapping OT that day
+--   ot_cancel(emp, pw, id)      → withdraw while still pending

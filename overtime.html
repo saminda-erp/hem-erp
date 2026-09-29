@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>HE Manufacturing — Overtime Request</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="icon" type="image/png" href="hem-seal-160.png">
+<link rel="apple-touch-icon" href="hem-seal-160.png">
+<!--
+  HE Manufacturing — Overtime Request (HODs), 2026-09-29
+  -------------------------------------------------------
+  Opened from the Overtime QR on HR → Overtime. A Head of Department signs in with the same
+  Employee ID + password as the leave portal. Only HODs get in: an employee is an HOD when HR ticks
+  "Can request overtime" on their record, or when they are set as someone's Superior.
+    ot_data     → my requests, the staff list, work areas, HR WhatsApp number
+    ot_request  → submit (all checks server side: date, area, work, times, same person double-booked)
+    ot_cancel   → withdraw a request HR has not decided yet
+  HR approves in the ERP and, the next day, verifies who actually worked and for how long.
+-->
+<style>
+  :root{
+    --wine:#522B39; --wine-soft:#f4eeee; --brass:#9C7434; --brass-soft:#f6efe3;
+    --ink:#231a1c; --ink2:#5c4b51; --paper:#faf8f6; --card:#ffffff; --field:#ffffff;
+    --line:#e7dfdb; --muted:#8a7b76;
+    --ok:#2f6b46; --ok-bg:#e4f0e7; --bad:#a3312c; --bad-bg:#fbe4e2; --warn:#a86a10; --warn-bg:#fbeed9; --info:#35557f; --info-bg:#e5edf7;
+    --r:10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --wine:#c7899c; --wine-soft:#2d2226; --brass:#c9a063; --brass-soft:#2e2619;
+      --ink:#f1e9e6; --ink2:#c9bab5; --paper:#171214; --card:#211a1d; --field:#1b1517; --line:#3a2f33; --muted:#9a8b86;
+      --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15; --info:#9bbbe6; --info-bg:#1c2636;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;font-size:15.5px;line-height:1.5}
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .wrap{max-width:600px;margin:0 auto;padding:18px 16px 60px}
+  .topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;background:#522B39;color:#f7f0ee;position:sticky;top:0;z-index:5}
+  .crest{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex:none;padding:2px;overflow:hidden}
+  .crest img{width:100%;height:100%;object-fit:contain;display:block}
+  .topbar .name{font-family:'Fraunces',serif;font-size:15px;font-weight:600;line-height:1.2}
+  .topbar .sub{font-size:11.5px;color:rgba(247,240,238,.7)}
+  .lang{display:flex;border:1px solid rgba(255,255,255,.3);border-radius:20px;overflow:hidden;flex:none}
+  .lang button{background:transparent;color:#f7f0ee;border:0;padding:6px 10px;font:600 12px 'Archivo',sans-serif;cursor:pointer;width:auto}
+  .lang button.on{background:#f7f0ee;color:#522B39}
+  .topbtn{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:7px 10px;font:600 12px 'Archivo',sans-serif;cursor:pointer}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+  .card h3{font-size:16px;margin-bottom:10px}
+  label.l{display:block;font-size:13px;color:var(--ink2);margin-bottom:5px;font-weight:600}
+  .req{color:var(--bad)}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);
+    font-family:'Archivo',sans-serif;font-size:16px;background:var(--field);color:var(--ink);margin-bottom:12px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--wine);outline-offset:1px}
+  button{font-family:'Archivo',sans-serif;font-weight:600;font-size:15px;border:none;border-radius:var(--r);padding:12px 16px;cursor:pointer}
+  .btn-primary{background:#522B39;color:#f7f0ee;width:100%} .btn-primary:disabled{opacity:.5}
+  .btn-ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
+  .btn-sm{padding:7px 11px;font-size:13px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .msg{border-radius:var(--r);padding:10px 12px;font-size:13.5px;margin-bottom:12px}
+  .msg.err{background:var(--bad-bg);color:var(--bad)} .msg.ok{background:var(--ok-bg);color:var(--ok)}
+  .msg.warn{background:var(--warn-bg);color:var(--warn)} .msg.info{background:var(--info-bg);color:var(--info)}
+  .muted{color:var(--muted);font-size:12.5px}
+  .who{font-size:13.5px;font-weight:600;margin:-6px 0 12px;min-height:18px} .who.ok{color:var(--ok)} .who.bad{color:var(--bad)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 12px}
+  .chips button{background:var(--field);border:1px solid var(--line);color:var(--ink2);border-radius:20px;padding:6px 11px;font-size:13px;font-weight:600}
+  .chips button.on{border-color:var(--wine);background:var(--wine-soft);color:var(--wine)}
+  .picker{border:1px solid var(--line);border-radius:var(--r);max-height:280px;overflow-y:auto;margin-bottom:10px;background:var(--field)}
+  .picker .grp{position:sticky;top:0;background:var(--wine-soft);font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--wine);padding:6px 10px;display:flex;justify-content:space-between;align-items:center}
+  .picker .grp button{background:none;color:var(--wine);padding:0;font-size:11.5px;text-decoration:underline}
+  .picker label{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--line);font-size:14px;cursor:pointer}
+  .picker label:last-child{border-bottom:0}
+  .picker input{width:auto;margin:0;accent-color:var(--wine);transform:scale(1.2)}
+  .sel{border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px}
+  .selrow{display:grid;grid-template-columns:1fr 92px 92px 34px;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:14px}
+  .selrow:last-child{border-bottom:0}
+  .selrow input{margin:0;padding:8px 6px;font-size:15px}
+  .selrow .x{background:transparent;border:1px solid var(--line);color:var(--ink2);padding:6px 0;font-size:14px}
+  .selrow .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .total{background:var(--wine-soft);border-radius:var(--r);padding:10px 12px;font-size:14px;margin-bottom:12px;display:flex;justify-content:space-between}
+  .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:700;white-space:nowrap}
+  .tag.pending{background:var(--warn-bg);color:var(--warn)} .tag.approved,.tag.verified{background:var(--ok-bg);color:var(--ok)}
+  .tag.rejected{background:var(--bad-bg);color:var(--bad)} .tag.cancelled{background:var(--line);color:var(--ink2)}
+  .hist{padding:12px 0;border-bottom:1px solid var(--line);font-size:14px} .hist:last-child{border-bottom:none}
+  .hist ul{margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--ink2)}
+  .btn-wa{display:block;text-align:center;background:#25D366;color:#fff;border-radius:var(--r);padding:13px 16px;font-weight:700;text-decoration:none}
+  .wacard{border-color:#25D366}
+  [hidden]{display:none!important}
+  @media (max-width:420px){ .selrow{grid-template-columns:1fr 78px 78px 30px} }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="crest"><img src="hem-seal-160.png" alt="HE Manufacturing"></div>
+  <div style="flex:1;min-width:0"><div class="name" id="tbName">HE Manufacturing</div><div class="sub" id="tbSub"></div></div>
+  <div class="lang" role="group" aria-label="Language"><button type="button" data-lang="en" class="on">EN</button><button type="button" data-lang="ms">BM</button></div>
+  <button type="button" class="topbtn" id="logoutBtn" hidden></button>
+</div>
+
+<div id="loginScreen" class="wrap" style="padding-top:30px">
+  <div style="text-align:center;margin-bottom:18px">
+    <img src="hem-seal-160.png" alt="HE Manufacturing" style="width:84px;height:84px;object-fit:contain;background:#fff;border-radius:50%;padding:4px;margin-bottom:8px">
+    <h1 style="font-size:21px" data-t="title"></h1>
+    <div class="muted" data-t="loginSub"></div>
+  </div>
+  <form class="card" id="loginForm" autocomplete="on">
+    <div id="loginMsg"></div>
+    <label class="l" for="empNo" data-t="empId"></label>
+    <input id="empNo" autocomplete="username" autocapitalize="characters" required>
+    <div class="who" id="who"></div>
+    <label class="l" for="empPass" data-t="password"></label>
+    <input id="empPass" type="password" autocomplete="current-password" required>
+    <button type="submit" class="btn-primary" id="loginBtn"></button>
+    <div class="muted" style="margin-top:12px;text-align:center"><span data-t="noAccount"></span> <a href="leave-portal.html" data-t="goRegister"></a></div>
+  </form>
+</div>
+
+<div id="appScreen" class="wrap" hidden>
+  <div id="topMsg"></div>
+  <div id="waBox"></div>
+  <div class="card" id="formCard"></div>
+  <div class="card"><h3 data-t="myRequests"></h3><div id="history"></div></div>
+</div>
+
+<script>
+const sb = window.supabase && window.supabase.createClient('https://znxtvkpnwzrzevljdsgx.supabase.co','sb_publishable_3Q-qF58hDO6Q5Tr8Wr8X4A_WTBVR8z5',{auth:{persistSession:false}});
+const TX={
+  title:{en:'Overtime Request', ms:'Permohonan Kerja Lebih Masa'},
+  sub:{en:'Overtime request — Heads of Department', ms:'Permohonan OT — Ketua Jabatan'},
+  loginSub:{en:'For Heads of Department. Sign in with your leave-portal Employee ID and password.', ms:'Untuk Ketua Jabatan. Log masuk dengan ID Pekerja dan kata laluan portal cuti anda.'},
+  empId:{en:'Employee ID', ms:'ID Pekerja'}, password:{en:'Password', ms:'Kata laluan'},
+  signIn:{en:'Sign in', ms:'Log masuk'}, signingIn:{en:'Signing in…', ms:'Sedang log masuk…'}, signOut:{en:'Sign out', ms:'Log keluar'},
+  noAccount:{en:'No password yet?', ms:'Belum ada kata laluan?'}, goRegister:{en:'Register on the leave portal', ms:'Daftar di portal cuti'},
+  badLogin:{en:'Wrong Employee ID or password.', ms:'ID Pekerja atau kata laluan salah.'},
+  notHod:{en:'{n}, only Heads of Department can request overtime. If you are a HOD, ask HR to enable it for you.', ms:'{n}, hanya Ketua Jabatan boleh memohon OT. Jika anda Ketua Jabatan, minta HR mengaktifkannya.'},
+  notFound:{en:'Employee ID not found', ms:'ID Pekerja tidak dijumpai'},
+  offline:{en:'Could not connect — check your internet and try again.', ms:'Tidak dapat disambungkan — semak internet anda dan cuba lagi.'},
+  newReq:{en:'New overtime request', ms:'Permohonan OT baharu'},
+  otDate:{en:'Overtime date', ms:'Tarikh OT'}, sunday:{en:'Sunday — rest day', ms:'Ahad — hari rehat'},
+  area:{en:'Where will they work?', ms:'Di mana mereka akan bekerja?'}, areaOther:{en:'Describe the place', ms:'Nyatakan tempat'},
+  product:{en:'Product / batch (if any)', ms:'Produk / kelompok (jika ada)'}, productPh:{en:'e.g. Body wash 500 ml — batch B2610', ms:'cth. Sabun mandi 500 ml — kelompok B2610'},
+  work:{en:'Work to be done', ms:'Kerja yang akan dibuat'},
+  workPh:{en:'e.g. Fill and pack 3,000 bottles for Monday shipment', ms:'cth. Isi dan bungkus 3,000 botol untuk penghantaran Isnin'},
+  workPhQC:{en:'e.g. Test and release batch B2610, stability samples', ms:'cth. Uji dan lepaskan kelompok B2610, sampel kestabilan'},
+  workPhMix:{en:'e.g. Mix 500 kg shampoo base for tomorrow’s filling', ms:'cth. Campur 500 kg bahan asas syampu untuk pengisian esok'},
+  time:{en:'Planned time (for everyone — you can change each person below)', ms:'Masa dirancang (untuk semua — boleh ubah setiap orang di bawah)'},
+  from:{en:'From', ms:'Dari'}, to:{en:'To', ms:'Hingga'},
+  staff:{en:'Employees', ms:'Pekerja'}, search:{en:'Search name or ID…', ms:'Cari nama atau ID…'},
+  addAll:{en:'add all', ms:'tambah semua'}, selected:{en:'Selected ({n})', ms:'Dipilih ({n})'},
+  noneSel:{en:'Tick the employees who will work overtime.', ms:'Tandakan pekerja yang akan bekerja lebih masa.'},
+  total:{en:'{p} people · {h} hours', ms:'{p} orang · {h} jam'},
+  submit:{en:'Submit & send to HR', ms:'Hantar kepada HR'}, sending:{en:'Sending…', ms:'Menghantar…'},
+  sent:{en:'Request saved — {p} people, {h} hours. Now send it to HR on WhatsApp ↓', ms:'Permohonan disimpan — {p} orang, {h} jam. Sekarang hantar kepada HR melalui WhatsApp ↓'},
+  waTitle:{en:'Tell HR on WhatsApp', ms:'Maklumkan HR melalui WhatsApp'}, waBtn:{en:'Send to HR on WhatsApp', ms:'Hantar kepada HR melalui WhatsApp'},
+  waNoHr:{en:'HR has not set a WhatsApp number yet — HR will still see your request in the system.', ms:'HR belum menetapkan nombor WhatsApp — HR tetap boleh melihat permohonan anda dalam sistem.'},
+  myRequests:{en:'My overtime requests', ms:'Permohonan OT saya'}, none:{en:'No requests yet.', ms:'Tiada permohonan lagi.'},
+  cancel:{en:'Withdraw', ms:'Tarik balik'}, resend:{en:'Send to HR again', ms:'Hantar semula kepada HR'},
+  cancelled:{en:'Request withdrawn.', ms:'Permohonan ditarik balik.'},
+  hrNote:{en:'HR', ms:'HR'}, notApproved:{en:'not approved', ms:'tidak diluluskan'},
+  worked:{en:'worked {h} h', ms:'bekerja {h} j'}, absent:{en:'did not attend', ms:'tidak hadir'},
+  st:{en:{pending:'Waiting for HR',approved:'Approved',rejected:'Not approved',cancelled:'Withdrawn',verified:'Done — verified'},
+      ms:{pending:'Menunggu HR',approved:'Diluluskan',rejected:'Tidak diluluskan',cancelled:'Ditarik balik',verified:'Selesai — disahkan'}},
+  e_bad_date:{en:'Choose today or a later date.', ms:'Pilih hari ini atau tarikh akan datang.'},
+  e_area:{en:'Choose where they will work.', ms:'Pilih tempat mereka akan bekerja.'},
+  e_work:{en:'Describe the work clearly (at least 10 characters).', ms:'Terangkan kerja dengan jelas (sekurang-kurangnya 10 aksara).'},
+  e_no_staff:{en:'Add at least one employee.', ms:'Tambah sekurang-kurangnya seorang pekerja.'},
+  e_bad_time:{en:'Check the start and end time for {n}.', ms:'Semak masa mula dan tamat untuk {n}.'},
+  e_too_long:{en:'{n}: more than 12 hours overtime in one go is not allowed.', ms:'{n}: OT lebih 12 jam sekali gus tidak dibenarkan.'},
+  e_clash:{en:'{n} is already booked for overtime at that time ({r}).', ms:'{n} sudah ditempah untuk OT pada masa itu ({r}).'},
+  e_dup_staff:{en:'{n} is listed twice.', ms:'{n} disenaraikan dua kali.'},
+  e_generic:{en:'Could not save ({c}). Please try again or see HR.', ms:'Tidak dapat disimpan ({c}). Sila cuba lagi atau jumpa HR.'}
+};
+let LANG='en'; try{ if(localStorage.getItem('hem_leave_lang')==='ms') LANG='ms'; }catch(e){}
+let CRED=null, DATA=null, FORM=null, SEARCH='', WA=null;
+const $=id=>document.getElementById(id);
+const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function t(k,v){ let s=(TX[k]||{})[LANG]||(TX[k]||{}).en||k; if(v) Object.keys(v).forEach(x=>{ s=s.split('{'+x+'}').join(v[x]); }); return s; }
+function showMsg(id,kind,text){ const el=$(id); if(el) el.innerHTML=text?'<div class="msg '+kind+'">'+esc(text)+'</div>':''; }
+const fmtDate=s=>s? new Date(s+'T00:00:00Z').toLocaleDateString(LANG==='ms'?'ms-MY':'en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}) : '';
+const isSunday=s=>s && new Date(s+'T00:00:00Z').getUTCDay()===0;
+const mins=v=>{ const m=/^(\d{2}):(\d{2})$/.exec(v||''); return m? (+m[1])*60+(+m[2]) : null; };
+function hours(a,b){ const s=mins(a), e=mins(b); if(s==null||e==null||s===e) return 0; return Math.round(((e>s? e-s : e+1440-s)/60)*100)/100; }
+function blankForm(){ return {date:'', area:'', areaOther:'', product:'', work:'', from:'17:00', to:'20:00', lines:[]}; }
+
+/* ------------------------------------------------ sign in */
+let WHO_T=null;
+$('empNo').addEventListener('input',()=>{
+  const v=$('empNo').value.trim(), box=$('who'); clearTimeout(WHO_T);
+  if(v.length<3||!sb){ box.textContent=''; box.className='who'; return; }
+  WHO_T=setTimeout(async()=>{ try{ const {data}=await sb.rpc('portal_whois',{p_emp_no:v}); if($('empNo').value.trim()!==v) return;
+    if(!data||!data.ok){ box.className='who bad'; box.textContent=t('notFound'); } else { box.className='who ok'; box.textContent='✓ '+data.name; } }catch(e){} },350);
+});
+async function load(){
+  const {data,error}=await sb.rpc('ot_data',{p_emp_no:CRED.emp_no, p_password:CRED.password});
+  if(error) throw error; return data;
+}
+$('loginForm').addEventListener('submit', async e=>{
+  e.preventDefault(); if(!sb) return showMsg('loginMsg','err',t('offline'));
+  const btn=$('loginBtn'); btn.disabled=true; btn.textContent=t('signingIn'); showMsg('loginMsg','','');
+  CRED={emp_no:$('empNo').value.trim(), password:$('empPass').value};
+  try{
+    const d=await load();
+    if(!d||!d.ok){ const c=d&&d.code; CRED=null; showMsg('loginMsg','err', c==='not_hod'? t('notHod',{n:d.name||''}) : t('badLogin')); return; }
+    try{ localStorage.setItem('hem_leave_empno', CRED.emp_no); }catch(x){}
+    DATA=d; FORM=blankForm(); $('empPass').value='';
+    $('loginScreen').hidden=true; $('appScreen').hidden=false; $('logoutBtn').hidden=false; renderAll();
+  }catch(x){ console.error(x); CRED=null; showMsg('loginMsg','err',t('offline')); }
+  finally{ btn.disabled=false; btn.textContent=t('signIn'); }
+});
+$('logoutBtn').addEventListener('click',()=>{ CRED=null; DATA=null; WA=null; $('appScreen').hidden=true; $('loginScreen').hidden=false; $('logoutBtn').hidden=true; applyLang(); });
+async function refresh(){ try{ const d=await load(); if(d&&d.ok){ DATA=d; renderAll(); } }catch(e){} }
+
+/* ------------------------------------------------ form */
+function areaValue(){ return FORM.area==='Other'? (FORM.areaOther.trim()? 'Other — '+FORM.areaOther.trim() : '') : FORM.area; }
+function workPh(){ const a=FORM.area||''; return /QC/i.test(a)? t('workPhQC') : /mix/i.test(a)? t('workPhMix') : t('workPh'); }
+function renderForm(){
+  const me=DATA.me||{}, staff=DATA.staff||[], today=DATA.today;
+  const picked=new Set(FORM.lines.map(l=>l.emp_no));
+  const q=SEARCH.trim().toLowerCase();
+  const list=staff.filter(s=>s.emp_no!==undefined && (!q || (s.name||'').toLowerCase().includes(q) || String(s.emp_no).toLowerCase().includes(q)));
+  const groups={}; list.forEach(s=>{ const g=s.department||'—'; (groups[g]=groups[g]||[]).push(s); });
+  const myDept=me.department||'';
+  const order=Object.keys(groups).sort((a,b)=>(a===myDept?-1:b===myDept?1:a.localeCompare(b)));
+  const tot=FORM.lines.reduce((x,l)=>x+hours(l.start,l.end),0);
+  let h='<h3>'+esc(t('newReq'))+'</h3><div id="formMsg"></div>'
+   +'<label class="l" for="otDate">'+esc(t('otDate'))+' <span class="req">*</span></label>'
+   +'<input type="date" id="otDate" min="'+esc(today)+'" value="'+esc(FORM.date)+'">'
+   +(isSunday(FORM.date)?'<div class="msg info" style="margin-top:-6px">'+esc(t('sunday'))+'</div>':'')
+   +'<label class="l">'+esc(t('area'))+' <span class="req">*</span></label>'
+   +'<div class="chips">'+(DATA.areas||[]).map(a=>'<button type="button" data-area="'+esc(a)+'" class="'+(FORM.area===a?'on':'')+'">'+esc(a)+'</button>').join('')+'</div>'
+   +(FORM.area==='Other'? '<input id="otAreaOther" maxlength="60" placeholder="'+esc(t('areaOther'))+'" value="'+esc(FORM.areaOther)+'">' : '')
+   +'<label class="l" for="otProduct">'+esc(t('product'))+'</label>'
+   +'<input id="otProduct" maxlength="120" placeholder="'+esc(t('productPh'))+'" value="'+esc(FORM.product)+'">'
+   +'<label class="l" for="otWork">'+esc(t('work'))+' <span class="req">*</span></label>'
+   +'<textarea id="otWork" rows="3" maxlength="1000" placeholder="'+esc(workPh())+'">'+esc(FORM.work)+'</textarea>'
+   +'<label class="l">'+esc(t('time'))+'</label>'
+   +'<div class="row2"><div><span class="muted">'+esc(t('from'))+'</span><input type="time" id="otFrom" value="'+esc(FORM.from)+'"></div>'
+   +'<div><span class="muted">'+esc(t('to'))+'</span><input type="time" id="otTo" value="'+esc(FORM.to)+'"></div></div>'
+   +'<label class="l">'+esc(t('staff'))+' <span class="req">*</span></label>'
+   +'<input id="otSearch" type="search" placeholder="'+esc(t('search'))+'" value="'+esc(SEARCH)+'" style="margin-bottom:6px">'
+   +'<div class="picker">'+order.map(g=>'<div class="grp"><span>'+esc(g)+'</span><button type="button" data-addall="'+esc(g)+'">'+esc(t('addAll'))+'</button></div>'
+       +groups[g].map(s=>'<label><input type="checkbox" data-pick="'+esc(s.emp_no)+'"'+(picked.has(s.emp_no)?' checked':'')+'><span style="flex:1">'+esc(s.name)+'</span><span class="muted mono">'+esc(s.emp_no)+'</span></label>').join('')).join('')+'</div>'
+   +'<label class="l">'+esc(t('selected',{n:FORM.lines.length}))+'</label>'
+   +(FORM.lines.length? '<div class="sel">'+FORM.lines.map((l,i)=>'<div class="selrow"><div class="nm"><b>'+esc(l.name)+'</b><div class="muted mono">'+esc(l.emp_no)+' · '+hours(l.start,l.end)+' h</div></div>'
+        +'<input type="time" data-lt="start" data-i="'+i+'" value="'+esc(l.start)+'"><input type="time" data-lt="end" data-i="'+i+'" value="'+esc(l.end)+'">'
+        +'<button type="button" class="x" data-unpick="'+esc(l.emp_no)+'" aria-label="remove">✕</button></div>').join('')+'</div>'
+      : '<div class="muted" style="margin:-4px 0 12px">'+esc(t('noneSel'))+'</div>')
+   +'<div class="total"><span>'+esc(fmtDate(FORM.date)||'—')+(areaValue()?' · '+esc(areaValue()):'')+'</span><b>'+esc(t('total',{p:FORM.lines.length,h:Math.round(tot*100)/100}))+'</b></div>'
+   +'<button type="button" class="btn-primary" id="submitBtn">'+esc(t('submit'))+'</button>';
+  const y=window.scrollY, focusId=document.activeElement&&document.activeElement.id, caret=document.activeElement&&document.activeElement.selectionStart;
+  $('formCard').innerHTML=h;
+  if(focusId && $(focusId)){ $(focusId).focus(); try{ if(caret!=null) $(focusId).setSelectionRange(caret,caret); }catch(e){} }
+  window.scrollTo(0,y);
+}
+function addPerson(s){ if(FORM.lines.some(l=>l.emp_no===s.emp_no)) return; FORM.lines.push({emp_no:s.emp_no, name:s.name, start:FORM.from, end:FORM.to}); }
+document.addEventListener('input', e=>{
+  const id=e.target.id;
+  if(id==='otWork') FORM.work=e.target.value;
+  if(id==='otProduct') FORM.product=e.target.value;
+  if(id==='otAreaOther') FORM.areaOther=e.target.value;
+  if(id==='otSearch'){ SEARCH=e.target.value; renderForm(); }
+});
+document.addEventListener('change', e=>{
+  const id=e.target.id, d=e.target.dataset||{};
+  if(id==='otDate'){ FORM.date=e.target.value; if(isSunday(FORM.date) && FORM.from==='17:00' && FORM.to==='20:00' && !FORM.lines.length){ FORM.from='08:00'; FORM.to='17:00'; } renderForm(); }
+  if(id==='otFrom'||id==='otTo'){ const old={from:FORM.from,to:FORM.to}; FORM[id==='otFrom'?'from':'to']=e.target.value;
+    FORM.lines.forEach(l=>{ if(l.start===old.from && l.end===old.to){ l.start=FORM.from; l.end=FORM.to; } }); renderForm(); }
+  if(d.pick){ const s=(DATA.staff||[]).find(x=>x.emp_no===d.pick); if(e.target.checked && s) addPerson(s); else FORM.lines=FORM.lines.filter(l=>l.emp_no!==d.pick); renderForm(); }
+  if(d.lt){ FORM.lines[+d.i][d.lt]=e.target.value; renderForm(); }
+});
+document.addEventListener('click', e=>{
+  const a=e.target.closest('[data-area]'); if(a){ FORM.area=a.dataset.area; renderForm(); return; }
+  const all=e.target.closest('[data-addall]'); if(all){ (DATA.staff||[]).filter(s=>(s.department||'—')===all.dataset.addall).forEach(addPerson); renderForm(); return; }
+  const un=e.target.closest('[data-unpick]'); if(un){ FORM.lines=FORM.lines.filter(l=>l.emp_no!==un.dataset.unpick); renderForm(); return; }
+  const c=e.target.closest('[data-cancel]'); if(c){ cancelReq(c.dataset.cancel); return; }
+  const r=e.target.closest('[data-resend]'); if(r){ const q=(DATA.requests||[]).find(x=>x.id===r.dataset.resend); if(q){ WA=q; renderWa(); $('waBox').scrollIntoView({behavior:'smooth'}); } return; }
+  if(e.target.id==='submitBtn') submit();
+  if(e.target.id==='waBtn') setTimeout(()=>{ WA=null; renderWa(); }, 500);
+});
+function errText(r){
+  const c=r&&r.code||'?';
+  if(c==='bad_time') return t('e_bad_time',{n:r.name||''}); if(c==='too_long') return t('e_too_long',{n:r.name||''});
+  if(c==='clash') return t('e_clash',{n:r.name||'', r:r.ref||''}); if(c==='dup_staff') return t('e_dup_staff',{n:r.name||''});
+  return TX['e_'+c]? t('e_'+c) : t('e_generic',{c});
+}
+function check(){
+  if(!FORM.date || FORM.date<DATA.today) return {code:'bad_date'};
+  if(areaValue().length<2) return {code:'area'};
+  if(FORM.work.trim().length<10) return {code:'work'};
+  if(!FORM.lines.length) return {code:'no_staff'};
+  for(const l of FORM.lines){ const h=hours(l.start,l.end); if(!h) return {code:'bad_time',name:l.name}; if(h>12) return {code:'too_long',name:l.name}; }
+  return null;
+}
+async function submit(){
+  showMsg('formMsg','','');
+  const err=check(); if(err){ showMsg('formMsg','err',errText(err)); $('formCard').scrollIntoView({behavior:'smooth'}); return; }
+  const btn=$('submitBtn'); btn.disabled=true; btn.textContent=t('sending');
+  try{
+    let res=null;
+    for(let i=0;i<2;i++){
+      const id='OT-'+Date.now()+String(Math.floor(Math.random()*90)+10);
+      const {data,error}=await sb.rpc('ot_request',{p_emp_no:CRED.emp_no,p_password:CRED.password,
+        p:{id, ot_date:FORM.date, area:areaValue(), product:FORM.product.trim(), work:FORM.work.trim(), lines:FORM.lines.map(l=>({emp_no:l.emp_no,start:l.start,end:l.end}))}});
+      if(error) throw error; res=data; if(!(res&&res.code==='dup_id')) break;
+    }
+    if(!res||!res.ok){ showMsg('formMsg','err',errText(res)); $('formCard').scrollIntoView({behavior:'smooth'}); return; }
+    const sent={id:res.id, ot_date:FORM.date, area:areaValue(), product:FORM.product.trim(), work:FORM.work.trim(), total_hours:res.total_hours,
+      lines:FORM.lines.map(l=>({name:l.name, emp_no:l.emp_no, start:l.start, end:l.end, hours:hours(l.start,l.end)}))};
+    FORM=blankForm(); SEARCH=''; WA=sent;
+    await refresh();
+    showMsg('topMsg','ok',t('sent',{p:sent.lines.length,h:res.total_hours}));
+    $('waBox').scrollIntoView({behavior:'smooth'});
+  }catch(x){ console.error(x); showMsg('formMsg','err',t('offline')); }
+  finally{ const b=$('submitBtn'); if(b){ b.disabled=false; b.textContent=t('submit'); } }
+}
+async function cancelReq(id){
+  try{ const {data,error}=await sb.rpc('ot_cancel',{p_emp_no:CRED.emp_no,p_password:CRED.password,p_id:id}); if(error) throw error;
+    if(!data||!data.ok) return showMsg('topMsg','err',t('e_generic',{c:(data&&data.code)||'?'}));
+    await refresh(); showMsg('topMsg','ok',t('cancelled')); window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){ showMsg('topMsg','err',t('offline')); }
+}
+
+/* ------------------------------------------------ WhatsApp to HR (HR head taps nothing — the HOD taps Send) */
+function waText(r){
+  const me=DATA.me||{};
+  const people=(r.lines||[]).map((l,i)=>(i+1)+'. '+l.name+' ('+l.emp_no+') '+l.start+'–'+l.end+' · '+l.hours+'h').join('\n');
+  return 'HE Manufacturing — OVERTIME REQUEST ⏱\nRef: '+r.id+'\n\n👤 Requested by: *'+me.name+'*'+(me.department?' · '+me.department:'')
+    +'\n📅 Date: '+fmtDate(r.ot_date)+(isSunday(r.ot_date)?' (Sunday / rest day)':'')
+    +'\n📍 Where: '+r.area+(r.product?'\n🧴 Product: '+r.product:'')+'\n🛠 Work: '+r.work
+    +'\n\n👥 '+(r.lines||[]).length+' people · '+r.total_hours+' hours\n'+people
+    +'\n\nPlease approve in the ERP: HR → Overtime.';
+}
+function renderWa(){
+  if(!WA){ $('waBox').innerHTML=''; return; }
+  const n=String(DATA.hr_phone||'').replace(/\D/g,'');
+  $('waBox').innerHTML='<div class="card wacard"><h3>💬 '+esc(t('waTitle'))+(DATA.hr_name?' ('+esc(DATA.hr_name)+')':'')+'</h3>'
+    +(n? '<a class="btn-wa" id="waBtn" target="_blank" rel="noopener" href="'+esc('https://wa.me/'+n+'?text='+encodeURIComponent(waText(WA)))+'">'+esc(t('waBtn'))+'</a>'
+       : '<div class="msg warn">'+esc(t('waNoHr'))+'</div>')+'</div>';
+}
+
+/* ------------------------------------------------ history */
+function renderHistory(){
+  const rs=DATA.requests||[];
+  $('history').innerHTML = rs.length? rs.map(r=>{
+    const st=(TX.st[LANG]||TX.st.en)[r.status]||r.status;
+    const lines=(r.lines||[]).map(l=>'<li>'+esc(l.name)+' · '+esc(l.start)+'–'+esc(l.end)
+      +(l.approved===false?' — <b style="color:var(--bad)">'+esc(t('notApproved'))+'</b>':'')
+      +(r.status==='verified'? (l.attended===false? ' — '+esc(t('absent')) : l.actual_hours!=null? ' — '+esc(t('worked',{h:l.actual_hours})) : '') : '')+'</li>').join('');
+    return '<div class="hist"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>'+esc(fmtDate(r.ot_date))+' · '+esc(r.area)+'</b><span class="tag '+esc(r.status)+'">'+esc(st)+'</span></div>'
+      +'<div class="muted">'+esc(r.work)+(r.product?' · '+esc(r.product):'')+'</div>'
+      +'<div class="muted mono">'+esc(r.id)+' · '+(r.lines||[]).length+' people · '+esc(r.total_hours)+' h</div>'
+      +(r.hr_comment?'<div style="font-size:13px;margin-top:4px"><b>'+esc(t('hrNote'))+':</b> '+esc(r.hr_comment)+'</div>':'')
+      +'<ul>'+lines+'</ul>'
+      +(r.status==='pending'? '<div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn-ghost btn-sm" data-resend="'+esc(r.id)+'">'+esc(t('resend'))+'</button>'
+          +'<button type="button" class="btn-ghost btn-sm" data-cancel="'+esc(r.id)+'">'+esc(t('cancel'))+'</button></div>' : '')
+      +'</div>'; }).join('') : '<div class="muted">'+esc(t('none'))+'</div>';
+}
+function renderAll(){
+  const me=DATA.me||{};
+  $('tbName').textContent=me.name||'HE Manufacturing'; $('tbSub').textContent=t('sub')+(me.department?' · '+me.department:'');
+  applyLang(true); renderForm(); renderWa(); renderHistory();
+}
+function applyLang(skip){
+  document.documentElement.lang=LANG;
+  document.querySelectorAll('[data-t]').forEach(el=>el.textContent=t(el.dataset.t));
+  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on',b.dataset.lang===LANG));
+  $('loginBtn').textContent=t('signIn'); $('logoutBtn').textContent=t('signOut');
+  if(!DATA) $('tbSub').textContent=t('sub');
+  if(DATA && !skip) renderAll();
+}
+document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click',()=>{ LANG=b.dataset.lang; try{localStorage.setItem('hem_leave_lang',LANG);}catch(e){} applyLang(); }));
+try{ const last=localStorage.getItem('hem_leave_empno'); if(last){ $('empNo').value=last; $('empNo').dispatchEvent(new Event('input')); } }catch(e){}
+applyLang();
+</script>
+</body>
+</html>
