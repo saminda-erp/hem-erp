@@ -618,7 +618,7 @@ leaveTypes:[
  {id:'annual', code:'annual', name:'Annual Leave', color:'#39537F', defaultDays:14, paid:true},
  {id:'medical', code:'medical', name:'Medical Leave (MC)', color:'#A32E2E', defaultDays:14, paid:true},
  {id:'hospitalization', code:'hospitalization', name:'Hospitalization Leave', color:'#9C7434', defaultDays:60, paid:true},
- {id:'emergency', code:'emergency', name:'Emergency Leave', color:'#6E3B4D', defaultDays:3, paid:true},
+ {id:'emergency', code:'emergency', name:'Emergency Leave', color:'#6E3B4D', defaultDays:0, paid:false},
  {id:'unpaid', code:'unpaid', name:'Unpaid Leave', color:'#8A767C', defaultDays:0, paid:false},
  {id:'timeoff', code:'timeoff', name:'Time Off', color:'#2E6F4E', defaultDays:0, paid:true}
 ],
@@ -4343,13 +4343,17 @@ function leaveTabHtml(){
     btn('Upload leave report (PDF)','leave-pdf-import','','btn primary')]);
 
   if(pending.length) h += sect('Pending approval', T([
-      {h:'Employee', f:a=>'<b>'+esc(employee(a.empNo).name)+'</b><div class="sub mono">'+esc(a.empNo)+'</div>'},
-      {h:'Type', f:a=>'<span style="color:'+esc(leaveType(a.type).color)+'">●</span> '+esc(leaveType(a.type).name)},
+      {h:'Employee', f:a=>'<b>'+esc(employee(a.empNo).name)+'</b><div class="sub mono">'+esc(a.empNo)+(employee(a.empNo).department?' · '+esc(employee(a.empNo).department):'')+'</div>'},
+      {h:'Type', f:a=>'<span style="color:'+esc(leaveType(a.type).color)+'">●</span> '+esc(leaveType(a.type).name)+(leaveType(a.type).paid===false?' <span class="tag t-mute">unpaid</span>':'')},
       {h:'Dates', f:a=>'<span class="mono">'+esc(a.start)+(a.end!==a.start?' → '+esc(a.end):'')+'</span>'},
       {h:'Days', c:'num', f:a=>nf(a.days)},
-      {h:'Reason', f:a=>'<span class="sub">'+esc(a.reason||'—')+'</span>'},
-      {h:'Applied', f:a=>'<span class="mono">'+esc(a.appliedAt)+'</span>'},
-      {h:'', f:a=>btn('Approve','leave-approve',a.id,'btn sm primary')+btn('Reject','leave-reject',a.id,'btn sm danger')}
+      {h:'Reason', f:a=>'<span class="sub">'+esc(a.reason||'—')+'</span>'+(a.contact?'<div class="sub mono">☎ '+esc(a.contact)+'</div>':'')
+        +(a.meeting?'<div class="sub"><span class="tag t-info">HR meeting '+esc(a.meeting.when)+'</span></div>':'')},
+      {h:'Document', f:a=>(a.docPaths||[]).length? btn('View ('+a.docPaths.length+')','leave-docs',a.id,'btn sm')
+        : a.docSeen? '<span class="tag t-ok">paper seen</span>' : leaveDocNeeded(a)? '<span class="tag t-bad">missing</span>' : '<span class="sub">—</span>'},
+      {h:'Checks', f:a=>leaveChecks(a).map(c=>'<span class="tag '+c.cls+'" style="margin:0 3px 3px 0;display:inline-block">'+esc(c.t)+'</span>').join('')||'<span class="tag t-ok">OK</span>'},
+      {h:'Applied', f:a=>'<span class="mono">'+esc(a.appliedAt)+'</span><div class="sub">'+(a.source==='portal'?'portal':'by HR')+'</div>'},
+      {h:'', f:a=>btn('Approve','leave-approve',a.id,'btn sm primary')+btn('Reject','leave-reject',a.id,'btn sm danger')+btn('Call to HR','leave-meet',a.id,'btn sm')}
     ], pending));
 
   h += sect('Employees — '+year, T([
@@ -4360,12 +4364,14 @@ function leaveTabHtml(){
       {h:'Unpaid', c:'num', f:e=>{const b=leaveBalance(e.empNo,year).find(x=>x.type==='unpaid'); return b? nf(b.taken):'—';}},
       {h:'Other', c:'num', f:e=>{const bs=leaveBalance(e.empNo,year).filter(x=>!['annual','medical','unpaid'].includes(x.type)&&x.taken>0);
         return bs.length? bs.map(b=>nf(b.taken)+' '+b.name).join(', ') : '—';}},
-      {h:'', f:e=>btn('Calendar','emp-calendar',e.empNo,'btn sm')+btn('Apply','leave-apply',e.empNo,'btn sm')+btn('Set password','leave-set-password',e.empNo,'btn sm')}
+      {h:'Mobile', f:e=>e.phone? '<span class="mono" style="font-size:12px">'+esc(e.phone)+'</span>' : '<span class="sub">—</span>'},
+      {h:'', f:e=>btn('Calendar','emp-calendar',e.empNo,'btn sm')+btn('Apply','leave-apply',e.empNo,'btn sm')+btn('Call to HR','leave-meet','emp:'+e.empNo,'btn sm')
+        +btn('Edit','emp-edit',e.empNo,'btn sm')+btn('Set password','leave-set-password',e.empNo,'btn sm')}
     ], emps, {empty:'No employees on file yet — add one from Masters, or import another leave report.'}));
 
   h += sect('Scan to apply leave', '<div class="card" style="text-align:center;max-width:280px">'
     +'<div id="leaveQr" style="display:flex;justify-content:center;margin-bottom:10px"></div>'
-    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">This opens the separate Employee Leave Portal — its own page, with its own employee number + password login (not the main ERP login). Set a password for someone under Employees above before they can sign in there.</div>'
+    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">Employees scan this to apply for leave on their phone (English / BM). They sign in with their employee number + the password you set under Employees. The portal shows the leave rules, takes MC / hospital-letter uploads, and shows your approvals, rejections and meeting requests.</div>'
     +btn('Check for new requests from the portal','leave-sync',null,'btn')
     +btn('Resync everything to the portal','leave-resync-all',null,'btn')+'</div>');
   return h;
@@ -7170,6 +7176,7 @@ function boot(){
   COLLECTIONS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
   S.settings = Object.assign(clone(SEED.settings), S.settings||{});
   cleanupVoidedPOs();
+  if(migrateLeaveRules()) save();
   renderNav(); render();
   try{
     const gsInput=document.getElementById('gsearchInput'), gsResults=document.getElementById('gsearchResults');
@@ -8541,33 +8548,27 @@ ACT['leave-apply']=a=>{
       {k:'empNo',label:'Employee',type:'select',opts:(S.employees||[]).map(e=>({v:e.empNo,t:e.empNo+' — '+e.name})),req:true},
       {k:'type',label:'Leave type',type:'select',opts:(S.leaveTypes||[]).map(t=>({v:t.code,t:t.name})),blank:false},
       {k:'start',label:'Start date',type:'date',req:true},{k:'end',label:'End date',type:'date',req:true},
-      {k:'reason',label:'Reason / notes',type:'textarea',full:true}],
+      {k:'reason',label:'Reason (be specific — min. 10 characters)',type:'textarea',full:true,req:true},
+      {k:'docSeen',label:'MC / hospital letter seen (paper copy)',type:'select',blank:false,opts:[{v:'',t:'Not applicable / not yet'},{v:'yes',t:'Yes — HR has seen the original'}],full:true}],
+    after:'<div class="note" style="margin-top:10px;font-size:12.5px">Rules: Annual leave 14 days\' notice · MC needs the certificate (up to 2 days after) · Hospitalisation needs the hospital letter · Emergency leave is UNPAID · Unpaid leave 7 days\' notice · Day off 3 days\' notice · Sundays are not counted. As HR you may enter late applications — they are flagged, not blocked.</div>',
     saveLabel:'Submit application',
     onSave:v=>{
       if(!v.empNo||!v.start||!v.end) return toast('Employee, start and end date are required','bad');
       if(v.end<v.start) return toast('End date must be on or after the start date','bad');
-      const days=datesInRange(v.start,v.end).length;
+      if(String(v.reason||'').trim().length<10) return toast('Please enter a specific reason (at least 10 characters)','bad');
+      const days=workingDays(v.start,v.end);
+      if(days<1) return toast('Those dates have no working days (Sundays are not counted)','bad');
       const id='LV-'+String(1000+(S.leaveApplications||[]).length);
       S.leaveApplications.push({id, empNo:v.empNo, type:v.type, start:v.start, end:v.end, days, year:Number(v.start.slice(0,4)),
-        status:'pending', reason:v.reason||'', appliedAt:today(), appliedBy:UI.user||'SS', approvedBy:'', approvedAt:'', source:'app'});
+        status:'pending', reason:v.reason.trim(), appliedAt:today(), appliedBy:UI.user||'SS', approvedBy:'', approvedAt:'', source:'app',
+        paid:leaveType(v.type).paid!==false, docSeen:v.docSeen==='yes'});
+      const r=leaveRule(v.type);
+      if(r.notice && v.start<new Date(Date.now()+r.notice*864e5).toISOString().slice(0,10)) toast('Note: less than '+r.notice+' days\' notice for '+leaveType(v.type).name,'warn');
       logAudit('Leave application submitted', id, v.empNo+' — '+v.type+' '+v.start+' to '+v.end+' ('+days+'d)');
       save(); toast('Application submitted — '+days+' day(s), awaiting approval','ok'); closeModal(); render();
     }});
 };
-ACT['leave-approve']=a=>{ const l=(S.leaveApplications||[]).find(x=>x.id===a); if(!l) return;
-  l.status='approved'; l.approvedBy=UI.user||'SS'; l.approvedAt=today();
-  logAudit('Leave approved', l.id, l.empNo+' — '+leaveType(l.type).name+' '+nf(l.days)+'d recorded');
-  save(); toast('Approved and recorded','ok'); render();
-  pushLeaveStatusToPortal(l);
-};
-ACT['leave-reject']=a=>{ const l=(S.leaveApplications||[]).find(x=>x.id===a); if(!l) return;
-  formModal({title:'Reject leave application '+l.id, fields:[{k:'reason',label:'Reason for rejection',full:true,req:true}], saveLabel:'Reject',
-    onSave:v=>{ if(!String(v.reason||'').trim()) return toast('A reason is required','bad');
-      l.status='rejected'; l.rejectReason=v.reason.trim(); l.approvedBy=UI.user||'SS'; l.approvedAt=today();
-      logAudit('Leave rejected', l.id, l.empNo+' — '+v.reason.trim()); save(); toast('Rejected','ok'); closeModal(); render();
-      pushLeaveStatusToPortal(l);
-    }});
-};
+
 ACT['leave-report']=a=>{
   const year=Number(a)||new Date().getFullYear();
   const rows=sortBy(S.employees||[],'name').map(e=>({e, bal:leaveBalance(e.empNo,year)}));
@@ -9026,6 +9027,204 @@ ACT['cand-qr-print'] = ()=>{
 };
 
 /* ============================================================
+   LEAVE v2 (2026-09-29) — rules, documents, HR notices, WhatsApp
+   ------------------------------------------------------------
+   The authoritative rule set lives in Supabase hem_leave_types and is enforced server-side by
+   portal_apply() for everything that comes in through the QR portal. LEAVE_RULES below mirrors
+   it for HR's own checks inside the ERP (approval screen + leave entered by HR on someone's
+   behalf). If you change a rule, change it in both places.
+   ============================================================ */
+const LEAVE_RULES = {
+  annual:{notice:14, late:0, doc:'none'},
+  medical:{notice:0, late:2, doc:'required', docLabel:'MC'},
+  hospitalization:{notice:0, late:2, doc:'required_if_started', docLabel:'Hospital letter'},
+  emergency:{notice:0, late:2, doc:'none'},
+  unpaid:{notice:7, late:0, doc:'none'},
+  timeoff:{notice:3, late:0, doc:'none'}
+};
+function leaveRule(code){ return LEAVE_RULES[code] || {notice:0, late:0, doc:'none'}; }
+/* working days, Sundays excluded (factory rest day) — must match _leave_days() in the database */
+function workingDays(start,end){ return datesInRange(start,end).filter(d=>new Date(d+'T00:00:00Z').getUTCDay()!==0).length; }
+function leaveDocNeeded(l){ const r=leaveRule(l.type);
+  return r.doc==='required' || (r.doc==='required_if_started' && l.start<=today()); }
+function leaveHasDoc(l){ return (l.docPaths||[]).length>0 || !!l.docSeen; }
+/* one-time, idempotent: emergency leave became UNPAID with no entitlement (company rule) */
+function migrateLeaveRules(){
+  const em=(S.leaveTypes||[]).find(t=>t.code==='emergency');
+  if(em && (em.paid!==false || em.defaultDays!==0)){ em.paid=false; em.defaultDays=0; logAudit('Leave rule updated','emergency','Emergency leave set to unpaid'); return true; }
+  return false;
+}
+/* everything HR should know before approving */
+function leaveChecks(l){
+  const out=[], lt=leaveType(l.type), emp=employee(l.empNo);
+  if(leaveDocNeeded(l) && !leaveHasDoc(l)) out.push({cls:'t-bad', block:true, t:(leaveRule(l.type).docLabel||'Document')+' missing'});
+  if(lt.paid!==false && Number(lt.defaultDays)>0){
+    const b=leaveBalance(l.empNo, l.year).find(x=>x.type===l.type);
+    const left=b? b.entitlement-b.taken : 0;
+    if(Number(l.days)>left) out.push({cls:'t-bad', block:true, t:'Only '+nf(Math.max(0,left),1)+' '+lt.name+' day(s) left'});
+  }
+  if(lt.paid===false) out.push({cls:'t-mute', t:'Unpaid'});
+  if(l.source==='portal' && l.start<(l.appliedAt||today())) out.push({cls:'t-info', t:'Applied after leave started'});
+  if(emp.department){
+    const clash=(S.leaveApplications||[]).filter(o=>o.id!==l.id && o.empNo!==l.empNo && (o.status==='approved'||o.status==='pending')
+      && o.start<=l.end && o.end>=l.start && employee(o.empNo).department===emp.department);
+    if(clash.length) out.push({cls:'t-warn', warn:true, t:'Also off in '+emp.department+': '+[...new Set(clash.map(o=>employee(o.empNo).name))].join(', ')});
+  }
+  return out;
+}
+function fmtLeaveDates(l){
+  const f=d=>new Date(d+'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+  return f(l.start)+(l.end!==l.start?' – '+f(l.end):'')+' ('+nf(l.days)+' day'+(Number(l.days)===1?'':'s')+')';
+}
+
+/* ---- WhatsApp: Malaysian numbers → wa.me/60… with the message pre-filled; HR taps Send ---- */
+function waNumber(p){ let d=String(p||'').replace(/\D/g,''); if(!d) return '';
+  if(d.startsWith('0')) d='6'+d; else if(!d.startsWith('60') && d.length<=10) d='60'+d; return d.length>=10? d:''; }
+function waLink(phone, text){ const n=waNumber(phone); return n? 'https://wa.me/'+n+'?text='+encodeURIComponent(text) : ''; }
+let NOTIFY=null;   // {empNo, text, title}
+function notifyModal(empNo, title, text){
+  NOTIFY={empNo, title, text};
+  const e=employee(empNo), link=waLink(e.phone, text);
+  modal(esc(title), '<div class="note" style="margin-bottom:12px">Saved. The employee will also see this in their leave portal (Messages from HR).</div>'
+    +'<label style="font-size:12px;color:var(--ink2)">WhatsApp message</label>'
+    +'<pre style="white-space:pre-wrap;font-family:inherit;background:var(--sunk);border-radius:8px;padding:10px 12px;margin:4px 0 12px">'+esc(text)+'</pre>'
+    +(link? '<a class="btn primary" href="'+esc(link)+'" target="_blank" rel="noopener">Send WhatsApp to '+esc(e.name)+' ('+esc(e.phone)+')</a>'
+          : '<div class="banner warn" style="margin-bottom:8px">No phone number on file for '+esc(e.name)+'. Add it to send by WhatsApp:</div>'
+            +'<div class="fgrid"><div class="field"><label>Mobile number</label><input type="tel" id="notifyPhone" placeholder="012-345 6789"></div></div>'
+            +btn('Save number','notify-save-phone',null,'btn primary')), '', false);
+}
+ACT['notify-save-phone']=()=>{
+  const el=document.getElementById('notifyPhone'); if(!NOTIFY||!el) return;
+  if(!waNumber(el.value)) return toast('Enter a valid Malaysian mobile number','bad');
+  const e=(S.employees||[]).find(x=>x.empNo===NOTIFY.empNo); if(!e) return;
+  e.phone=el.value.trim(); logAudit('Employee phone updated', e.empNo, ''); save();
+  notifyModal(NOTIFY.empNo, NOTIFY.title, NOTIFY.text);
+};
+function pushNotice(n){
+  if(!window.HEM_AUTH) return;
+  try{ window.HEM_AUTH.from('hem_leave_notices').insert(n).then(({error})=>{
+    if(error) toast('Saved here, but the portal message could not be sent — '+error.message,'warn'); }); }catch(e){}
+}
+
+/* ---- approve / reject / call to HR ---- */
+function doApprove(id){
+  const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l||l.status!=='pending') return;
+  const lt=leaveType(l.type);
+  l.status='approved'; l.paid=lt.paid!==false; l.approvedBy=UI.user||'SS'; l.approvedAt=today();
+  logAudit('Leave approved', l.id, l.empNo+' — '+lt.name+' '+nf(l.days)+'d '+(l.paid?'paid':'UNPAID')+' recorded');
+  save(); render(); pushLeaveStatusToPortal(l);
+  const e=employee(l.empNo);
+  pushNotice({emp_no:l.empNo, kind:'approved', leave_id:l.id, title:lt.name+' approved',
+    body:fmtLeaveDates(l)+(l.paid?'':'\nThis leave is UNPAID.')});
+  notifyModal(l.empNo, 'Approved — notify '+e.name,
+    'HE Manufacturing — Leave APPROVED ✅\n'+e.name+' ('+e.empNo+')\n'+lt.name+': '+fmtLeaveDates(l)+(l.paid?'':'\n(Unpaid / Tanpa gaji)')
+    +'\n\nCuti anda telah DILULUSKAN.');
+}
+ACT['leave-approve']=id=>{
+  const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
+  const ch=leaveChecks(l), blocks=ch.filter(c=>c.block), warns=ch.filter(c=>c.warn);
+  if(blocks.length){
+    modal('Cannot approve yet', '<div class="banner bad" style="margin-bottom:10px">'+blocks.map(b=>esc(b.t)).join('<br>')+'</div>'
+      +'<div style="font-size:13px;color:var(--ink2)">'+(blocks.some(b=>/missing/.test(b.t))
+        ? 'Company rule: this leave needs its supporting document before approval. Ask the employee to upload it in the leave portal'+(l.source==='portal'?'':', or tick "document seen" if you hold the paper copy')+'.'
+        : 'Company rule: paid leave cannot exceed the balance. Reject this application and ask the employee to re-apply with the extra days as Unpaid Leave.')+'</div>',
+      btn('Call to HR','leave-meet',l.id,'btn')+btn('Reject','leave-reject',l.id,'btn danger')+(l.source!=='portal' && blocks.some(b=>/missing/.test(b.t))? btn('Paper document seen','leave-doc-seen',l.id,'btn'):''));
+    return;
+  }
+  if(warns.length){
+    modal('Approve anyway?', '<div class="banner warn" style="margin-bottom:10px">'+warns.map(w=>esc(w.t)).join('<br>')+'</div>'
+      +'<div style="font-size:13px;color:var(--ink2)">Check the department can still run before approving.</div>',
+      btn('Approve anyway','leave-approve-confirm',l.id,'btn primary'));
+    return;
+  }
+  doApprove(id);
+};
+ACT['leave-approve-confirm']=id=>doApprove(id);
+ACT['leave-doc-seen']=id=>{ const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
+  l.docSeen=true; logAudit('Leave document seen (paper)', l.id, l.empNo); save(); closeModal(); render(); toast('Marked — you can approve now','ok'); };
+ACT['leave-reject']=id=>{
+  const l0=(S.leaveApplications||[]).find(x=>x.id===id); if(!l0) return;
+  formModal({title:'Reject leave — '+employee(l0.empNo).name,
+    intro:esc(leaveType(l0.type).name+' · '+fmtLeaveDates(l0))+'<br>The employee sees this reason in the portal, so write it for them.',
+    fields:[{k:'reason',label:'Reason for rejection',type:'textarea',rows:3,full:true,req:true}], saveLabel:'Reject',
+    onSave:v=>{
+      if(!String(v.reason||'').trim()) return toast('A reason is required','bad');
+      const l=(S.leaveApplications||[]).find(x=>x.id===id);          // fresh — see cand-outcome
+      if(!l){ toast('Application no longer exists','bad'); return false; }
+      l.status='rejected'; l.rejectReason=v.reason.trim(); l.approvedBy=UI.user||'SS'; l.approvedAt=today();
+      logAudit('Leave rejected', l.id, l.empNo+' — '+l.rejectReason); save(); render();
+      pushLeaveStatusToPortal(l);
+      const lt=leaveType(l.type), e=employee(l.empNo);
+      pushNotice({emp_no:l.empNo, kind:'rejected', leave_id:l.id, title:lt.name+' not approved', body:fmtLeaveDates(l)+'\nReason: '+l.rejectReason});
+      notifyModal(l.empNo, 'Rejected — notify '+e.name,
+        'HE Manufacturing — Leave NOT approved ❌\n'+e.name+' ('+e.empNo+')\n'+lt.name+': '+fmtLeaveDates(l)+'\nReason / Sebab: '+l.rejectReason
+        +'\n\nCuti anda TIDAK diluluskan. Sila hubungi HR jika ada pertanyaan.');
+    }});
+};
+/* arg: a leave id, or 'emp:<empNo>' to call someone in without a leave application */
+ACT['leave-meet']=arg=>{
+  const isEmp=String(arg).startsWith('emp:'), l0=isEmp? null : (S.leaveApplications||[]).find(x=>x.id===arg);
+  const empNo=isEmp? String(arg).slice(4) : (l0&&l0.empNo); if(!empNo) return;
+  const e0=employee(empNo);
+  formModal({title:'Call to HR — '+e0.name,
+    intro:(l0? 'About: '+esc(leaveType(l0.type).name+' · '+fmtLeaveDates(l0))+'. The application stays pending until you decide.<br>' : '')
+      +'The employee sees this in the leave portal, and you can send it by WhatsApp.',
+    values:{date:today(), time:'10:00', place:'HR office', note:''},
+    fields:[{k:'date',label:'Date',type:'date',req:true},{k:'time',label:'Time',type:'time',req:true},
+      {k:'place',label:'Where',full:true},{k:'note',label:'Message (e.g. bring your original MC)',type:'textarea',rows:3,full:true}],
+    saveLabel:'Send',
+    onSave:v=>{
+      if(!v.date||!v.time) return toast('Date and time are required','bad');
+      const when=new Date(v.date+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})+', '+v.time;
+      const l=l0? (S.leaveApplications||[]).find(x=>x.id===l0.id) : null;
+      if(l){ l.meeting={when, place:v.place||'', note:v.note||'', by:UI.user||'', at:new Date().toISOString()}; }
+      logAudit('Employee called to HR', empNo, when+(l?' re '+l.id:''));
+      save(); render();
+      pushNotice({emp_no:empNo, kind:'meeting', leave_id:l?l.id:null, title:'Please see HR'+(l?' about your '+leaveType(l.type).name:''),
+        body:v.note||'', meet_at:when, meet_place:v.place||''});
+      notifyModal(empNo, 'Meeting request — notify '+e0.name,
+        'HE Manufacturing — Please see HR 📌\n'+e0.name+' ('+empNo+')\nWhen / Bila: '+when+'\nWhere / Di mana: '+(v.place||'HR office')
+        +(l?'\nAbout / Berkenaan: '+leaveType(l.type).name+' '+fmtLeaveDates(l):'')+(v.note?'\n'+v.note:'')+'\n\nSila jumpa HR pada masa di atas.');
+    }});
+};
+/* supporting documents (MC / hospital letter) — private bucket, 10-minute signed links */
+ACT['leave-docs']=id=>{
+  const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
+  const paths=l.docPaths||[];
+  if(!paths.length) return toast('No document uploaded','bad');
+  if(!window.HEM_AUTH||!window.HEM_AUTH.storage) return toast('Sign in to view documents','bad');
+  modal(esc('Documents — '+employee(l.empNo).name+' · '+leaveType(l.type).name), '<div class="note">Loading…</div>', '', true);
+  const seq=MODAL_SEQ;
+  Promise.all(paths.map(p=>window.HEM_AUTH.storage.from('hem-leave-docs').createSignedUrl(p,600)
+    .then(({data,error})=>({p, url:error?null:(data&&data.signedUrl), err:error&&error.message})).catch(e=>({p,url:null,err:String(e)}))))
+  .then(list=>{ if(seq!==MODAL_SEQ) return;
+    const mb=document.querySelector('#modal-root .mbody'); if(!mb) return;
+    mb.innerHTML='<div class="sub" style="margin-bottom:8px">'+esc(fmtLeaveDates(l))+' · '+esc(l.reason||'')+'</div>'+list.map((x,i)=>{
+      const head='<div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px"><b>Document '+(i+1)+'</b>'
+        +(x.url?'<a class="btn sm" href="'+esc(x.url)+'" target="_blank" rel="noopener">Open / download ↗</a>':'')+'</div>';
+      if(!x.url) return head+'<div class="banner bad">Could not open — '+esc(x.err||'')+'</div>';
+      return head+(/\.pdf$/i.test(x.p)? '<iframe src="'+esc(x.url)+'" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:8px;background:#fff" title="document"></iframe>'
+        : '<img src="'+esc(x.url)+'" style="max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fff" alt="document">');
+    }).join('')+'<div class="sub" style="margin-top:10px">Check the clinic/hospital name, dates and doctor\'s stamp match the leave dates. Links expire after 10 minutes.</div>';
+  });
+};
+ACT['emp-edit']=empNo=>{
+  const e0=(S.employees||[]).find(x=>x.empNo===empNo); if(!e0) return;
+  formModal({title:'Employee — '+e0.name, values:{name:e0.name, department:e0.department||'', phone:e0.phone||'', status:e0.status||'active'},
+    fields:[{k:'name',label:'Name',req:true,full:true},{k:'department',label:'Department'},{k:'phone',label:'Mobile (for WhatsApp)',type:'tel',ph:'012-345 6789'},
+      {k:'status',label:'Status',type:'select',blank:false,opts:[{v:'active',t:'Active'},{v:'inactive',t:'Left / inactive (portal login blocked)'}]}],
+    saveLabel:'Save',
+    onSave:v=>{
+      if(!String(v.name||'').trim()) return toast('Name is required','bad');
+      if(v.phone && !waNumber(v.phone)) return toast('Mobile number looks wrong','bad');
+      const e=(S.employees||[]).find(x=>x.empNo===empNo); if(!e) return false;
+      Object.assign(e,{name:v.name.trim(), department:v.department||'', phone:(v.phone||'').trim(), status:v.status||'active'});
+      logAudit('Employee updated', empNo, ''); save(); toast('Saved','ok');
+      pushEmployeesToPortal([empNo]);
+    }});
+};
+
+/* ============================================================
    EMPLOYEE LEAVE PORTAL — bridges the local leave records above to the separate
    leave-portal.html page, via the same Supabase project already used for ERP login.
    Requires the SQL setup script to have been run once against that project; see
@@ -9055,15 +9254,22 @@ function syncPortalLeave(silent){
   if(!silent) toast('Checking the portal for new requests…','ok');
   window.HEM_AUTH.from('hem_leave_applications').select('*').eq('status','pending').then(({data,error})=>{
     if(error){ if(!silent) toast('Could not reach the portal database — check the Supabase setup','bad'); return; }
-    const existing=new Set((S.leaveApplications||[]).map(x=>x.id));
-    let added=0;
+    migrateLeaveRules();
+    let added=0, docs=0;
     (data||[]).forEach(r=>{
-      if(existing.has(r.id)) return;
+      const ex=(S.leaveApplications||[]).find(x=>x.id===r.id);
+      const paths=Array.isArray(r.doc_paths)? r.doc_paths : [];
+      if(ex){  // documents uploaded after applying (planned hospitalisation, clearer MC photo)
+        if(ex.status==='pending' && paths.length>(ex.docPaths||[]).length){ ex.docPaths=paths; docs++; }
+        return;
+      }
       S.leaveApplications.push({id:r.id, empNo:r.emp_no, type:r.type, start:r.start_date, end:r.end_date,
         days:Number(r.days)||0, year:r.year, status:'pending', reason:r.reason||'',
-        appliedAt:(r.applied_at||'').slice(0,10), appliedBy:'portal', approvedBy:'', approvedAt:'', source:'portal'});
+        appliedAt:(r.applied_at||'').slice(0,10), appliedBy:'portal', approvedBy:'', approvedAt:'', source:'portal',
+        paid:r.paid!==false, docPaths:paths, contact:((r.details||{}).contact)||''});
       added++;
     });
+    if(docs){ logAudit('Leave documents synced from portal','',docs+' application(s)'); if(!added){ save(); render(); } }
     if(added){ logAudit('Leave requests synced from portal', '', added+' new pending request(s)'); save(); render(); }
     if(!silent) toast(added? added+' new request(s) pulled in from the portal':'No new requests waiting','ok');
     else if(added) toast(added+' new leave request(s) just came in from the portal','ok');
@@ -9081,7 +9287,8 @@ ACT['cloud-sync-now'] = ()=>{
 function pushLeaveStatusToPortal(l){
   if(l.source!=='portal' || !window.HEM_AUTH) return;
   window.HEM_AUTH.from('hem_leave_applications').update({
-    status:l.status, approved_by:l.approvedBy||'', approved_at:new Date().toISOString(), reject_reason:l.rejectReason||''
+    status:l.status, approved_by:l.approvedBy||'', approved_at:new Date().toISOString(), reject_reason:l.rejectReason||'',
+    paid:leaveType(l.type).paid!==false
   }).eq('id', l.id).then(({error})=>{ if(error) toast('Recorded here, but could not update the portal record','warn'); });
 }
 /* bulk push — used by Add employee, batch imports, and the Resync-everything button. Pass
@@ -9100,7 +9307,8 @@ function pushLeaveAppsToPortal(ids){
   if(!window.HEM_AUTH) return;
   const list=(S.leaveApplications||[]).filter(a=>!ids||ids.includes(a.id))
     .map(a=>({id:a.id, emp_no:a.empNo, type:a.type, start_date:a.start, end_date:a.end, days:a.days, year:a.year,
-      status:a.status, reason:a.reason||'', approved_by:a.approvedBy||'', reject_reason:a.rejectReason||''}));
+      status:a.status, reason:a.reason||'', approved_by:a.approvedBy||'', reject_reason:a.rejectReason||'',
+      paid:a.paid!=null? a.paid : leaveType(a.type).paid!==false}));
   if(!list.length) return;
   window.HEM_AUTH.from('hem_leave_applications').upsert(list, {onConflict:'id'}).then(({error})=>{
     if(error) toast('Saved here, but the portal sync failed — '+error.message,'warn');
@@ -9117,6 +9325,8 @@ ACT['leave-resync-all']=()=>{
       closeModal();
       pushEmployeesToPortal(null);
       pushLeaveAppsToPortal(null);
+      try{ window.HEM_AUTH.from('hem_leave_types').upsert((S.leaveTypes||[]).map(t=>({code:t.code, name:t.name, color:t.color,
+        default_days:Number(t.defaultDays)||0, paid:t.paid!==false})), {onConflict:'code'}).then(({error})=>{ if(error) toast('Leave types not synced — '+error.message,'warn'); }); }catch(e){}
       logAudit('Full resync to portal', '', nf((S.employees||[]).length)+' employees, '+nf((S.leaveApplications||[]).length)+' leave records');
       save();
     }});
@@ -9126,12 +9336,12 @@ ACT['leave-resync-all']=()=>{
 ACT['emp-new']=()=>{
   formModal({title:'Add employee',
     fields:[{k:'empNo',label:'Employee number',req:true,full:true},{k:'name',label:'Name',req:true,full:true},
-      {k:'department',label:'Department',full:true}],
+      {k:'department',label:'Department',full:true},{k:'phone',label:'Mobile (for WhatsApp)',type:'tel',ph:'012-345 6789',full:true}],
     saveLabel:'Add employee',
     onSave:v=>{
       if(!v.empNo||!v.name) return toast('Employee number and name are required','bad');
       if((S.employees||[]).find(e=>e.empNo===v.empNo)) return toast('That employee number already exists','bad');
-      S.employees.push({id:'EMP-'+v.empNo, empNo:v.empNo, name:v.name, department:v.department||'', status:'active'});
+      S.employees.push({id:'EMP-'+v.empNo, empNo:v.empNo, name:v.name, department:v.department||'', phone:(v.phone||'').trim(), status:'active'});
       logAudit('Employee added', v.empNo, v.name);
       save(); toast('Added — set a portal password when ready','ok'); closeModal(); render();
       pushEmployeesToPortal([v.empNo]);
@@ -9144,17 +9354,17 @@ function parseEmployeeCsv(text){
   (text||'').split('\n').map(l=>l.trim()).filter(Boolean).forEach(line=>{
     const parts=line.split(/\t|,/).map(p=>p.trim());
     if(parts.length<2) return;
-    const [empNo,name,department]=parts;
+    const [empNo,name,department,phone]=parts;
     if(!empNo||!name) return;
     if(/^emp/i.test(empNo) && /name/i.test(name)) return; // skip an obvious header row
-    rows.push({empNo, name, department:department||''});
+    rows.push({empNo, name, department:department||'', phone:phone||''});
   });
   return rows;
 }
 let PENDING_EMP_IMPORT=null;
 ACT['emp-import']=()=>{
   formModal({title:'Batch import employees', wide:true,
-    intro:'Paste rows exported from your HR/SQL system — one employee per line, comma or tab separated: <span class="mono">Employee No, Name, Department</span> (department optional). A header row is detected and skipped automatically. Nothing is saved until you review and confirm on the next screen.',
+    intro:'Paste rows exported from your HR/SQL system — one employee per line, comma or tab separated: <span class="mono">Employee No, Name, Department, Mobile</span> (department and mobile optional — mobile is used for WhatsApp leave notices). A header row is detected and skipped automatically. Nothing is saved until you review and confirm on the next screen.',
     fields:[{k:'csv',label:'Paste employee data',type:'textarea',full:true}],
     saveLabel:'Preview import',
     onSave:v=>{
@@ -9167,6 +9377,7 @@ ACT['emp-import']=()=>{
         {h:'Emp No.', f:r=>'<span class="mono">'+esc(r.empNo)+'</span>'},
         {h:'Name', f:r=>esc(r.name)},
         {h:'Department', f:r=>esc(r.department||'—')},
+        {h:'Mobile', f:r=>esc(r.phone||'—')},
         {h:'Action', f:r=>existing.has(r.empNo)? '<span class="tag t-warn">will update existing</span>':'<span class="tag t-ok">new employee</span>'}
       ], rows);
       modal('Confirm import — '+rows.length+' employee(s)', body, btn('Confirm import','emp-import-confirm',null,'btn primary'), true);
@@ -9177,12 +9388,15 @@ ACT['emp-import-confirm']=()=>{
   let added=0, updated=0;
   rows.forEach(r=>{
     const ex=(S.employees||[]).find(e=>e.empNo===r.empNo);
-    if(ex){ ex.name=r.name; if(r.department) ex.department=r.department; updated++; }
-    else{ S.employees.push({id:'EMP-'+r.empNo, empNo:r.empNo, name:r.name, department:r.department||'', status:'active'}); added++; }
+    if(ex){ ex.name=r.name; if(r.department) ex.department=r.department; if(r.phone) ex.phone=r.phone; updated++; }
+    else{ S.employees.push({id:'EMP-'+r.empNo, empNo:r.empNo, name:r.name, department:r.department||'', phone:r.phone||'', status:'active'}); added++; }
   });
   logAudit('Employees batch imported', '', added+' added, '+updated+' updated');
   save(); toast(added+' added, '+updated+' updated','ok'); closeModal(); render();
   pushEmployeesToPortal(rows.map(r=>r.empNo));
+  /* their leave history too, so the balance the portal checks against is right from day one */
+  const imported=new Set(rows.map(r=>r.empNo));
+  pushLeaveAppsToPortal((S.leaveApplications||[]).filter(a=>imported.has(a.empNo)).map(a=>a.id));
   PENDING_EMP_IMPORT=null;
 };
 

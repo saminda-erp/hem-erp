@@ -1,0 +1,20 @@
+-- ============================================================
+-- HE Manufacturing — Leave Portal v2 (2026-09-29) — ALREADY APPLIED to project znxtvkpnwzrzevljdsgx
+-- The full SQL is stored in Supabase's migration history under these names:
+--     leave_portal_v2_rules_notices_docs
+--     leave_types_staff_write
+-- (Dashboard → Database → Migrations, or: select statements from supabase_migrations.schema_migrations where name = '...')
+--
+-- What it did:
+--   * hem_leave_types: rule columns (min_notice_days, late_days, doc_rule, doc labels, EN/BM notes).
+--       annual 14d notice · medical: MC required, up to 2d late · hospitalization: letter required once started
+--       emergency: UNPAID, up to 2d late · unpaid: 7d notice · timeoff: 3d notice
+--   * hem_leave_applications: paid, doc_paths, details. Public (anon) read/insert REMOVED —
+--       the portal now goes only through the functions below.
+--   * hem_employees: passwords re-stored as bcrypt hashes; anon access removed.
+--   * hem_leave_notices: messages to employees (approved / rejected / meeting). Staff-only table.
+--   * Functions (security definer, each re-checks employee no. + password):
+--       portal_data, portal_apply (enforces every rule server-side), portal_attach_docs, portal_mark_read;
+--       login_employee / set_employee_password now use bcrypt.
+--   * Storage bucket 'hem-leave-docs' (private, 10 MB, PDF/images): portal upload-only, staff read/delete.
+-- ============================================================

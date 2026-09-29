@@ -2,240 +2,541 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>HE Manufacturing — Leave Portal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!--
+  HE Manufacturing — Employee Leave Portal (v2, 2026-09-29)
+  ---------------------------------------------------------
+  Opened from the QR on HR → Leave. Employee signs in with Employee No. + the password HR set.
+  Nothing talks to the tables directly any more: every call goes through a security-definer
+  function that re-checks the employee number + password (bcrypt) first —
+    portal_data        → my details, leave types + rules, my applications, messages from HR
+    portal_apply       → submit; ALL leave rules are enforced there, server side
+    portal_attach_docs → add an MC / hospital letter to a pending application
+    portal_mark_read   → mark HR messages as read
+  Documents go to the private Storage bucket 'hem-leave-docs' (upload-only for this page).
+  The rules shown on this page are read from hem_leave_types, the same row the server
+  enforces, so what the employee is told and what is checked can't drift apart.
+-->
 <style>
   :root{
-    --wine:#522B39; --wine-dk:#3c1f29; --wine-soft:#f4eeee; --brass:#9C7434;
-    --ink:#231a1c; --ink2:#5c4b51; --paper:#faf8f6; --card:#ffffff;
-    --line:#e7dfdb; --muted:#8a7b76; --on-wine:#f7f0ee;
-    --ok:#2f6b46; --ok-bg:#e4f0e7; --bad:#a3312c; --bad-bg:#fbe4e2; --warn:#a86a10; --warn-bg:#fbeed9;
+    --wine:#522B39; --wine-dk:#3c1f29; --wine-soft:#f4eeee; --brass:#9C7434; --brass-soft:#f6efe3;
+    --ink:#231a1c; --ink2:#5c4b51; --paper:#faf8f6; --card:#ffffff; --field:#ffffff;
+    --line:#e7dfdb; --muted:#8a7b76;
+    --ok:#2f6b46; --ok-bg:#e4f0e7; --bad:#a3312c; --bad-bg:#fbe4e2; --warn:#a86a10; --warn-bg:#fbeed9; --info:#35557f; --info-bg:#e5edf7;
     --r:10px;
   }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --wine:#c7899c; --wine-soft:#2d2226; --brass:#c9a063; --brass-soft:#2e2619;
+      --ink:#f1e9e6; --ink2:#c9bab5; --paper:#171214; --card:#211a1d; --field:#1b1517; --line:#3a2f33; --muted:#9a8b86;
+      --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15; --info:#9bbbe6; --info-bg:#1c2636;
+    }
+  }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;font-size:15px;line-height:1.5}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;font-size:15.5px;line-height:1.5}
   h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0}
   .mono{font-family:'IBM Plex Mono',monospace}
-  .wrap{max-width:480px;margin:0 auto;padding:20px 16px 60px}
-  .topbar{display:flex;align-items:center;gap:10px;padding:16px;background:var(--wine);color:var(--on-wine)}
-  .crest{width:32px;height:32px;border-radius:8px;background:var(--brass);display:flex;align-items:center;justify-content:center;
-    font-family:'Fraunces',serif;font-weight:600;color:var(--wine-dk);font-size:13px;flex:none}
+  .wrap{max-width:560px;margin:0 auto;padding:18px 16px 60px}
+  .topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;background:#522B39;color:#f7f0ee;position:sticky;top:0;z-index:5}
+  .crest{width:34px;height:34px;border-radius:8px;background:#9C7434;display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-weight:600;color:#3c1f29;font-size:13px;flex:none}
   .topbar .name{font-family:'Fraunces',serif;font-size:15px;font-weight:600;line-height:1.2}
-  .topbar .sub{font-size:11px;color:rgba(247,240,238,.65)}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
-  label{display:block;font-size:12.5px;color:var(--ink2);margin-bottom:5px;font-weight:500}
-  input,select,textarea{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);
-    font-family:'Archivo',sans-serif;font-size:15px;background:#fff;color:var(--ink);margin-bottom:14px}
+  .topbar .sub{font-size:11.5px;color:rgba(247,240,238,.7)}
+  .lang{display:flex;border:1px solid rgba(255,255,255,.3);border-radius:20px;overflow:hidden;flex:none}
+  .lang button{background:transparent;color:#f7f0ee;border:0;padding:6px 10px;font:600 12px 'Archivo',sans-serif;cursor:pointer;width:auto}
+  .lang button.on{background:#f7f0ee;color:#522B39}
+  .topbtn{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:7px 10px;font:600 12px 'Archivo',sans-serif;cursor:pointer}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+  .card h3{font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  label.l{display:block;font-size:13px;color:var(--ink2);margin-bottom:5px;font-weight:600}
+  .req{color:var(--bad)}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);
+    font-family:'Archivo',sans-serif;font-size:16px;background:var(--field);color:var(--ink);margin-bottom:12px}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--wine);outline-offset:1px}
-  button{font-family:'Archivo',sans-serif;font-weight:600;font-size:14.5px;border:none;border-radius:var(--r);
-    padding:12px 16px;cursor:pointer;width:100%}
-  .btn-primary{background:var(--wine);color:var(--on-wine)}
+  button{font-family:'Archivo',sans-serif;font-weight:600;font-size:15px;border:none;border-radius:var(--r);padding:12px 16px;cursor:pointer}
+  .btn-primary{background:#522B39;color:#f7f0ee;width:100%}
   .btn-primary:disabled{opacity:.5}
   .btn-ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
-  .err{background:var(--bad-bg);color:var(--bad);border-radius:var(--r);padding:10px 12px;font-size:13px;margin-bottom:14px}
-  .ok{background:var(--ok-bg);color:var(--ok);border-radius:var(--r);padding:10px 12px;font-size:13px;margin-bottom:14px}
-  .balrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f1ecea;font-size:13.5px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .msg{border-radius:var(--r);padding:10px 12px;font-size:13.5px;margin-bottom:12px}
+  .msg.err{background:var(--bad-bg);color:var(--bad)} .msg.ok{background:var(--ok-bg);color:var(--ok)}
+  .msg.warn{background:var(--warn-bg);color:var(--warn)} .msg.info{background:var(--info-bg);color:var(--info)}
+  .note{background:var(--brass-soft);border-radius:var(--r);padding:11px 13px;font-size:13.5px;color:var(--ink2);margin-bottom:12px}
+  .rules{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink2)} .rules li{margin-bottom:5px}
+  .rules b{color:var(--ink)}
+  .balrow{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
   .balrow:last-child{border-bottom:none}
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:7px}
-  .balnum{font-family:'IBM Plex Mono',monospace}
-  .balnum b{font-size:15px}
-  .hist{padding:8px 0;border-bottom:1px solid #f1ecea;font-size:13px}
-  .hist:last-child{border-bottom:none}
-  .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
-  .tag.pending{background:var(--warn-bg);color:var(--warn)}
-  .tag.approved{background:var(--ok-bg);color:var(--ok)}
-  .tag.rejected{background:var(--bad-bg);color:var(--bad)}
+  .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+  .tag.pending{background:var(--warn-bg);color:var(--warn)} .tag.approved{background:var(--ok-bg);color:var(--ok)}
+  .tag.rejected{background:var(--bad-bg);color:var(--bad)} .tag.unpaid{background:var(--line);color:var(--ink2)}
+  .tag.meeting{background:var(--info-bg);color:var(--info)}
+  .hist{padding:10px 0;border-bottom:1px solid var(--line);font-size:14px} .hist:last-child{border-bottom:none}
   .muted{color:var(--muted);font-size:12.5px}
-  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .notice{border:1px solid var(--line);border-radius:var(--r);padding:11px 12px;margin-bottom:8px;font-size:14px}
+  .notice.unread{border-color:var(--wine);background:var(--wine-soft)}
+  .notice .t{font-weight:700;display:flex;justify-content:space-between;gap:8px}
+  .badge{background:#b3261e;color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;font-family:'IBM Plex Mono',monospace}
+  .count{font-size:12px;color:var(--muted);text-align:right;margin:-8px 0 12px}
+  .cvbtns{display:flex;gap:8px;margin:6px 0 8px}
+  .cvbtns label{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--wine);color:var(--wine);
+    border-radius:var(--r);padding:11px 8px;font-weight:600;font-size:14px;cursor:pointer;background:var(--field)}
+  .cvbtns input{display:none}
+  .file{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:6px;background:var(--field);font-size:13px}
+  .file img,.file .th{width:40px;height:50px;border-radius:4px;object-fit:cover;background:var(--wine-soft);display:flex;align-items:center;justify-content:center;font:600 11px 'IBM Plex Mono',monospace;color:var(--wine);flex:none}
+  .file .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file button{background:transparent;border:1px solid var(--line);color:var(--ink2);padding:5px 9px;font-size:12px}
+  .docbox{border:1px dashed var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
+  .docbox.need{border-color:var(--wine)}
   [hidden]{display:none!important}
 </style>
 </head>
 <body>
 
-<div id="loginScreen" class="wrap" style="padding-top:60px">
-  <div style="text-align:center;margin-bottom:22px">
-    <div class="crest" style="width:52px;height:52px;font-size:19px;margin:0 auto 12px">HE</div>
-    <h1 style="font-size:20px">HE Manufacturing</h1>
-    <div class="muted">Employee Leave Portal</div>
+<div class="topbar">
+  <div class="crest">HE</div>
+  <div style="flex:1;min-width:0">
+    <div class="name" id="tbName">HE Manufacturing</div>
+    <div class="sub" id="tbSub"></div>
   </div>
-  <div class="card">
-    <div id="loginErr" class="err" hidden></div>
-    <form id="loginForm">
-      <label>Employee Number</label>
-      <input type="text" id="empNo" autocomplete="username" placeholder="e.g. 00093" required>
-      <label>Password</label>
-      <input type="password" id="empPass" autocomplete="current-password" required>
-      <button type="submit" class="btn-primary" id="loginBtn">Sign in</button>
-    </form>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" data-lang="en" class="on">EN</button>
+    <button type="button" data-lang="ms">BM</button>
   </div>
-  <div class="muted" style="text-align:center">Don't have a password yet? Ask HR to set one for you in the main system.</div>
+  <button type="button" class="topbtn" id="logoutBtn" hidden></button>
 </div>
 
-<div id="appScreen" hidden>
-  <div class="topbar">
-    <div class="crest">HE</div>
-    <div style="flex:1">
-      <div class="name" id="empName">—</div>
-      <div class="sub" id="empMeta">—</div>
-    </div>
-    <button class="btn-ghost" id="logoutBtn" style="width:auto;padding:8px 12px;font-size:12.5px;background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25)">Sign out</button>
+<div id="loginScreen" class="wrap" style="padding-top:34px">
+  <div style="text-align:center;margin-bottom:18px">
+    <h1 style="font-size:21px" data-t="portalTitle"></h1>
+    <div class="muted" data-t="portalSub"></div>
   </div>
-  <div class="wrap">
-    <div id="submitMsg"></div>
-
-    <div class="card">
-      <h3 style="font-size:14px;margin-bottom:10px">Your leave balance — <span id="balYear"></span></h3>
-      <div id="balanceList"></div>
-    </div>
-
-    <div class="card">
-      <h3 style="font-size:14px;margin-bottom:12px">Apply for leave</h3>
-      <form id="applyForm">
-        <label>Leave type</label>
-        <select id="leaveType" required></select>
-        <div class="row2">
-          <div><label>Start date</label><input type="date" id="startDate" required></div>
-          <div><label>End date</label><input type="date" id="endDate" required></div>
-        </div>
-        <label>Reason (optional)</label>
-        <textarea id="reason" rows="2"></textarea>
-        <button type="submit" class="btn-primary" id="applyBtn">Submit application</button>
-      </form>
-    </div>
-
-    <div class="card">
-      <h3 style="font-size:14px;margin-bottom:10px">Your applications</h3>
-      <div id="historyList"><div class="muted">Loading…</div></div>
-    </div>
+  <div class="card">
+    <div id="loginMsg"></div>
+    <form id="loginForm">
+      <label class="l" for="empNo" data-t="empNo"></label>
+      <input type="text" id="empNo" autocomplete="username" inputmode="numeric" placeholder="00093" required>
+      <label class="l" for="empPass" data-t="password"></label>
+      <input type="password" id="empPass" autocomplete="current-password" required>
+      <button type="submit" class="btn-primary" id="loginBtn" data-t="signIn"></button>
+    </form>
   </div>
+  <div class="muted" style="text-align:center" data-t="noPassword"></div>
+</div>
+
+<div id="appScreen" class="wrap" hidden>
+  <div id="topMsg"></div>
+  <div id="noticesCard"></div>
+  <div class="card"><h3 data-t="balanceTitle"></h3><div id="balanceList"></div></div>
+  <div class="card" id="rulesCard"></div>
+  <div class="card" id="applyCard"></div>
+  <div class="card"><h3 data-t="historyTitle"></h3><div id="historyList"></div></div>
 </div>
 
 <script>
 const SUPABASE_URL = 'https://znxtvkpnwzrzevljdsgx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_3Q-qF58hDO6Q5Tr8Wr8X4A_WTBVR8z5';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = (window.supabase && window.supabase.createClient)
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:false}}) : null;
+const DOC_BUCKET = 'hem-leave-docs', MAX_DOCS = 4, MAX_BYTES = 10*1024*1024;
 
-let ME = null; // {emp_no, name, department}
-let LEAVE_TYPES = [];
-
+/* ------------------------------------------------------------------ text */
+const TX = {
+  portalTitle:{en:'Employee Leave Portal', ms:'Portal Cuti Pekerja'},
+  portalSub:{en:'HE Manufacturing (M) Sdn Bhd', ms:'HE Manufacturing (M) Sdn Bhd'},
+  empNo:{en:'Employee number', ms:'Nombor pekerja'}, password:{en:'Password', ms:'Kata laluan'},
+  signIn:{en:'Sign in', ms:'Log masuk'}, signingIn:{en:'Signing in…', ms:'Sedang log masuk…'},
+  signOut:{en:'Sign out', ms:'Log keluar'},
+  noPassword:{en:'No password yet? Ask HR to set one for you.', ms:'Belum ada kata laluan? Minta HR tetapkan untuk anda.'},
+  badLogin:{en:'Incorrect employee number or password.', ms:'Nombor pekerja atau kata laluan salah.'},
+  offline:{en:'Could not connect. Check your internet and try again.', ms:'Tidak dapat disambungkan. Semak internet anda dan cuba lagi.'},
+  noticesTitle:{en:'Messages from HR', ms:'Mesej daripada HR'},
+  meetHR:{en:'Please see HR', ms:'Sila jumpa HR'}, when:{en:'When', ms:'Bila'}, where:{en:'Where', ms:'Di mana'},
+  balanceTitle:{en:'Your leave balance — {y}', ms:'Baki cuti anda — {y}'},
+  left:{en:'left', ms:'baki'}, taken:{en:'taken', ms:'diambil'}, pendingW:{en:'pending', ms:'menunggu'},
+  daysW:{en:'day(s)', ms:'hari'}, unpaid:{en:'UNPAID', ms:'TANPA GAJI'}, notTracked:{en:'as approved', ms:'mengikut kelulusan'},
+  rulesTitle:{en:'Before you apply — leave rules', ms:'Sebelum memohon — peraturan cuti'},
+  ruleGeneral:{en:'Give a clear, honest reason (at least 10 characters). Vague reasons like "personal" may be rejected.',
+               ms:'Berikan sebab yang jelas dan jujur (sekurang-kurangnya 10 aksara). Sebab umum seperti "hal peribadi" mungkin ditolak.'},
+  ruleSunday:{en:'Sundays are the rest day and are not counted as leave days.', ms:'Hari Ahad ialah hari rehat dan tidak dikira sebagai hari cuti.'},
+  ruleBalance:{en:'You cannot apply for more paid days than your balance. Extra days must be applied as Unpaid Leave.',
+               ms:'Anda tidak boleh memohon lebih daripada baki cuti bergaji. Hari tambahan mesti dimohon sebagai Cuti Tanpa Gaji.'},
+  ruleOverlap:{en:'Your dates must not overlap another pending or approved application.', ms:'Tarikh tidak boleh bertindih dengan permohonan lain yang menunggu atau telah diluluskan.'},
+  ruleApproval:{en:'Leave is only confirmed once HR approves it. You will see the result here and may receive a WhatsApp message.',
+                ms:'Cuti hanya disahkan selepas diluluskan oleh HR. Keputusan akan dipaparkan di sini dan anda mungkin menerima mesej WhatsApp.'},
+  ruleFalse:{en:'False reasons or fake documents may lead to disciplinary action.', ms:'Sebab palsu atau dokumen palsu boleh membawa kepada tindakan tatatertib.'},
+  applyTitle:{en:'Apply for leave', ms:'Mohon cuti'},
+  leaveType:{en:'Leave type', ms:'Jenis cuti'}, start:{en:'First day', ms:'Hari pertama'}, end:{en:'Last day', ms:'Hari terakhir'},
+  reason:{en:'Reason for leave', ms:'Sebab bercuti'},
+  reasonPh:{en:'e.g. Fever and cough, saw Klinik Mediviron; or Sister\'s wedding in Ipoh', ms:'cth. Demam dan batuk, ke Klinik Mediviron; atau Majlis perkahwinan adik di Ipoh'},
+  contact:{en:'Phone number while on leave — optional', ms:'Nombor telefon semasa cuti — pilihan'},
+  chars:{en:'{n} / 10 characters minimum', ms:'{n} / minimum 10 aksara'},
+  workDays:{en:'{n} leave day(s) — Sundays not counted', ms:'{n} hari cuti — Ahad tidak dikira'},
+  docTitleReq:{en:'{doc} — required', ms:'{doc} — wajib'},
+  docTitleLater:{en:'{doc} — upload now, or before HR approves', ms:'{doc} — muat naik sekarang, atau sebelum HR meluluskan'},
+  docTitleOpt:{en:'Supporting document — optional', ms:'Dokumen sokongan — pilihan'},
+  photo:{en:'Take photo', ms:'Ambil gambar'}, file:{en:'Choose file', ms:'Pilih fail'}, remove:{en:'Remove', ms:'Buang'},
+  fileHint:{en:'Photo, gallery image or PDF. Make sure the clinic name, date and doctor\'s stamp are readable.',
+            ms:'Gambar, imej galeri atau PDF. Pastikan nama klinik, tarikh dan cop doktor boleh dibaca.'},
+  submit:{en:'Submit application', ms:'Hantar permohonan'}, sending:{en:'Sending…', ms:'Menghantar…'},
+  uploading:{en:'Uploading document {n} of {t}…', ms:'Memuat naik dokumen {n} daripada {t}…'},
+  submitted:{en:'Application sent — {d} day(s){u}. HR will review it.', ms:'Permohonan dihantar — {d} hari{u}. HR akan menyemaknya.'},
+  unpaidSuffix:{en:', UNPAID', ms:', TANPA GAJI'},
+  historyTitle:{en:'Your applications', ms:'Permohonan anda'}, none:{en:'No applications yet.', ms:'Tiada permohonan lagi.'},
+  rejReason:{en:'Reason', ms:'Sebab'}, docs:{en:'{n} document(s)', ms:'{n} dokumen'},
+  needDocLater:{en:'Upload your hospital letter — HR cannot approve without it.', ms:'Muat naik surat hospital anda — HR tidak boleh meluluskan tanpanya.'},
+  uploadNow:{en:'Upload document', ms:'Muat naik dokumen'}, docAdded:{en:'Document added.', ms:'Dokumen ditambah.'},
+  st:{en:{pending:'PENDING',approved:'APPROVED',rejected:'REJECTED'}, ms:{pending:'MENUNGGU',approved:'DILULUSKAN',rejected:'DITOLAK'}},
+  // live checks + server codes
+  e_auth:{en:'Your session has ended. Please sign in again.', ms:'Sesi anda telah tamat. Sila log masuk semula.'},
+  e_bad_type:{en:'Please choose a leave type.', ms:'Sila pilih jenis cuti.'},
+  e_bad_dates:{en:'Check the dates — the last day must be on or after the first day.', ms:'Semak tarikh — hari terakhir mesti sama atau selepas hari pertama.'},
+  e_span_year:{en:'Leave cannot cross into the next year. Please make two applications.', ms:'Cuti tidak boleh merentasi tahun. Sila buat dua permohonan.'},
+  e_too_long:{en:'That is longer than 90 days. Please speak to HR.', ms:'Tempoh melebihi 90 hari. Sila berjumpa HR.'},
+  e_no_workdays:{en:'Those dates contain no working days (Sundays are not counted).', ms:'Tarikh tersebut tiada hari bekerja (Ahad tidak dikira).'},
+  e_reason_short:{en:'Please give a clearer reason (at least 10 characters).', ms:'Sila berikan sebab yang lebih jelas (sekurang-kurangnya 10 aksara).'},
+  e_notice:{en:'{type} must be applied at least {n} days before. The earliest first day you can choose is {date}.', ms:'{type} mesti dimohon sekurang-kurangnya {n} hari lebih awal. Hari pertama paling awal ialah {date}.'},
+  e_too_late:{en:'Too late to apply — {type} can be applied at most {n} day(s) after the last day. Please see HR.', ms:'Sudah terlewat — {type} hanya boleh dimohon sehingga {n} hari selepas hari terakhir. Sila jumpa HR.'},
+  e_too_late0:{en:'The first day has already passed. {type} must be applied in advance.', ms:'Hari pertama telah berlalu. {type} mesti dimohon lebih awal.'},
+  e_mc_future:{en:'Medical leave can only be applied once you have your MC (not for future dates).', ms:'Cuti sakit hanya boleh dimohon selepas mendapat MC (bukan untuk tarikh akan datang).'},
+  e_doc_missing:{en:'Please attach your {doc}.', ms:'Sila lampirkan {doc} anda.'},
+  e_overlap:{en:'You already have an application for some of these days.', ms:'Anda sudah mempunyai permohonan untuk sebahagian hari tersebut.'},
+  e_balance:{en:'Not enough balance — only {n} day(s) of {type} left. Apply the extra days as Unpaid Leave.', ms:'Baki tidak mencukupi — hanya {n} hari {type} lagi. Mohon hari tambahan sebagai Cuti Tanpa Gaji.'},
+  e_dup_id:{en:'Please press Submit again.', ms:'Sila tekan Hantar sekali lagi.'},
+  e_upload:{en:'Could not upload the document — check your internet and try again.', ms:'Tidak dapat memuat naik dokumen — semak internet anda dan cuba lagi.'},
+  e_file_big:{en:'{f} is larger than 10 MB.', ms:'{f} melebihi 10 MB.'}, e_file_type:{en:'{f} is not a photo or PDF.', ms:'{f} bukan gambar atau PDF.'},
+  e_max_files:{en:'Up to {n} files.', ms:'Maksimum {n} fail.'},
+  e_generic:{en:'Could not submit ({c}). Please try again or see HR.', ms:'Tidak dapat dihantar ({c}). Sila cuba lagi atau jumpa HR.'}
+};
+let LANG = 'en';
+try{ const l=localStorage.getItem('hem_leave_lang'); if(l==='ms'||l==='en') LANG=l; }catch(e){}
 const $ = id => document.getElementById(id);
 const esc = v => String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const today = () => new Date().toISOString().slice(0,10);
-function daysInRange(a,b){
-  const out=[]; let d=new Date(a), last=new Date(b);
-  while(d<=last){ out.push(1); d=new Date(d.getTime()+864e5); }
-  return out.length;
-}
+function t(k, vars){ let s=(TX[k]||{})[LANG]; if(s==null) s=(TX[k]||{}).en; if(s==null) s=k;
+  if(vars && typeof s==='string') Object.keys(vars).forEach(x=>{ s=s.split('{'+x+'}').join(vars[x]); }); return s; }
 
-function showLogin(msg){
-  $('loginScreen').hidden=false; $('appScreen').hidden=true;
-  if(msg){ $('loginErr').textContent=msg; $('loginErr').hidden=false; } else { $('loginErr').hidden=true; }
-}
-function showApp(){ $('loginScreen').hidden=true; $('appScreen').hidden=false; }
+/* ------------------------------------------------------------------ state */
+let CRED=null;              // {emp_no, password} — memory only, never stored
+let DATA=null;              // last portal_data result
+let DOCS=[];                // files chosen in the apply form [{blob,name,type,size,thumb}]
+let FORM={type:'', start:'', end:'', reason:'', contact:''};
+let refreshTimer=null, markReadTimer=null;
 
-$('loginForm').addEventListener('submit', async function(e){
+/* ------------------------------------------------------------------ date helpers (KL calendar) */
+const iso = d => d.toISOString().slice(0,10);
+function addDays(s, n){ const d=new Date(s+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return iso(d); }
+function workDays(a, b){ if(!a||!b||b<a) return 0; let n=0, d=a;
+  for(let i=0;i<400 && d<=b;i++){ if(new Date(d+'T00:00:00Z').getUTCDay()!==0) n++; d=addDays(d,1); } return n; }
+function fmtDate(s){ if(!s) return ''; const d=new Date(s+'T00:00:00Z');
+  return d.toLocaleDateString(LANG==='ms'?'ms-MY':'en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}); }
+function todayKL(){ return (DATA&&DATA.today) || new Date(Date.now()+8*3600e3).toISOString().slice(0,10); }
+function typeOf(code){ return ((DATA&&DATA.types)||[]).find(x=>x.code===code); }
+function typeName(ty){ return ty? ty.name : ''; }
+function docLabel(ty){ return ty? (LANG==='ms'? ty.doc_label_ms||ty.doc_label_en : ty.doc_label_en) || (LANG==='ms'?'dokumen':'document') : ''; }
+function tNote(ty){ return ty? (LANG==='ms'? ty.note_ms||ty.note_en : ty.note_en)||'' : ''; }
+
+/* ------------------------------------------------------------------ language */
+function applyLang(){
+  document.documentElement.lang = LANG==='ms'?'ms':'en';
+  document.querySelectorAll('[data-t]').forEach(el=>{ el.textContent=t(el.dataset.t, {y:new Date().getFullYear()}); });
+  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on', b.dataset.lang===LANG));
+  $('logoutBtn').textContent=t('signOut');
+  if(DATA) renderAll();
+}
+document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click', ()=>{
+  LANG=b.dataset.lang; try{ localStorage.setItem('hem_leave_lang', LANG); }catch(e){} applyLang(); }));
+
+/* ------------------------------------------------------------------ sign in / out */
+function showMsg(id, kind, text){ $(id).innerHTML = text? '<div class="msg '+kind+'">'+esc(text)+'</div>' : ''; }
+async function load(){
+  if(!sb) throw new Error('offline');
+  const { data, error } = await sb.rpc('portal_data', {p_emp_no:CRED.emp_no, p_password:CRED.password});
+  if(error) throw error;
+  if(!data || !data.ok) return false;
+  DATA=data; return true;
+}
+$('loginForm').addEventListener('submit', async e=>{
   e.preventDefault();
-  $('loginErr').hidden=true;
-  const empNo=$('empNo').value.trim(), pass=$('empPass').value;
-  $('loginBtn').disabled=true; $('loginBtn').textContent='Signing in…';
+  const emp=$('empNo').value.trim(), pw=$('empPass').value;
+  const btn=$('loginBtn'); btn.disabled=true; btn.textContent=t('signingIn'); showMsg('loginMsg','','');
+  CRED={emp_no:emp, password:pw};
   try{
-    const { data, error } = await sb.rpc('login_employee', { p_emp_no: empNo, p_password: pass });
-    $('loginBtn').disabled=false; $('loginBtn').textContent='Sign in';
-    if(error){ showLogin('Could not reach the leave system. Try again in a moment.'); console.error(error); return; }
-    if(!data || !data.length){ showLogin('Incorrect employee number or password.'); return; }
-    ME = data[0];
-    try{ localStorage.setItem('hem_leave_empno', empNo); }catch(e){}
-    await afterLogin();
-  }catch(err){
-    $('loginBtn').disabled=false; $('loginBtn').textContent='Sign in';
-    showLogin('Could not reach the leave system. Check your connection and try again.');
-    console.error(err);
-  }
+    const ok=await load();
+    if(!ok){ CRED=null; showMsg('loginMsg','err',t('badLogin')); return; }
+    try{ localStorage.setItem('hem_leave_empno', emp); }catch(x){}
+    $('empPass').value='';
+    $('loginScreen').hidden=true; $('appScreen').hidden=false; $('logoutBtn').hidden=false;
+    renderAll(); scheduleMarkRead();
+    clearInterval(refreshTimer); refreshTimer=setInterval(()=>refresh(true), 60000);
+  }catch(err){ CRED=null; console.error(err); showMsg('loginMsg','err',t('offline')); }
+  finally{ btn.disabled=false; btn.textContent=t('signIn'); }
 });
-
-$('logoutBtn').addEventListener('click', function(){
-  ME=null; try{ localStorage.removeItem('hem_leave_empno'); }catch(e){}
-  $('empPass').value='';
-  showLogin();
-});
-
-async function afterLogin(){
-  showApp();
-  $('empName').textContent = ME.name || ME.emp_no;
-  $('empMeta').textContent = 'Emp No. '+ME.emp_no + (ME.department? ' · '+ME.department : '');
-  $('balYear').textContent = new Date().getFullYear();
-  await loadLeaveTypes();
-  await refreshBalanceAndHistory();
+function signOut(msg){
+  CRED=null; DATA=null; DOCS=[]; FORM={type:'',start:'',end:'',reason:'',contact:''};
+  clearInterval(refreshTimer); clearTimeout(markReadTimer);
+  $('appScreen').hidden=true; $('loginScreen').hidden=false; $('logoutBtn').hidden=true;
+  $('tbName').textContent='HE Manufacturing'; $('tbSub').textContent='';
+  showMsg('loginMsg', msg?'err':'', msg||'');
 }
-
-async function loadLeaveTypes(){
-  const { data, error } = await sb.from('hem_leave_types').select('*').order('code');
-  if(error){ console.error(error); return; }
-  LEAVE_TYPES = data||[];
-  $('leaveType').innerHTML = LEAVE_TYPES.map(t=>'<option value="'+esc(t.code)+'">'+esc(t.name)+'</option>').join('');
+$('logoutBtn').addEventListener('click', ()=>signOut());
+async function refresh(silent){
+  if(!CRED) return;
+  try{ const ok=await load(); if(!ok) return signOut(t('e_auth')); renderAll(true); if(!silent) scheduleMarkRead(); }
+  catch(e){ if(!silent) showMsg('topMsg','err',t('offline')); }
 }
+function scheduleMarkRead(){
+  clearTimeout(markReadTimer);
+  if(!DATA || !(DATA.notices||[]).some(n=>!n.read_at)) return;
+  // leave them highlighted long enough to be noticed, then mark read on the server
+  markReadTimer=setTimeout(()=>{ if(CRED) sb.rpc('portal_mark_read',{p_emp_no:CRED.emp_no, p_password:CRED.password}).then(()=>{},()=>{}); }, 4000);
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && CRED) refresh(true); });
 
-async function refreshBalanceAndHistory(){
-  const year = new Date().getFullYear();
-  const { data, error } = await sb.from('hem_leave_applications')
-    .select('*').eq('emp_no', ME.emp_no).eq('year', year).order('start_date', {ascending:false});
-  if(error){ console.error(error); $('balanceList').innerHTML='<div class="err">Could not load your leave data.</div>'; return; }
-  const apps = data||[];
-  const approved = apps.filter(a=>a.status==='approved');
+/* ------------------------------------------------------------------ rendering */
+function balances(){
+  const yr=Number(todayKL().slice(0,4));
+  return (DATA.types||[]).map(ty=>{
+    const mine=(DATA.apps||[]).filter(a=>a.type===ty.code && Number(a.year)===yr);
+    const taken=mine.filter(a=>a.status==='approved').reduce((s,a)=>s+Number(a.days||0),0);
+    const pend=mine.filter(a=>a.status==='pending').reduce((s,a)=>s+Number(a.days||0),0);
+    const tracked = ty.paid && Number(ty.default_days)>0;
+    return {ty, taken, pend, tracked, left: tracked? Math.max(0, Number(ty.default_days)-taken-pend) : null};
+  });
+}
+function renderAll(keepForm){
+  const emp=DATA.employee||{};
+  $('tbName').textContent=emp.name||emp.emp_no; $('tbSub').textContent=(emp.emp_no||'')+(emp.department?' · '+emp.department:'');
+  document.querySelectorAll('[data-t]').forEach(el=>{ el.textContent=t(el.dataset.t, {y:todayKL().slice(0,4)}); });
 
-  $('balanceList').innerHTML = LEAVE_TYPES.map(t=>{
-    const taken = approved.filter(a=>a.type===t.code).reduce((s,a)=>s+(Number(a.days)||0),0);
-    const bal = Math.max(0, (t.default_days||0)-taken);
-    return '<div class="balrow"><span><span class="dot" style="background:'+esc(t.color)+'"></span>'+esc(t.name)+'</span>'
-      +'<span class="balnum">'+taken+' taken · <b>'+bal+'</b> left</span></div>';
-  }).join('');
+  // messages from HR
+  const ns=DATA.notices||[], unread=ns.filter(n=>!n.read_at).length;
+  $('noticesCard').innerHTML = ns.length? '<div class="card"><h3>'+esc(t('noticesTitle'))+(unread?' <span class="badge">'+unread+'</span>':'')+'</h3>'
+    + ns.slice(0,8).map(n=>'<div class="notice'+(n.read_at?'':' unread')+'"><div class="t"><span>'
+      + (n.kind==='meeting'?'<span class="tag meeting">'+esc(t('meetHR'))+'</span> ':n.kind==='approved'?'<span class="tag approved">✓</span> ':n.kind==='rejected'?'<span class="tag rejected">✗</span> ':'')
+      + esc(n.title)+'</span><span class="muted mono">'+esc(String(n.created_at||'').slice(0,10))+'</span></div>'
+      + (n.body?'<div style="margin-top:4px;white-space:pre-line">'+esc(n.body)+'</div>':'')
+      + (n.meet_at?'<div style="margin-top:4px"><b>'+esc(t('when'))+':</b> '+esc(n.meet_at)+(n.meet_place?' · <b>'+esc(t('where'))+':</b> '+esc(n.meet_place):'')+'</div>':'')
+      + '</div>').join('') + '</div>' : '';
 
-  const hist = apps.slice(0,15);
-  $('historyList').innerHTML = hist.length ? hist.map(a=>{
-    const lt = LEAVE_TYPES.find(t=>t.code===a.type);
-    return '<div class="hist"><div style="display:flex;justify-content:space-between;align-items:center">'
-      +'<b>'+esc(lt?lt.name:a.type)+'</b><span class="tag '+esc(a.status)+'">'+esc(a.status)+'</span></div>'
-      +'<div class="muted mono">'+esc(a.start_date)+(a.end_date!==a.start_date?' → '+esc(a.end_date):'')+' · '+esc(a.days)+' day(s)</div>'
-      +(a.status==='rejected'&&a.reject_reason? '<div class="muted">Reason: '+esc(a.reject_reason)+'</div>':'')
+  // balances
+  $('balanceList').innerHTML = balances().map(b=>'<div class="balrow"><span><span class="dot" style="background:'+esc(b.ty.color||'#888')+'"></span>'+esc(b.ty.name)
+      + (b.ty.paid?'':' <span class="tag unpaid">'+esc(t('unpaid'))+'</span>')+'</span><span class="mono" style="font-size:13px">'
+      + (b.tracked? '<b style="font-size:15px">'+b.left+'</b> '+esc(t('left'))+' <span class="muted">· '+b.taken+' '+esc(t('taken'))+(b.pend?' · '+b.pend+' '+esc(t('pendingW')):'')+'</span>'
+                  : (b.taken? b.taken+' '+esc(t('taken')) : '<span class="muted">'+esc(t('notTracked'))+'</span>'))
+      + '</span></div>').join('');
+
+  // rules
+  $('rulesCard').innerHTML='<h3>📋 '+esc(t('rulesTitle'))+'</h3><ul class="rules">'
+    + (DATA.types||[]).map(ty=>'<li><b>'+esc(ty.name)+(ty.paid?'':' ('+esc(t('unpaid'))+')')+':</b> '+esc(tNote(ty))+'</li>').join('')
+    + ['ruleGeneral','ruleSunday','ruleBalance','ruleOverlap','ruleApproval','ruleFalse'].map(k=>'<li>'+esc(t(k))+'</li>').join('')+'</ul>';
+
+  renderApply();
+  renderHistory();
+}
+function docRequired(ty, start){ if(!ty) return false;
+  return ty.doc_rule==='required' || (ty.doc_rule==='required_if_started' && start && start<=todayKL()); }
+function renderApply(){
+  const ty=typeOf(FORM.type), today=todayKL();
+  const minStart = ty? (ty.min_notice_days>0? addDays(today, ty.min_notice_days) : (ty.late_days>0? addDays(today, -60) : today)) : '';
+  const maxStart = ty && ty.code==='medical'? today : '';
+  const req=docRequired(ty, FORM.start), docOk = ty && ty.doc_rule!=='none';
+  let h='<h3>'+esc(t('applyTitle'))+'</h3><div id="applyMsg"></div>'
+   +'<label class="l" for="lvType">'+esc(t('leaveType'))+' <span class="req">*</span></label>'
+   +'<select id="lvType"><option value="">—</option>'+(DATA.types||[]).map(x=>'<option value="'+esc(x.code)+'"'+(FORM.type===x.code?' selected':'')+'>'+esc(x.name)+(x.paid?'':' — '+t('unpaid'))+'</option>').join('')+'</select>';
+  if(ty) h+='<div class="note">'+(ty.paid?'':'<b>'+esc(t('unpaid'))+'.</b> ')+esc(tNote(ty))+'</div>';
+  h+='<div class="row2"><div><label class="l" for="lvStart">'+esc(t('start'))+' <span class="req">*</span></label>'
+   +'<input type="date" id="lvStart" value="'+esc(FORM.start)+'"'+(minStart?' min="'+minStart+'"':'')+(maxStart?' max="'+maxStart+'"':'')+'></div>'
+   +'<div><label class="l" for="lvEnd">'+esc(t('end'))+' <span class="req">*</span></label>'
+   +'<input type="date" id="lvEnd" value="'+esc(FORM.end)+'"'+(FORM.start?' min="'+esc(FORM.start)+'"':'')+(maxStart?' max="'+maxStart+'"':'')+'></div></div>'
+   +'<div id="liveCheck"></div>'
+   +'<label class="l" for="lvReason">'+esc(t('reason'))+' <span class="req">*</span></label>'
+   +'<textarea id="lvReason" rows="3" maxlength="1000" placeholder="'+esc(t('reasonPh'))+'">'+esc(FORM.reason)+'</textarea>'
+   +'<div class="count" id="reasonCount"></div>';
+  if(ty){
+    h+='<div class="docbox'+(req?' need':'')+'"><label class="l">'
+      +esc(docOk? (req? t('docTitleReq',{doc:docLabel(ty)}) : t('docTitleLater',{doc:docLabel(ty)})) : t('docTitleOpt'))
+      +(req?' <span class="req">*</span>':'')+'</label>'
+      +'<div class="cvbtns"><label><input type="file" id="docCam" accept="image/*" capture="environment">📷 '+esc(t('photo'))+'</label>'
+      +'<label><input type="file" id="docPick" accept="application/pdf,image/*" multiple>📄 '+esc(t('file'))+'</label></div>'
+      +'<div class="muted" style="margin-bottom:6px">'+esc(t('fileHint'))+'</div>'
+      +DOCS.map((f,i)=>'<div class="file">'+(f.thumb?'<img src="'+f.thumb+'" alt="">':'<div class="th">PDF</div>')
+        +'<div class="nm">'+esc(f.name)+'<div class="muted">'+Math.max(1,Math.round(f.size/1024))+' KB</div></div>'
+        +'<button type="button" data-docdel="'+i+'">'+esc(t('remove'))+'</button></div>').join('')
       +'</div>';
-  }).join('') : '<div class="muted">No applications yet.</div>';
+  }
+  h+='<label class="l" for="lvContact">'+esc(t('contact'))+'</label>'
+   +'<input type="tel" id="lvContact" inputmode="tel" value="'+esc(FORM.contact)+'">'
+   +'<button type="button" class="btn-primary" id="submitBtn">'+esc(t('submit'))+'</button>';
+  $('applyCard').innerHTML=h;
+  liveCheck();
+}
+/* the same rules the server enforces, run as the employee types so they see the problem first */
+function check(){
+  const ty=typeOf(FORM.type), today=todayKL(), s=FORM.start, e=FORM.end;
+  if(!ty) return {code:'bad_type'};
+  if(!s||!e||e<s) return {code:'bad_dates'};
+  if(s.slice(0,4)!==e.slice(0,4)) return {code:'span_year'};
+  const days=workDays(s,e);
+  if((new Date(e)-new Date(s))/864e5>90) return {code:'too_long'};
+  if(days<1) return {code:'no_workdays'};
+  if(ty.min_notice_days>0 && s<addDays(today,ty.min_notice_days)) return {code:'notice', need:ty.min_notice_days, earliest:addDays(today,ty.min_notice_days), days};
+  if(s<today && addDays(e,ty.late_days)<today) return {code:'too_late', late_days:ty.late_days, days};
+  if(ty.code==='medical' && s>today) return {code:'mc_future', days};
+  const mine=(DATA.apps||[]).filter(a=>a.status==='pending'||a.status==='approved');
+  if(mine.some(a=>a.start_date<=e && a.end_date>=s)) return {code:'overlap', days};
+  if(ty.paid && Number(ty.default_days)>0){
+    const used=mine.filter(a=>a.type===ty.code && Number(a.year)===Number(s.slice(0,4))).reduce((x,a)=>x+Number(a.days||0),0);
+    if(used+days>Number(ty.default_days)) return {code:'balance', left:Math.max(0,Number(ty.default_days)-used), days};
+  }
+  return {code:'', days};
+}
+function errText(r){
+  const ty=typeOf(FORM.type), nm=typeName(ty);
+  switch(r.code){
+    case 'notice': return t('e_notice',{type:nm, n:r.need, date:fmtDate(r.earliest)});
+    case 'too_late': return r.late_days>0? t('e_too_late',{type:nm, n:r.late_days}) : t('e_too_late0',{type:nm});
+    case 'balance': return t('e_balance',{n:r.left, type:nm});
+    case 'doc_missing': return t('e_doc_missing',{doc:docLabel(ty)||'document'});
+    default: return TX['e_'+r.code]? t('e_'+r.code) : t('e_generic',{c:r.code||'?'});
+  }
+}
+function liveCheck(){
+  const box=$('liveCheck'); if(!box) return;
+  const r = (FORM.type && FORM.start && FORM.end)? check() : null;
+  const ty=typeOf(FORM.type);
+  box.innerHTML = !r? '' : r.code? '<div class="msg warn">'+esc(errText(r))+'</div>'
+    : '<div class="msg info">'+esc(t('workDays',{n:r.days}))+(ty&&!ty.paid?' — '+esc(t('unpaid')):'')+'</div>';
+  const rc=$('reasonCount'); if(rc){ const n=FORM.reason.trim().length; rc.textContent=t('chars',{n}); rc.style.color=n>=10?'var(--ok)':''; }
+}
+function renderHistory(){
+  const apps=DATA.apps||[];
+  $('historyList').innerHTML = apps.length? apps.map(a=>{
+    const ty=typeOf(a.type), needLater = a.status==='pending' && ty && ty.doc_rule==='required_if_started' && !Number(a.docs);
+    return '<div class="hist"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>'+esc(ty?ty.name:a.type)+'</b>'
+      +'<span>'+(a.paid===false?'<span class="tag unpaid">'+esc(t('unpaid'))+'</span> ':'')+'<span class="tag '+esc(a.status)+'">'+esc((TX.st[LANG]||TX.st.en)[a.status]||a.status)+'</span></span></div>'
+      +'<div class="muted mono">'+esc(fmtDate(a.start_date))+(a.end_date!==a.start_date?' → '+esc(fmtDate(a.end_date)):'')+' · '+esc(a.days)+' '+esc(t('daysW'))
+      +(Number(a.docs)?' · '+esc(t('docs',{n:a.docs})):'')+'</div>'
+      +(a.reason?'<div class="muted">'+esc(a.reason)+'</div>':'')
+      +(a.status==='rejected'&&a.reject_reason?'<div style="color:var(--bad);font-size:13px"><b>'+esc(t('rejReason'))+':</b> '+esc(a.reject_reason)+'</div>':'')
+      +(needLater?'<div class="msg warn" style="margin:6px 0 0">'+esc(t('needDocLater'))
+        +'<div class="cvbtns" style="margin-bottom:0"><label><input type="file" data-later="'+esc(a.id)+'" accept="application/pdf,image/*">📄 '+esc(t('uploadNow'))+'</label></div></div>':'')
+      +'</div>';
+  }).join('') : '<div class="muted">'+esc(t('none'))+'</div>';
 }
 
-$('applyForm').addEventListener('submit', async function(e){
-  e.preventDefault();
-  const type=$('leaveType').value, start=$('startDate').value, end=$('endDate').value, reason=$('reason').value.trim();
-  $('submitMsg').innerHTML='';
-  if(!start||!end){ $('submitMsg').innerHTML='<div class="err">Pick a start and end date.</div>'; return; }
-  if(end<start){ $('submitMsg').innerHTML='<div class="err">End date must be on or after the start date.</div>'; return; }
-  const days = daysInRange(start,end);
-  const id = 'LV-P-'+Date.now();
-  $('applyBtn').disabled=true; $('applyBtn').textContent='Submitting…';
-  try{
-    const { error } = await sb.from('hem_leave_applications').insert({
-      id, emp_no: ME.emp_no, type, start_date: start, end_date: end, days,
-      year: Number(start.slice(0,4)), status: 'pending', reason
-    });
-    $('applyBtn').disabled=false; $('applyBtn').textContent='Submit application';
-    if(error){ $('submitMsg').innerHTML='<div class="err">Could not submit — please try again.</div>'; console.error(error); return; }
-    $('submitMsg').innerHTML='<div class="ok">Application submitted — '+days+' day(s), awaiting approval.</div>';
-    $('applyForm').reset();
-    await refreshBalanceAndHistory();
-  }catch(err){
-    $('applyBtn').disabled=false; $('applyBtn').textContent='Submit application';
-    $('submitMsg').innerHTML='<div class="err">Could not reach the leave system. Check your connection.</div>';
-    console.error(err);
-  }
+/* ------------------------------------------------------------------ form events */
+document.addEventListener('input', e=>{
+  const id=e.target.id;
+  if(id==='lvReason'){ FORM.reason=e.target.value; liveCheck(); }
+  if(id==='lvContact'){ FORM.contact=e.target.value; }
+});
+document.addEventListener('change', e=>{
+  const id=e.target.id;
+  if(id==='lvType'){ FORM.type=e.target.value; FORM.start=''; FORM.end=''; showMsg('applyMsg','',''); renderApply(); }
+  if(id==='lvStart'){ FORM.start=e.target.value; if(!FORM.end || FORM.end<FORM.start) FORM.end=FORM.start; renderApply(); }
+  if(id==='lvEnd'){ FORM.end=e.target.value; liveCheck(); }
+  if(id==='docCam' || id==='docPick'){ addDocs(e.target.files).then(()=>renderApply()); }
+  if(e.target.dataset && e.target.dataset.later){ attachLater(e.target.dataset.later, e.target.files); }
+});
+document.addEventListener('click', e=>{
+  const d=e.target.closest('[data-docdel]'); if(d){ DOCS.splice(Number(d.dataset.docdel),1); renderApply(); return; }
+  if(e.target.id==='submitBtn') submitLeave();
 });
 
-// prefill last-used employee number for convenience (never the password)
+/* photos are resized on the phone (long edge 2000px JPEG) — an MC photo stays readable at a
+   fraction of the size, which matters on mobile data */
+function shrinkImage(file){
+  return new Promise(res=>{
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{ try{
+        const k=Math.min(1, 2000/Math.max(img.naturalWidth,img.naturalHeight)), w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
+        const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,w,h); g.drawImage(img,0,0,w,h);
+        const tc=document.createElement('canvas'), tk=100/Math.max(w,h); tc.width=Math.round(w*tk); tc.height=Math.round(h*tk); tc.getContext('2d').drawImage(c,0,0,tc.width,tc.height);
+        const thumb=tc.toDataURL('image/jpeg',0.7);
+        c.toBlob(b=>{ URL.revokeObjectURL(url); res(b?{blob:b,thumb}:null); }, 'image/jpeg', 0.82);
+      }catch(x){ URL.revokeObjectURL(url); res(null); } };
+    img.onerror=()=>{ URL.revokeObjectURL(url); res(null); };
+    img.src=url;
+  });
+}
+async function prepFiles(list, room){
+  const out=[];
+  for(const f of Array.from(list||[])){
+    if(out.length>=room){ showMsg('applyMsg','err',t('e_max_files',{n:MAX_DOCS})); break; }
+    const isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name), isImg=/^image\//.test(f.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name);
+    if(!isPdf&&!isImg){ showMsg('applyMsg','err',t('e_file_type',{f:f.name})); continue; }
+    if(isImg){ const r=await shrinkImage(f); if(r){ out.push({blob:r.blob, name:f.name.replace(/\.[^.]+$/,'')+'.jpg', type:'image/jpeg', size:r.blob.size, thumb:r.thumb}); continue; } }
+    if(f.size>MAX_BYTES){ showMsg('applyMsg','err',t('e_file_big',{f:f.name})); continue; }
+    out.push({blob:f, name:f.name, type:isPdf?'application/pdf':(f.type||'image/heic'), size:f.size, thumb:null});
+  }
+  return out;
+}
+async function addDocs(list){ const got=await prepFiles(list, MAX_DOCS-DOCS.length); DOCS=DOCS.concat(got); }
+const extOf = f => f.type==='application/pdf'?'pdf': f.type==='image/png'?'png': f.type==='image/webp'?'webp': /hei[cf]/.test(f.type)?'heic':'jpg';
+async function uploadDocs(id, files, startAt, onProgress){
+  const paths=[];
+  for(let i=0;i<files.length;i++){
+    const f=files[i], path=id+'/doc-'+(startAt+i+1)+'.'+extOf(f);
+    if(onProgress) onProgress(i+1, files.length);
+    const { error } = await sb.storage.from(DOC_BUCKET).upload(path, f.blob, {contentType:f.type, upsert:false});
+    if(error) throw Object.assign(new Error(error.message||'upload'), {upload:true});
+    paths.push(path);
+  }
+  return paths;
+}
+
+/* ------------------------------------------------------------------ submit */
+async function submitLeave(){
+  showMsg('applyMsg','','');
+  const r=check(), ty=typeOf(FORM.type);
+  let err = r.code? r : (FORM.reason.trim().length<10? {code:'reason_short'} : (docRequired(ty,FORM.start) && !DOCS.length? {code:'doc_missing'} : null));
+  if(err){ showMsg('applyMsg','err',errText(err)); $('applyCard').scrollIntoView({behavior:'smooth'}); return; }
+  const btn=$('submitBtn'); btn.disabled=true; btn.textContent=t('sending');
+  try{
+    let res=null;
+    for(let attempt=0; attempt<2; attempt++){
+      const id='LV-P-'+Date.now()+String(Math.floor(Math.random()*90)+10);
+      const paths = DOCS.length? await uploadDocs(id, DOCS, 0, (n,tot)=>{ btn.textContent=t('uploading',{n,t:tot}); }) : [];
+      btn.textContent=t('sending');
+      const { data, error } = await sb.rpc('portal_apply', {p_emp_no:CRED.emp_no, p_password:CRED.password,
+        p:{id, type:FORM.type, start_date:FORM.start, end_date:FORM.end, reason:FORM.reason.trim(), contact:FORM.contact.trim(), doc_paths:paths, lang:LANG}});
+      if(error) throw error;
+      res=data; if(!(res && res.code==='dup_id')) break;
+    }
+    if(!res || !res.ok){
+      if(res && res.code==='auth') return signOut(t('e_auth'));
+      showMsg('applyMsg','err',errText(res||{code:'?'})); return;
+    }
+    DOCS=[]; FORM={type:'',start:'',end:'',reason:'',contact:''};
+    await refresh(true);
+    showMsg('topMsg','ok',t('submitted',{d:res.days, u:res.paid===false?t('unpaidSuffix'):''}));
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){
+    console.error(e);
+    showMsg('applyMsg','err', e && e.upload? t('e_upload') : t('offline'));
+  }finally{
+    const b=$('submitBtn'); if(b){ b.disabled=false; b.textContent=t('submit'); }
+  }
+}
+async function attachLater(id, files){
+  try{
+    const got=await prepFiles(files, MAX_DOCS); if(!got.length) return;
+    const app=(DATA.apps||[]).find(a=>a.id===id); const start=Number(app&&app.docs)||0;
+    const paths=await uploadDocs(id, got, start + Math.floor(Math.random()*5)*MAX_DOCS);
+    const { data, error } = await sb.rpc('portal_attach_docs', {p_emp_no:CRED.emp_no, p_password:CRED.password, p_id:id, p_paths:paths});
+    if(error || !data || !data.ok) throw error||new Error((data&&data.code)||'attach');
+    await refresh(true); showMsg('topMsg','ok',t('docAdded')); window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){ console.error(e); showMsg('topMsg','err',t('e_upload')); window.scrollTo({top:0,behavior:'smooth'}); }
+}
+
 try{ const last=localStorage.getItem('hem_leave_empno'); if(last) $('empNo').value=last; }catch(e){}
-$('startDate').value=today(); $('endDate').value=today();
-showLogin();
+applyLang();
 </script>
 </body>
 </html>
