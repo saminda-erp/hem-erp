@@ -8798,13 +8798,15 @@ function talentPoolHtml(){
   return h;
 }
 ACT['cand-purge-expired'] = ()=>{
-  const list=liveCandidates().filter(c=>c.status!=='hired' && candAgeDays(c)>POOL_KEEP_DAYS);
+  let list=liveCandidates().filter(c=>c.status!=='hired' && candAgeDays(c)>POOL_KEEP_DAYS);
   if(!list.length) return toast('Nothing older than 12 months','ok');
   formModal({title:'Delete '+list.length+' expired application(s)',
     intro:'The form tells applicants their details are kept for up to 12 months. This removes the personal details, salary and test answers of every non-hired applicant who applied more than 12 months ago — here and in the online table. Reference numbers stay so they are not imported again.',
     fields:[{k:'confirm',label:'Type DELETE to confirm',full:true}], saveLabel:'Delete',
     onSave:v=>{
       if(v.confirm!=='DELETE') return toast('Type DELETE to confirm','bad');
+      const ids=new Set(list.map(c=>c.id));
+      list=liveCandidates().filter(c=>ids.has(c.id));   // fresh objects — see cand-outcome
       removeCvStorage(list.flatMap(c=>candCvFiles(c).map(f=>f.path)));
       list.forEach(c=>{ const i=S.candidates.indexOf(c);
         S.candidates[i]={id:c.id, deleted:true, deletedAt:new Date().toISOString(), deletedBy:UI.user||'', status:'deleted', submittedAt:c.submittedAt}; });
@@ -8981,6 +8983,11 @@ ACT['cand-outcome'] = id=>{
     ],
     saveLabel:'Save outcome',
     onSave:v=>{
+      /* Look the record up again NOW, not when the window opened: the 25-second background cloud
+         pull replaces S with a fresh copy, so a reference captured at open time can point at a
+         discarded object — edits to it would silently vanish (the "outcome not saving" bug). */
+      const c=candidate(id);
+      if(!c || c.deleted){ toast('This candidate was removed on another device','bad'); return false; }
       const was=c.status;
       c.status=v.status||c.status;
       c.interview={date:v.date||'', by:v.by||'', rating:v.rating||'', agreedSalary:v.agreedSalary, startDate:v.startDate||'', notes:v.notes||'',
@@ -8996,6 +9003,8 @@ ACT['cand-delete'] = id=>{
     fields:[{k:'confirm',label:'Type DELETE to confirm',full:true}], saveLabel:'Delete',
     onSave:v=>{
       if(v.confirm!=='DELETE') return toast('Type DELETE to confirm','bad');
+      const c=candidate(id);                         // fresh lookup — see cand-outcome
+      if(!c){ closeModal(); return; }
       const i=S.candidates.indexOf(c);
       removeCvStorage(candCvFiles(c).map(f=>f.path));
       S.candidates[i]={id:c.id, deleted:true, deletedAt:new Date().toISOString(), deletedBy:UI.user||'', status:'deleted', submittedAt:c.submittedAt};
