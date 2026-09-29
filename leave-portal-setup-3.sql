@@ -32,3 +32,12 @@
 --   records relief + handover; routes to the employee's superior first (stage 'superior').
 --   Superior approval link: leave-approve.html?t=<token>; superior_view / superior_decide (token
 --   stored as SHA-256, 21-day expiry); portal_superior_link / hr_superior_link issue fresh links.
+
+-- ---- 2026-09-29 (later): migration "leave_v4_self_register_hod_whatsapp" — ALREADY APPLIED ----
+--   WhatsApp OTP retired (portal_request_otp / portal_verify_otp no longer callable).
+--   Self-service: portal_register / portal_reset — Employee ID + IC/passport (checked against
+--   hem_employees.ic_hash, a SHA-256 the ERP sends; never the IC) + phone → own password (bcrypt).
+--   Reset also needs the registered phone. 5 wrong tries → 15-minute lock.
+--   portal_apply: HOD name + WhatsApp number required; every application starts at stage 'superior'.
+--   hem_portal_settings(hr_whatsapp, hr_name): shown on leave-approve.html so the HOD can inform HR.
+--   hr_portal_status(): registration status for the ERP.

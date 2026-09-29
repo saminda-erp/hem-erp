@@ -41,7 +41,9 @@
   .msg{border-radius:var(--r);padding:11px 13px;font-size:14px;margin-bottom:12px}
   .msg.ok{background:var(--ok-bg);color:var(--ok)} .msg.err{background:var(--bad-bg);color:var(--bad)} .msg.warn{background:var(--warn-bg);color:var(--warn)}
   .tag{font-size:11.5px;padding:2px 8px;border-radius:20px;font-weight:700} .tag.unpaid{background:var(--line);color:var(--ink2)}
-  .done{text-align:center;padding:26px 10px} .done .ic{font-size:44px}
+  .done{text-align:center;padding:26px 10px}
+  .btn-wa{display:block;text-align:center;background:#25D366;color:#fff;border-radius:var(--r);padding:14px 16px;font-weight:700;text-decoration:none;margin-top:10px}
+  .btn-wa.sec{background:transparent;color:var(--ink);border:1px solid var(--line)} .done .ic{font-size:44px}
   [hidden]{display:none!important}
 </style>
 </head>
@@ -67,7 +69,8 @@
       </div>
       <div class="muted" style="margin-top:10px" data-t="afterNote"></div>
     </div>
-    <div class="card done" id="doneCard" hidden><div class="ic" id="doneIc"></div><h1 id="doneTitle"></h1><div class="muted" id="doneBody"></div></div>
+    <div class="card done" id="doneCard" hidden><div class="ic" id="doneIc"></div><h1 id="doneTitle"></h1><div class="muted" id="doneBody"></div>
+      <div id="informBox" style="margin-top:16px;text-align:left"></div></div>
   </div>
 </div>
 <script>
@@ -75,7 +78,7 @@ const sb = window.supabase && window.supabase.createClient('https://znxtvkpnwzrz
 const TOKEN = (new URLSearchParams(location.search).get('t')||'').toLowerCase();
 const TX={
   sub:{en:'Leave approval', ms:'Kelulusan cuti'}, loading:{en:'Loading the application…', ms:'Memuatkan permohonan…'},
-  title:{en:'Leave application', ms:'Permohonan cuti'}, forYou:{en:'For your approval as superior{n}', ms:'Untuk kelulusan anda sebagai penyelia{n}'},
+  title:{en:'Leave application', ms:'Permohonan cuti'}, forYou:{en:'For your approval as Head of Department{n}', ms:'Untuk kelulusan anda sebagai Ketua Jabatan{n}'},
   emp:{en:'Employee', ms:'Pekerja'}, dept:{en:'Department', ms:'Jabatan'}, type:{en:'Leave type', ms:'Jenis cuti'}, dates:{en:'Dates', ms:'Tarikh'},
   days:{en:'Days', ms:'Hari'}, reason:{en:'Reason', ms:'Sebab'}, relief:{en:'Relief / cover', ms:'Pengganti'}, handover:{en:'Handover', ms:'Serahan tugas'},
   docs:{en:'Documents', ms:'Dokumen'}, applied:{en:'Applied', ms:'Dimohon'}, unpaid:{en:'UNPAID', ms:'TANPA GAJI'},
@@ -86,7 +89,10 @@ const TX={
   needComment:{en:'Please write a short reason for not approving.', ms:'Sila tulis sebab ringkas tidak meluluskan.'},
   sending:{en:'Sending…', ms:'Menghantar…'},
   doneYes:{en:'You approved this leave', ms:'Anda telah meluluskan cuti ini'}, doneNo:{en:'You did not approve this leave', ms:'Anda tidak meluluskan cuti ini'},
-  doneBody:{en:'HR has been informed and will give the final decision. You can close this page.', ms:'HR telah dimaklumkan dan akan membuat keputusan akhir. Anda boleh menutup halaman ini.'},
+  doneBody:{en:'Your decision is saved in the system. Now tap below to inform HR on WhatsApp.', ms:'Keputusan anda disimpan dalam sistem. Sekarang tekan di bawah untuk memaklumkan HR melalui WhatsApp.'},
+  doneBodyNoHr:{en:'Your decision is saved and HR can see it in the system. You can close this page.', ms:'Keputusan anda disimpan dan HR boleh melihatnya dalam sistem. Anda boleh menutup halaman ini.'},
+  informHr:{en:'Inform HR on WhatsApp', ms:'Maklumkan HR melalui WhatsApp'}, informEmp:{en:'Tell {n} too', ms:'Beritahu {n} juga'},
+  hrSent:{en:'Thank you — you can close this page.', ms:'Terima kasih — anda boleh menutup halaman ini.'},
   already:{en:'You already responded: {d}. {c}', ms:'Anda telah memberi maklum balas: {d}. {c}'},
   closed:{en:'This application has already been {s} by HR — no action needed.', ms:'Permohonan ini telah {s} oleh HR — tiada tindakan diperlukan.'},
   invalid:{en:'This approval link is not valid or has expired. Ask the employee or HR to send a new one.', ms:'Pautan kelulusan ini tidak sah atau telah tamat tempoh. Minta pekerja atau HR menghantar pautan baharu.'},
@@ -117,7 +123,9 @@ function render(){
     +row('docs', A.docs? esc(A.docs):'')+row('applied',esc(String(A.applied_at||'').slice(0,10)));
   $('bal').textContent=t('bal',{type:A.type, taken:A.taken, ent:Number(A.entitlement)>0? t('of',{n:A.entitlement}) : ''});
   if(A.status!=='pending'){ $('decideCard').hidden=true; msg('warn', t('closed',{s:t(A.status==='approved'?'approvedW':'rejectedW')})); }
-  else if(A.decision){ msg('ok', t('already',{d:t(A.decision==='approved'?'approvedW':'rejectedW'), c:A.comment? '“'+A.comment+'”':''})); }
+  else if(A.decision){ msg('ok', t('already',{d:t(A.decision==='approved'?'approvedW':'rejectedW'), c:A.comment? '“'+A.comment+'”':''}));
+    $('decideCard').hidden=true; $('doneCard').hidden=false; $('doneIc').textContent=A.decision==='approved'?'✅':'❌';
+    $('doneTitle').textContent=t(A.decision==='approved'?'doneYes':'doneNo'); renderInform(); }
 }
 async function load(){
   if(!sb || !/^[0-9a-f]{36}$/.test(TOKEN)){ $('loading').hidden=true; msg('err',t('invalid')); return; }
@@ -139,9 +147,26 @@ async function decide(decision){
     if(!data||!data.ok){ msg('err', data&&data.code==='closed'? t('closed',{s:t(data.status==='approved'?'approvedW':'rejectedW')}) : data&&data.code==='comment_needed'? t('needComment') : t('invalid')); return; }
     msg('',''); $('decideCard').hidden=true; $('doneCard').hidden=false;
     $('doneIc').textContent=decision==='approved'?'✅':'❌';
-    $('doneTitle').textContent=t(decision==='approved'?'doneYes':'doneNo'); $('doneBody').textContent=t('doneBody');
+    $('doneTitle').textContent=t(decision==='approved'?'doneYes':'doneNo');
+    A.decision=decision; A.comment=c; renderInform();
   }catch(e){ console.error(e); msg('err',t('offline')); }
   finally{ $('yesBtn').disabled=$('noBtn').disabled=false; }
+}
+/* after deciding: one tap sends the result to HR (number set by HR in the ERP), optionally to the employee */
+function waHref(phone, text){ const n=String(phone||'').replace(/\D/g,''); return n? 'https://wa.me/'+n+'?text='+encodeURIComponent(text) : ''; }
+function renderInform(){
+  if(!A || !A.decision) return;
+  const e=A.employee||{}, ok=A.decision==='approved';
+  const d=fd(A.start_date)+(A.end_date!==A.start_date?' – '+fd(A.end_date):'')+(A.half?' ('+A.half+')':'');
+  const line=e.name+' ('+e.emp_no+(e.department?', '+e.department:'')+')\n'+A.type+': '+d+' · '+A.days+' day(s)\nReason: '+A.reason;
+  const toHr='HE Manufacturing — Leave '+(ok?'APPROVED ✅':'NOT APPROVED ❌')+' by HOD '+(A.superior_name||'')+'\n'+line
+    +(A.comment?'\nHOD comment: '+A.comment:'')+'\nRef: '+A.id+'\n\n'+(ok?'Please give final approval in the ERP (HR → Leave).':'For your records.');
+  const toEmp='HE Manufacturing — your leave was '+(ok?'APPROVED by your HOD ✅ — HR will give final approval.':'NOT APPROVED by your HOD ❌')+'\n'+A.type+': '+d
+    +(A.comment?'\nComment: '+A.comment:'')+'\n\nCuti anda '+(ok?'telah diluluskan oleh Ketua Jabatan. Menunggu kelulusan akhir HR.':'tidak diluluskan oleh Ketua Jabatan.');
+  const hr=waHref(A.hr_phone, toHr), em=waHref(e.phone, toEmp);
+  $('doneBody').textContent=t(hr?'doneBody':'doneBodyNoHr');
+  $('informBox').innerHTML=(hr?'<a class="btn-wa" id="hrWa" href="'+esc(hr)+'" target="_blank" rel="noopener">'+esc(t('informHr'))+(A.hr_name?' ('+esc(A.hr_name)+')':'')+'</a>':'')
+    +(em?'<a class="btn-wa sec" href="'+esc(em)+'" target="_blank" rel="noopener">'+esc(t('informEmp',{n:e.name}))+'</a>':'');
 }
 $('yesBtn').addEventListener('click',()=>decide('approved'));
 $('noBtn').addEventListener('click',()=>decide('rejected'));

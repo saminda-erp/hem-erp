@@ -4344,13 +4344,6 @@ function leaveTabHtml(){
     btn('Add employee','emp-new'), btn('Batch import employees','emp-import'), btn('Batch import leave records','leave-import'),
     btn('Upload leave report (PDF)','leave-pdf-import','','btn primary'), btn('Print blank leave form','leave-print','','btn')]);
 
-  if(OTP_QUEUE.length) h += sect('WhatsApp number verification ('+OTP_QUEUE.length+')',
-    '<div class="note" style="margin-bottom:8px">These employees asked to verify their WhatsApp number in the leave portal. Tap <b>Send code</b> — WhatsApp opens with their code — press send. They type the code in the portal to finish.</div>'
-    +T([{h:'Employee', f:r=>'<b>'+esc(employee(r.emp_no).name)+'</b><div class="sub mono">'+esc(r.emp_no)+'</div>'},
-        {h:'Number', f:r=>'<span class="mono">+'+esc(r.phone)+'</span>'},
-        {h:'Requested', f:r=>'<span class="mono">'+esc(String(r.created_at).slice(0,16).replace('T',' '))+'</span>'},
-        {h:'', f:r=>'<a class="btn sm '+(r.sent_at?'':'primary')+'" data-act="otp-sent" data-arg="'+esc(r.id)+'" href="'+esc(waLink(r.phone,'HE Manufacturing — your leave portal verification code is '+r.code+'.\nKod pengesahan portal cuti anda: '+r.code+'\nDo not share this code. / Jangan kongsi kod ini.'))+'" target="_blank" rel="noopener">'+(r.sent_at?'Send again':'Send code')+'</a>'
-          +(r.sent_at?' <span class="tag t-ok">sent</span>':'')}], OTP_QUEUE));
   if(pending.length) h += sect('Pending approval', T([
       {h:'Employee', f:a=>'<b>'+esc(employee(a.empNo).name)+'</b><div class="sub mono">'+esc(a.empNo)+(employee(a.empNo).department?' · '+esc(employee(a.empNo).department):'')+'</div>'},
       {h:'Type', f:a=>'<span style="color:'+esc(leaveType(a.type).color)+'">●</span> '+esc(leaveType(a.type).name)+(leaveType(a.type).paid===false?' <span class="tag t-mute">unpaid</span>':'')},
@@ -4359,12 +4352,12 @@ function leaveTabHtml(){
       {h:'Reason', f:a=>'<span class="sub">'+esc(a.reason||'—')+'</span>'+(a.contact?'<div class="sub mono">☎ '+esc(a.contact)+'</div>':'')
         +(a.relief?'<div class="sub">Relief: '+esc(a.relief)+'</div>':'')
         +(a.meeting?'<div class="sub"><span class="tag t-info">HR meeting '+esc(a.meeting.when)+'</span></div>':'')},
-      {h:'Superior', f:a=>{ const s=a.superior||{};
+      {h:'Head of Dept.', f:a=>{ const s=a.superior||{};
         if(!s.emp_no && !s.name) return '<span class="sub">—</span>';
-        const nm='<div class="sub">'+esc(s.name||employee(s.emp_no).name)+'</div>';
+        const nm='<div class="sub">'+esc(s.name||employee(s.emp_no).name)+(s.phone?' · <span class="mono">+'+esc(s.phone)+'</span>':'')+'</div>';
         if(s.decision==='approved') return '<span class="tag t-ok">approved</span>'+nm+(s.comment?'<div class="sub">“'+esc(s.comment)+'”</div>':'');
         if(s.decision==='rejected') return '<span class="tag t-bad">not approved</span>'+nm+(s.comment?'<div class="sub">“'+esc(s.comment)+'”</div>':'');
-        return '<span class="tag t-warn">waiting</span>'+nm+btn('Send to superior','leave-sup-link',a.id,'btn sm'); }},
+        return '<span class="tag t-warn">waiting for HOD</span>'+nm+btn('Resend to HOD','leave-sup-link',a.id,'btn sm'); }},
       {h:'Document', f:a=>(a.docPaths||[]).length? btn('View ('+a.docPaths.length+')','leave-docs',a.id,'btn sm')
         : a.docSeen? '<span class="tag t-ok">paper seen</span>' : leaveDocNeeded(a)? '<span class="tag t-bad">missing</span>' : '<span class="sub">—</span>'},
       {h:'Checks', f:a=>leaveChecks(a).map(c=>'<span class="tag '+c.cls+'" style="margin:0 3px 3px 0;display:inline-block">'+esc(c.t)+'</span>').join('')||'<span class="tag t-ok">OK</span>'},
@@ -4378,7 +4371,7 @@ function leaveTabHtml(){
       {h:'Type', f:a=>esc(leaveType(a.type).name)+(a.half?' <span class="sub">('+esc(a.half)+')</span>':'')},
       {h:'Dates', f:a=>'<span class="mono">'+esc(a.start)+(a.end!==a.start?' → '+esc(a.end):'')+'</span>'},
       {h:'Days', c:'num', f:a=>nf(a.days,1)},
-      {h:'Superior', f:a=>{ const s=a.superior||{}; return s.decision? tag(s.decision==='approved'?'approved':'rejected')+'<div class="sub">'+esc(s.name||'')+'</div>' : s.hrOverride? '<span class="sub">HR override</span>' : '<span class="sub">—</span>'; }},
+      {h:'Head of Dept.', f:a=>{ const s=a.superior||{}; return s.decision? tag(s.decision==='approved'?'approved':'rejected')+'<div class="sub">'+esc(s.name||'')+'</div>' : s.hrOverride? '<span class="sub">HR override</span>' : '<span class="sub">—</span>'; }},
       {h:'Decision', f:a=>tag(a.status)+'<div class="sub mono">'+esc(a.approvedBy||'')+' · '+esc(String(a.approvedAt).slice(0,10))+'</div>'},
       {h:'', f:a=>btn('Print','leave-print',a.id,'btn sm')}
     ], decided));
@@ -4399,6 +4392,11 @@ function leaveTabHtml(){
   h += sect('Scan to apply leave', '<div class="card" style="text-align:center;max-width:280px">'
     +'<div id="leaveQr" style="display:flex;justify-content:center;margin-bottom:10px"></div>'
     +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">Employees scan this to apply for leave on their phone (English / BM). They sign in with their employee number + the password you set under Employees. The portal shows the leave rules, takes MC / hospital-letter uploads, and shows your approvals, rejections and meeting requests.</div>'
+    +'<div style="text-align:left;border-top:1px solid var(--line);padding-top:10px;margin:10px 0">'
+    +'<div style="font-size:12px;font-weight:600;margin-bottom:4px">HR WhatsApp for HOD approvals</div>'
+    +'<div class="sub" style="margin-bottom:6px">When a Head of Department decides, they tap once to tell this number.</div>'
+    +'<div class="mono" style="font-size:13px">'+esc((S.settings||{}).hrWhatsapp||'— not set —')+(S.settings&&S.settings.hrName?' · '+esc(S.settings.hrName):'')+'</div>'
+    +btn('Set HR WhatsApp','hr-wa-set',null,'btn sm')+'</div>'
     +btn('Check for new requests from the portal','leave-sync',null,'btn')
     +btn('Resync everything to the portal','leave-resync-all',null,'btn')+'</div>');
   return h;
@@ -9157,11 +9155,11 @@ ACT['leave-approve']=id=>{
   const sup=l.superior||{};
   if(!blocks.length && (sup.emp_no||sup.name) && sup.decision!=='approved' && !sup.hrOverride){
     const nm=esc(sup.name||employee(sup.emp_no).name);
-    modal(sup.decision==='rejected'? 'Superior did not approve' : 'Superior has not responded yet',
+    modal(sup.decision==='rejected'? 'Head of Department did not approve' : 'Head of Department has not responded yet',
       sup.decision==='rejected'
         ? '<div class="banner bad" style="margin-bottom:10px">'+nm+' did not approve'+(sup.comment?': “'+esc(sup.comment)+'”':'.')+'</div><div style="font-size:13px;color:var(--ink2)">Usually you would reject with the superior\'s reason. You can still approve if you have agreed it with them.</div>'
         : '<div class="banner warn" style="margin-bottom:10px">Waiting for '+nm+' to approve on WhatsApp.</div><div style="font-size:13px;color:var(--ink2)">Send them the approval link again, or approve now if you have their OK another way.</div>',
-      (sup.decision==='rejected'? btn('Reject','leave-reject',l.id,'btn danger') : btn('Send to superior','leave-sup-link',l.id,'btn'))
+      (sup.decision==='rejected'? btn('Reject','leave-reject',l.id,'btn danger') : btn('Resend to HOD','leave-sup-link',l.id,'btn'))
       +btn('Approve anyway','leave-approve-force',l.id,'btn primary'));
     return;
   }
@@ -9182,6 +9180,21 @@ ACT['leave-approve']=id=>{
   doApprove(id);
 };
 ACT['leave-approve-confirm']=id=>doApprove(id);
+ACT['hr-wa-set']=()=>{
+  const st=S.settings||{};
+  formModal({title:'HR WhatsApp for HOD approvals', values:{phone:st.hrWhatsapp||'', name:st.hrName||'HR'},
+    intro:'After a Head of Department approves or rejects leave from the WhatsApp link, their page shows a button that sends the result to this number.',
+    fields:[{k:'phone',label:'HR WhatsApp number',type:'tel',req:true,ph:'012-345 6789'},{k:'name',label:'Shown as',ph:'HR — Puan Aini'}],
+    saveLabel:'Save',
+    onSave:v=>{
+      const n=waNumber(v.phone); if(!n) return toast('Enter a valid Malaysian mobile number','bad');
+      if(!window.HEM_AUTH) return toast('Sign in first','bad');
+      S.settings.hrWhatsapp=v.phone.trim(); S.settings.hrName=(v.name||'').trim();
+      logAudit('HR WhatsApp for HOD approvals set', '', n); save();
+      try{ window.HEM_AUTH.from('hem_portal_settings').upsert([{key:'hr_whatsapp',value:n},{key:'hr_name',value:S.settings.hrName||'HR'}],{onConflict:'key'})
+        .then(({error})=>toast(error?'Saved here, but not on the server — '+error.message:'Saved — HODs will send approvals to +'+n, error?'warn':'ok')); }catch(e){}
+    }});
+};
 ACT['leave-approve-force']=id=>{ const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
   l.superior=Object.assign({}, l.superior, {hrOverride:true, hrOverrideBy:UI.user||'', hrOverrideAt:new Date().toISOString()});
   logAudit('Leave: superior step overridden by HR', l.id, (l.superior.decision||'no response')); ACT['leave-approve'](id); };
@@ -9189,14 +9202,16 @@ ACT['leave-approve-force']=id=>{ const l=(S.leaveApplications||[]).find(x=>x.id=
 ACT['leave-sup-link']=id=>{
   const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
   if(!window.HEM_AUTH) return toast('Sign in first','bad');
-  const e=employee(l.empNo), supNo=(l.superior||{}).emp_no || e.superiorEmpNo, sup=employee(supNo);
+  const e=employee(l.empNo), supNo=(l.superior||{}).emp_no || e.superiorEmpNo, sup=Object.assign({}, employee(supNo));
+  if((l.superior||{}).name) sup.name=l.superior.name;
+  if((l.superior||{}).phone) sup.whatsapp=l.superior.phone;
   window.HEM_AUTH.rpc('hr_superior_link',{p_id:id}).then(({data,error})=>{
     if(error||!data||!data.ok) return toast('Could not create a link — '+((error&&error.message)||(data&&data.code)||''),'bad');
     const url=location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-approve.html?t='+data.token;
     const text='HE Manufacturing — Leave approval needed / Kelulusan cuti diperlukan\n'+e.name+' ('+e.empNo+')\n'+leaveType(l.type).name+': '+fmtLeaveDates(l)
       +(l.half?' ('+l.half+')':'')+'\nReason: '+(l.reason||'')+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
     const link=waLink(empWa(sup), text);
-    modal('Send to superior — '+esc(sup.name||'?'), '<div class="note" style="margin-bottom:10px">The link lets '+esc(sup.name||'the superior')+' approve or not approve with a comment, without logging in. It works for 21 days.</div>'
+    modal('Send to Head of Department — '+esc(sup.name||'?'), '<div class="note" style="margin-bottom:10px">The link lets '+esc(sup.name||'the superior')+' approve or not approve with a comment, without logging in. It works for 21 days.</div>'
       +'<pre style="white-space:pre-wrap;font-family:inherit;background:var(--sunk);border-radius:8px;padding:10px 12px">'+esc(text)+'</pre>'
       +(link? '<a class="btn primary" href="'+esc(link)+'" target="_blank" rel="noopener">Send WhatsApp to '+esc(sup.name)+'</a>'
             : '<div class="banner warn">'+esc(sup.name||'The superior')+' has no WhatsApp number on file — add it under HR → Employees.</div>'), '', true);
@@ -9348,30 +9363,20 @@ ACT['leave-set-password'] = a=>{
     }});
 };
 let LAST_LEAVE_SYNC=0;
-/* verified WhatsApp numbers (from the portal) → employee records; and HR's queue of codes to send */
-let OTP_QUEUE=[];
+/* who has registered in the portal (and the phone they registered with) → employee records */
 function syncPortalPhones(){
   if(!window.HEM_AUTH) return;
   try{
-    window.HEM_AUTH.from('hem_employees').select('emp_no,phone,phone_verified_at').then(({data,error})=>{
-      if(error||!data) return; let n=0;
-      data.forEach(r=>{ if(!r.phone_verified_at) return; const e=(S.employees||[]).find(x=>x.empNo===r.emp_no); if(!e) return;
-        if(e.phoneVerified!==r.phone_verified_at || e.phoneVerifiedNo!==r.phone){ e.phoneVerified=r.phone_verified_at; e.phoneVerifiedNo=r.phone;
-          if(waNumber(e.whatsapp||e.phone)!==r.phone) e.whatsapp=r.phone; n++; } });
-      if(n){ logAudit('Verified WhatsApp numbers synced','',n+' employee(s)'); save(); render(); }
-    });
-    window.HEM_AUTH.from('hem_phone_verify').select('*').eq('status','waiting').then(({data,error})=>{
-      if(error||!data) return;
-      const fresh=data.filter(r=>Date.now()-new Date(r.created_at).getTime()<2*864e5);
-      const changed=JSON.stringify(fresh.map(r=>r.id+':'+(r.sent_at||'')))!==JSON.stringify(OTP_QUEUE.map(r=>r.id+':'+(r.sent_at||'')));
-      OTP_QUEUE=fresh; if(changed && UI.view==='people') render();
+    window.HEM_AUTH.rpc('hr_portal_status').then(({data,error})=>{
+      if(error||!Array.isArray(data)) return; let n=0;
+      data.forEach(r=>{ const e=(S.employees||[]).find(x=>x.empNo===r.emp_no); if(!e) return;
+        const reg=r.registered_at||'';
+        if((e.portalRegistered||'')!==reg){ e.portalRegistered=reg; n++; }
+        if(r.phone && !waNumber(empWa(e))){ e.whatsapp=r.phone; n++; } });
+      if(n){ save(); render(); }
     });
   }catch(e){}
 }
-ACT['otp-sent']=id=>{ const r=OTP_QUEUE.find(x=>String(x.id)===String(id)); if(!r) return;
-  r.sent_at=new Date().toISOString(); logAudit('Verification code sent', r.emp_no, '+'+r.phone);
-  try{ window.HEM_AUTH.from('hem_phone_verify').update({sent_at:r.sent_at}).eq('id', r.id).then(()=>{}); }catch(e){}
-  setTimeout(render, 300); };
 function syncPortalLeave(silent){
   if(!window.HEM_AUTH){ if(!silent) toast('Portal connection not available on this page','bad'); return; }
   if(!silent) toast('Checking the portal for new requests…','ok');
@@ -9422,18 +9427,25 @@ function pushLeaveStatusToPortal(l){
 }
 /* bulk push — used by Add employee, batch imports, and the Resync-everything button. Pass
    null for empNos/ids to push everything on file, or an array to push just what changed. */
+function icHash(ic){
+  const n=String(ic||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(n.length<5 || !(window.crypto&&crypto.subtle)) return Promise.resolve(null);
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(n)).then(b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''));
+}
 function pushEmployeesToPortal(empNos, quiet){
   if(!window.HEM_AUTH) return Promise.resolve(false);
   const list=(S.employees||[]).filter(e=>!empNos||empNos.includes(e.empNo))
     .map(e=>({emp_no:e.empNo, name:e.name, department:e.department||'', status:e.status||'active',
       leave_scope:e.leaveScope||'full', staff_type:e.staffType||null, position:e.position||null,
       superior_emp_no:(e.superiorEmpNo && e.superiorEmpNo!==e.empNo)? e.superiorEmpNo : null,
-      phone: waNumber(empWa(e)) || null,
-      phone_verified_at: (e.phoneVerified && waNumber(e.phoneVerifiedNo) && waNumber(e.phoneVerifiedNo)===waNumber(empWa(e)))? e.phoneVerified : null,
       annual_entitlement:(e.annualEntitlement===''||e.annualEntitlement==null||isNaN(Number(e.annualEntitlement)))? null : Number(e.annualEntitlement)}));
   if(!list.length) return Promise.resolve(true);
   try{
-    return window.HEM_AUTH.from('hem_employees').upsert(list, {onConflict:'emp_no'}).then(({error})=>{
+    /* IC / passport no. is used by employees to register and reset their portal password. Only a
+       SHA-256 of the normalised number (A–Z, 0–9, upper-case) is sent — must match _ic_norm_hash(). */
+    const src=(S.employees||[]).filter(e=>!empNos||empNos.includes(e.empNo));
+    return Promise.all(list.map((row,i)=>icHash(src[i].icNo).then(h=>{ row.ic_hash=h; }))).then(()=>
+     window.HEM_AUTH.from('hem_employees').upsert(list, {onConflict:'emp_no'})).then(({error})=>{
       if(error){ toast('Saved here, but the portal sync failed — '+error.message,'warn'); return false; }
       if(!quiet) toast(list.length+' employee(s) synced to the portal','ok'); return true;
     }, ()=>false);
@@ -9602,11 +9614,12 @@ function staffTabHtml(){
     if(q && ![e.empNo,e.attendanceId,e.name,e.department,e.position,e.phone,e.whatsapp,e.icNo].join(' ').toLowerCase().includes(q)) return false;
     return true; }),'name');
   const act=all.filter(empActive);
-  const noWa=act.filter(e=>!waNumber(empWa(e))), noLogin=act.filter(e=>(e.leaveScope||'full')!=='none' && !e.portalLoginAt);
+  const noWa=act.filter(e=>!waNumber(empWa(e))), noLogin=act.filter(e=>(e.leaveScope||'full')!=='none' && !e.portalRegistered && !e.portalLoginAt);
+  const noIc=act.filter(e=>(e.leaveScope||'full')!=='none' && !e.portalRegistered && !String(e.icNo||'').trim());
   let h=KPI([
     {k:'Active employees', v:nf(act.length), d:STAFF_GROUPS.map(g=>{ const n=act.filter(g.f).length; return n? nf(n)+' '+(g.k==='exec'?'executive':g.k==='nonexec'?'non-executive':g.k==='parttime'?'part-time':'unclassified'):''; }).filter(Boolean).join(' · ')},
     {k:'No WhatsApp number', v:nf(noWa.length), d:noWa.length?'can\'t be messaged yet':'everyone reachable', cls:noWa.length?'warn':'ok'},
-    {k:'No portal login', v:nf(noLogin.length), d:noLogin.length?'can\'t apply leave on phone yet':'all set', cls:noLogin.length?'warn':'ok'},
+    {k:'Not registered on portal', v:nf(noLogin.length), d:noIc.length? nf(noIc.length)+' have no IC / passport on file — they can\'t register' : noLogin.length?'send them their Employee ID':'everyone registered', cls:noIc.length?'bad':noLogin.length?'warn':'ok'},
     {k:'Linked to attendance', v:nf(act.filter(e=>e.attendanceId).length)+' / '+nf(act.length), d:'iVMS Person ID on file'}
   ]);
   h+='<div class="pillrow" style="margin:0 0 10px">'+[{k:'',t:'All'}].concat(STAFF_GROUPS).map(g=>{
@@ -9630,7 +9643,10 @@ function staffTabHtml(){
     {h:'Leave', f:e=>{ const sc=e.leaveScope||'full';
       return '<span class="tag '+(sc==='full'?'t-ok':sc==='mc_only'?'t-info':'t-mute')+'">'+(sc==='full'?'full':sc==='mc_only'?'MC only':'none')+'</span>'
         +(annualEntitlementOf(e.empNo)!=null?'<div class="sub">'+nf(annualEntitlementOf(e.empNo))+' d annual</div>':''); }},
-    {h:'Portal', f:e=>(e.leaveScope||'full')==='none'? '<span class="sub">—</span>' : e.portalLoginAt? '<span class="tag t-ok">login set</span>' : '<span class="tag t-warn">no login</span>'},
+    {h:'Portal', f:e=>(e.leaveScope||'full')==='none'? '<span class="sub">—</span>'
+      : e.portalRegistered? '<span class="tag t-ok">registered</span>'
+      : !String(e.icNo||'').trim()? '<span class="tag t-bad">add IC / passport</span>'
+      : e.portalLoginAt? '<span class="tag t-info">PIN given</span>' : '<span class="tag t-warn">not yet</span>'},
     {h:'Status', f:e=>tag(empActive(e)?'active':'inactive')},
     {h:'', f:e=>(waNumber(empWa(e))?btn('WhatsApp','wa-msg',e.empNo,'btn sm primary'):'')+btn('Edit','emp-edit',e.empNo,'btn sm')+btn('Call to HR','leave-meet','emp:'+e.empNo,'btn sm')}
   ];
@@ -9657,7 +9673,7 @@ function staffForm(e, isNew){
         {k:'name',label:'Full name (as IC / passport)',req:true,full:true},
         {k:'gender',label:'Gender',type:'select',opts:['Female','Male']},
         {k:'nationality',label:'Nationality',ph:'Malaysian'},
-        {k:'icNo',label:'IC / passport no.'},
+        {k:'icNo',label:'IC / passport no.',hint:'Needed for the employee to register on the leave portal.'},
         {k:'dob',label:'Date of birth',type:'date'}]},
       {legend:'Contact', fields:[
         {k:'phone',label:'Mobile',type:'tel',ph:'012-345 6789'},
@@ -9889,7 +9905,8 @@ const WA_TEMPLATES=[
   {v:'Reminder: please clock in on time tomorrow. / Peringatan: sila punch in tepat pada masanya esok.', t:'Punctuality reminder'},
   {v:'Notice: your shift has changed. Please check with your supervisor. / Notis: syif anda telah berubah. Sila semak dengan penyelia.', t:'Shift change'},
   {v:'Please come to the HR office today. / Sila datang ke pejabat HR hari ini.', t:'Come to HR'},
-  {v:'Reminder: factory closed on the coming public holiday. / Peringatan: kilang ditutup pada cuti umum akan datang.', t:'Public holiday'}
+  {v:'Reminder: factory closed on the coming public holiday. / Peringatan: kilang ditutup pada cuti umum akan datang.', t:'Public holiday'},
+  {v:'Hi {name}, you can now apply for leave on your phone.\nYour Employee ID: {empno}\nOpen: {portal}\nTap "First time? Register", enter your Employee ID, IC/passport number and phone number, then choose your own password.\n\nAnda kini boleh memohon cuti di telefon. ID Pekerja: {empno}. Tekan "Kali pertama? Daftar" dan tetapkan kata laluan anda sendiri.', t:'Leave portal — Employee ID & how to register'}
 ];
 function waCompose(title, intro, onSend){
   formModal({title, intro, values:{tpl:'', msg:''},
@@ -9899,7 +9916,7 @@ function waCompose(title, intro, onSend){
   setTimeout(()=>{ const s=document.querySelector('#modal-root select[data-f="tpl"]'), t=document.querySelector('#modal-root textarea[data-f="msg"]');
     if(s&&t) s.addEventListener('change', ()=>{ if(s.value) t.value=s.value; }); }, 0);
 }
-function waText(e, m){ return 'HE Manufacturing\n'+m.replace(/\{name\}/g, e.name); }
+function waText(e, m){ return 'HE Manufacturing\n'+m.replace(/\{name\}/g, e.name).replace(/\{empno\}/g, e.empNo).replace(/\{portal\}/g, portalUrl()); }
 ACT['wa-msg']=empNo=>{
   const e=employee(empNo);
   if(!waNumber(empWa(e))) return toast('No valid WhatsApp number for '+e.name,'bad');
@@ -9918,7 +9935,7 @@ ACT['wa-group']=()=>{
     fields:[{k:'grp',label:'Send to',type:'select',blank:false,full:true,opts:[{v:'all',t:'All active employees ('+act.length+')'},
         {v:'type:Permanent',t:'Permanent staff'},{v:'grade:Executive',t:'Permanent — Executive'},{v:'grade:Non-executive',t:'Permanent — Non-executive'},{v:'type:Part-time',t:'Part-time staff'}].concat(depts.map(d=>({v:'dept:'+d,t:'Department: '+d})))},
       {k:'tpl',label:'Template',type:'select',blank:false,opts:WA_TEMPLATES.map(x=>({v:x.v,t:x.t})),full:true},
-      {k:'msg',label:'Message',type:'textarea',rows:5,full:true,hint:'{name} is replaced with each person\'s name.'}],
+      {k:'msg',label:'Message',type:'textarea',rows:5,full:true,hint:'{name} = person\'s name · {empno} = their Employee ID · {portal} = leave portal link.'}],
     saveLabel:'Next',
     onSave:v=>{
       const m=String(v.msg||'').trim()||String(v.tpl||'').trim(); if(!m) return toast('Write a message or pick a template','bad');

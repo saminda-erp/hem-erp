@@ -53,6 +53,7 @@
   .lang button.on{background:#f7f0ee;color:#522B39}
   .topbtn{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:7px 10px;font:600 12px 'Archivo',sans-serif;cursor:pointer}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+  .linkbtn{background:none;border:0;padding:0;color:var(--wine);text-decoration:underline;font:600 13px 'Archivo',sans-serif;cursor:pointer}
   .card h3{font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
   label.l{display:block;font-size:13px;color:var(--ink2);margin-bottom:5px;font-weight:600}
   .req{color:var(--bad)}
@@ -104,6 +105,7 @@
   .stage{font-size:12.5px;color:var(--info);margin-top:3px}
   .linkbtn{background:none;border:0;padding:0;color:var(--wine);text-decoration:underline;font-size:12.5px;font-weight:600;cursor:pointer}
   .supcard{border-color:#25D366}
+  .hodbox{border:1px solid var(--wine);border-radius:var(--r);padding:12px;margin-bottom:12px;background:var(--wine-soft)}
   .btn-wa{display:block;text-align:center;background:#25D366;color:#fff;border-radius:var(--r);padding:13px 16px;font-weight:700;text-decoration:none}
   [hidden]{display:none!important}
 </style>
@@ -137,8 +139,34 @@
       <input type="password" id="empPass" autocomplete="current-password" required>
       <button type="submit" class="btn-primary" id="loginBtn" data-t="signIn"></button>
     </form>
+    <div style="display:flex;justify-content:space-between;margin-top:12px;gap:10px">
+      <button type="button" class="linkbtn" id="toRegister" data-t="firstTime"></button>
+      <button type="button" class="linkbtn" id="toReset" data-t="forgot"></button>
+    </div>
   </div>
   <div class="muted" style="text-align:center" data-t="noPassword"></div>
+</div>
+
+<div id="regScreen" class="wrap" style="padding-top:24px" hidden>
+  <div class="card">
+    <h3 id="regTitle"></h3>
+    <div class="muted" id="regLead" style="margin:-4px 0 12px"></div>
+    <div id="regMsg"></div>
+    <form id="regForm" autocomplete="off">
+      <label class="l" for="rEmp" data-t="empNo"></label>
+      <input type="text" id="rEmp" inputmode="text" placeholder="00093" required>
+      <label class="l" for="rIc" data-t="icLbl"></label>
+      <input type="text" id="rIc" autocomplete="off" required>
+      <label class="l" for="rPhone" data-t="phoneLbl"></label>
+      <input type="tel" id="rPhone" inputmode="tel" placeholder="012-345 6789" required>
+      <label class="l" for="rPw" data-t="newPw"></label>
+      <input type="password" id="rPw" autocomplete="new-password" minlength="6" required>
+      <label class="l" for="rPw2" data-t="newPw2"></label>
+      <input type="password" id="rPw2" autocomplete="new-password" minlength="6" required>
+      <button type="submit" class="btn-primary" id="regBtn"></button>
+    </form>
+    <button type="button" class="btn-ghost" id="regBack" data-t="backToLogin" style="width:100%;margin-top:10px"></button>
+  </div>
 </div>
 
 <div id="appScreen" class="wrap" hidden>
@@ -165,7 +193,7 @@ const TX = {
   empNo:{en:'Employee number', ms:'Nombor pekerja'}, password:{en:'Password', ms:'Kata laluan'},
   signIn:{en:'Sign in', ms:'Log masuk'}, signingIn:{en:'Signing in…', ms:'Sedang log masuk…'},
   signOut:{en:'Sign out', ms:'Log keluar'},
-  noPassword:{en:'No password yet? Ask HR to set one for you.', ms:'Belum ada kata laluan? Minta HR tetapkan untuk anda.'},
+  noPassword:{en:'Your Employee ID is given by HR. Problems? Please see HR.', ms:'ID Pekerja anda diberikan oleh HR. Ada masalah? Sila jumpa HR.'},
   badLogin:{en:'Incorrect employee number or password.', ms:'Nombor pekerja atau kata laluan salah.'},
   offline:{en:'Could not connect. Check your internet and try again.', ms:'Tidak dapat disambungkan. Semak internet anda dan cuba lagi.'},
   noticesTitle:{en:'Messages from HR', ms:'Mesej daripada HR'},
@@ -247,16 +275,44 @@ const TX = {
   handover:{en:'Handover notes — optional', ms:'Nota serahan tugas — pilihan'}, handoverPh:{en:'Anything your team needs to know while you are away', ms:'Perkara yang perlu diketahui semasa anda tiada'},
   declaration:{en:'I confirm the information above is true. I understand that leave is only confirmed after approval, and that false information may lead to disciplinary action.', ms:'Saya mengesahkan maklumat di atas adalah benar. Saya faham cuti hanya sah selepas diluluskan, dan maklumat palsu boleh membawa kepada tindakan tatatertib.'},
   signature:{en:'Signature — type your full name', ms:'Tandatangan — taip nama penuh anda'},
-  submitSup:{en:'Submit & send to my superior', ms:'Hantar kepada penyelia saya'},
-  submittedSup:{en:'Application saved — {d} day(s){u}. Now send it to your superior on WhatsApp ↓', ms:'Permohonan disimpan — {d} hari{u}. Sekarang hantar kepada penyelia melalui WhatsApp ↓'},
-  sendSupTitle:{en:'Send to your superior {n}', ms:'Hantar kepada penyelia anda {n}'},
+  submitSup:{en:'Submit & send to my HOD', ms:'Hantar kepada Ketua Jabatan'},
+  submittedSup:{en:'Application saved — {d} day(s){u}. Now send it to your HOD on WhatsApp ↓', ms:'Permohonan disimpan — {d} hari{u}. Sekarang hantar kepada Ketua Jabatan melalui WhatsApp ↓'},
+  sendSupTitle:{en:'Send to your HOD {n}', ms:'Hantar kepada Ketua Jabatan {n}'},
   sendSupLead:{en:'Tap the button — WhatsApp opens with your application and an approval link. Press send there.', ms:'Tekan butang — WhatsApp akan dibuka dengan permohonan dan pautan kelulusan. Tekan hantar di sana.'},
   sendSupBtn:{en:'Send on WhatsApp', ms:'Hantar melalui WhatsApp'},
   supNoPhone:{en:'Your superior has no verified WhatsApp number yet. HR will forward your application.', ms:'Penyelia anda belum mempunyai nombor WhatsApp yang disahkan. HR akan memanjangkan permohonan anda.'},
-  supSentOk:{en:'Sent to your superior. You will see their decision here.', ms:'Dihantar kepada penyelia. Keputusan akan dipaparkan di sini.'},
-  stageSup:{en:'Waiting for superior {n}', ms:'Menunggu penyelia {n}'}, resendSup:{en:'Send again', ms:'Hantar semula'},
+  supSentOk:{en:'Sent to your HOD. You will see their decision here.', ms:'Dihantar kepada Ketua Jabatan. Keputusan akan dipaparkan di sini.'},
+  stageSup:{en:'Waiting for HOD {n}', ms:'Menunggu Ketua Jabatan {n}'}, resendSup:{en:'Send again', ms:'Hantar semula'},
   stageHr:{en:'With HR for final approval', ms:'Di HR untuk kelulusan akhir'},
-  supOk:{en:'Superior {n} approved', ms:'Penyelia {n} meluluskan'}, supNo:{en:'Superior {n} did not approve', ms:'Penyelia {n} tidak meluluskan'},
+  supOk:{en:'HOD {n} approved', ms:'Ketua Jabatan {n} meluluskan'}, supNo:{en:'HOD {n} did not approve', ms:'Ketua Jabatan {n} tidak meluluskan'},
+  firstTime:{en:'First time? Register', ms:'Kali pertama? Daftar'}, forgot:{en:'Forgot password?', ms:'Lupa kata laluan?'},
+  regTitle:{en:'Register — set your password', ms:'Daftar — tetapkan kata laluan'},
+  regLead:{en:'Use the Employee ID HR gave you and your IC or passport number.', ms:'Gunakan ID Pekerja daripada HR dan nombor IC atau pasport anda.'},
+  resetTitle:{en:'Reset your password', ms:'Tetapkan semula kata laluan'},
+  resetLead:{en:'Enter your Employee ID, IC or passport number and the phone number you registered with.', ms:'Masukkan ID Pekerja, nombor IC atau pasport dan nombor telefon yang didaftarkan.'},
+  icLbl:{en:'IC or passport number', ms:'Nombor IC atau pasport'}, phoneLbl:{en:'Your phone (WhatsApp) number', ms:'Nombor telefon (WhatsApp) anda'},
+  newPw:{en:'New password (at least 6 characters)', ms:'Kata laluan baharu (sekurang-kurangnya 6 aksara)'}, newPw2:{en:'Type the password again', ms:'Taip kata laluan sekali lagi'},
+  regBtn:{en:'Register', ms:'Daftar'}, resetBtn:{en:'Set new password', ms:'Tetapkan kata laluan baharu'}, backToLogin:{en:'Back to sign in', ms:'Kembali ke log masuk'},
+  regDone:{en:'Registered — welcome! Remember your Employee ID and password.', ms:'Berjaya didaftarkan — selamat datang! Ingat ID Pekerja dan kata laluan anda.'},
+  resetDone:{en:'Password changed — you are signed in.', ms:'Kata laluan ditukar — anda telah log masuk.'},
+  r_not_found:{en:'Employee ID not found. Check the ID HR gave you, or see HR.', ms:'ID Pekerja tidak dijumpai. Semak ID daripada HR, atau jumpa HR.'},
+  r_mismatch:{en:'The IC / passport number does not match our records.', ms:'Nombor IC / pasport tidak sepadan dengan rekod kami.'},
+  r_no_ic:{en:'HR has not recorded your IC / passport number yet. Please see HR.', ms:'HR belum merekodkan nombor IC / pasport anda. Sila jumpa HR.'},
+  r_locked:{en:'Too many wrong tries. Wait 15 minutes and try again, or see HR.', ms:'Terlalu banyak cubaan salah. Tunggu 15 minit dan cuba lagi, atau jumpa HR.'},
+  r_already:{en:'You are already registered. Sign in, or use "Forgot password?".', ms:'Anda sudah berdaftar. Log masuk, atau guna "Lupa kata laluan?".'},
+  r_not_registered:{en:'You have not registered yet — use "First time? Register".', ms:'Anda belum berdaftar — guna "Kali pertama? Daftar".'},
+  r_phone_mismatch:{en:'That is not the phone number you registered with. Please see HR.', ms:'Itu bukan nombor telefon yang anda daftarkan. Sila jumpa HR.'},
+  r_bad_phone:{en:'Enter a valid Malaysian mobile number.', ms:'Masukkan nombor telefon bimbit yang sah.'},
+  r_weak:{en:'Password must be at least 6 characters.', ms:'Kata laluan mesti sekurang-kurangnya 6 aksara.'},
+  r_nomatch:{en:'The two passwords are different.', ms:'Kedua-dua kata laluan tidak sama.'},
+  r_generic:{en:'Could not complete — please see HR.', ms:'Tidak dapat diselesaikan — sila jumpa HR.'},
+  myPhone:{en:'My phone', ms:'Telefon saya'},
+  hodTitle:{en:'Head of Department — approves first', ms:'Ketua Jabatan — meluluskan dahulu'},
+  hodLead:{en:'Your application goes to this person on WhatsApp. After they approve, HR is informed.', ms:'Permohonan anda dihantar kepada orang ini melalui WhatsApp. Selepas diluluskan, HR dimaklumkan.'},
+  hodName:{en:'HOD name', ms:'Nama Ketua Jabatan'}, hodPhone:{en:'HOD WhatsApp number', ms:'No. WhatsApp Ketua Jabatan'},
+  e_hod_name:{en:'Enter your Head of Department\'s name.', ms:'Masukkan nama Ketua Jabatan anda.'},
+  e_hod_phone:{en:'Enter your Head of Department\'s WhatsApp number.', ms:'Masukkan nombor WhatsApp Ketua Jabatan anda.'},
+  e_hod_self:{en:'The HOD number cannot be your own number.', ms:'Nombor Ketua Jabatan tidak boleh nombor anda sendiri.'},
   e_dup_id:{en:'Please press Submit again.', ms:'Sila tekan Hantar sekali lagi.'},
   e_upload:{en:'Could not upload the document — check your internet and try again.', ms:'Tidak dapat memuat naik dokumen — semak internet anda dan cuba lagi.'},
   e_file_big:{en:'{f} is larger than 10 MB.', ms:'{f} melebihi 10 MB.'}, e_file_type:{en:'{f} is not a photo or PDF.', ms:'{f} bukan gambar atau PDF.'},
@@ -274,7 +330,7 @@ function t(k, vars){ let s=(TX[k]||{})[LANG]; if(s==null) s=(TX[k]||{}).en; if(s
 let CRED=null;              // {emp_no, password} — memory only, never stored
 let DATA=null;              // last portal_data result
 let DOCS=[];                // files chosen in the apply form [{blob,name,type,size,thumb}]
-function blankForm(){ return {type:'', start:'', end:'', half:'', reason:'', contact:'', relief:'', handover:'', declared:false, signature:''}; }
+function blankForm(){ return {type:'', start:'', end:'', half:'', reason:'', contact:'', relief:'', handover:'', declared:false, signature:'', hodName:'', hodPhone:'', hodTouched:false}; }
 let FORM=blankForm();
 let refreshTimer=null, markReadTimer=null;
 
@@ -297,6 +353,8 @@ function applyLang(){
   document.querySelectorAll('[data-t]').forEach(el=>{ el.textContent=t(el.dataset.t, {y:new Date().getFullYear()}); });
   document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on', b.dataset.lang===LANG));
   $('logoutBtn').textContent=t('signOut');
+  if(!$('regScreen').hidden){ $('regTitle').textContent=t(REG_MODE==='register'?'regTitle':'resetTitle');
+    $('regLead').textContent=t(REG_MODE==='register'?'regLead':'resetLead'); $('regBtn').textContent=t(REG_MODE==='register'?'regBtn':'resetBtn'); }
   if(DATA) renderAll();
 }
 document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click', ()=>{
@@ -321,12 +379,49 @@ $('loginForm').addEventListener('submit', async e=>{
     if(!ok){ CRED=null; showMsg('loginMsg','err',t('badLogin')); return; }
     try{ localStorage.setItem('hem_leave_empno', emp); }catch(x){}
     $('empPass').value='';
-    $('loginScreen').hidden=true; $('appScreen').hidden=false; $('logoutBtn').hidden=false;
-    renderAll(); scheduleMarkRead();
-    clearInterval(refreshTimer); refreshTimer=setInterval(()=>refresh(true), 60000);
+    enterApp();
   }catch(err){ CRED=null; console.error(err); showMsg('loginMsg','err',t('offline')); }
   finally{ btn.disabled=false; btn.textContent=t('signIn'); }
 });
+/* ---------- first-time registration & forgotten password ----------
+   Employee proves who they are with Employee ID + IC/passport no. (HR records the IC; only a
+   hash reaches the database) and gives their phone number, then chooses their own password.
+   Reset works the same way and also needs the phone number they registered with. 5 wrong tries
+   locks the account for 15 minutes (server side). */
+let REG_MODE='register';
+function showReg(mode){
+  REG_MODE=mode; $('loginScreen').hidden=true; $('regScreen').hidden=false; showMsg('regMsg','','');
+  $('regTitle').textContent=t(mode==='register'?'regTitle':'resetTitle'); $('regLead').textContent=t(mode==='register'?'regLead':'resetLead');
+  $('regBtn').textContent=t(mode==='register'?'regBtn':'resetBtn'); $('rEmp').value=$('empNo').value||'';
+  ['rIc','rPw','rPw2'].forEach(id=>$(id).value='');
+}
+$('toRegister').addEventListener('click', ()=>showReg('register'));
+$('toReset').addEventListener('click', ()=>showReg('reset'));
+$('regBack').addEventListener('click', ()=>{ $('regScreen').hidden=true; $('loginScreen').hidden=false; });
+$('regForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const emp=$('rEmp').value.trim(), ic=$('rIc').value.trim(), ph=$('rPhone').value.trim(), pw=$('rPw').value, pw2=$('rPw2').value;
+  if(ph.replace(/\D/g,'').length<9) return showMsg('regMsg','err',t('e_bad_phone'));
+  if(pw.length<6) return showMsg('regMsg','err',t('r_weak'));
+  if(pw!==pw2) return showMsg('regMsg','err',t('r_nomatch'));
+  const btn=$('regBtn'); btn.disabled=true;
+  try{
+    const {data,error}=await sb.rpc(REG_MODE==='register'?'portal_register':'portal_reset',{p_emp_no:emp,p_ic:ic,p_phone:ph,p_password:pw});
+    if(error) throw error;
+    if(!data||!data.ok) return showMsg('regMsg','err',t('r_'+((data&&data.code)||'generic')));
+    // signed straight in with the new password
+    CRED={emp_no:emp, password:pw};
+    const ok=await load(); if(!ok) throw new Error('login');
+    try{ localStorage.setItem('hem_leave_empno', emp); }catch(x){}
+    $('regScreen').hidden=true; enterApp(); showMsg('topMsg','ok',t(REG_MODE==='register'?'regDone':'resetDone'));
+  }catch(err){ console.error(err); showMsg('regMsg','err',t('offline')); }
+  finally{ btn.disabled=false; }
+});
+function enterApp(){
+  $('loginScreen').hidden=true; $('appScreen').hidden=false; $('logoutBtn').hidden=false;
+  renderAll(); scheduleMarkRead();
+  clearInterval(refreshTimer); refreshTimer=setInterval(()=>refresh(true), 60000);
+}
 function signOut(msg){
   CRED=null; DATA=null; DOCS=[]; FORM=blankForm(); SUP_SEND=null;
   clearInterval(refreshTimer); clearTimeout(markReadTimer);
@@ -391,54 +486,10 @@ function renderAll(keepForm){
 }
 function docRequired(ty, start){ if(!ty) return false;
   return ty.doc_rule==='required' || (ty.doc_rule==='required_if_started' && start && start<=todayKL()); }
-/* ---------- WhatsApp number verification (required once before applying) ----------
-   The employee enters their number → portal_request_otp stores a 6-digit code → HR taps
-   "Send code" in the ERP, which opens WhatsApp to that number with the code → the employee
-   types it here → portal_verify_otp marks the number verified. */
-function renderVerify(){
-  const otp=DATA.otp, emp=DATA.employee||{};
-  let h='<h3>📱 '+esc(t('verifyTitle'))+'</h3><div id="verifyMsg"></div><div class="note">'+esc(t('verifyLead'))+'</div>';
-  if(!otp){
-    h+='<label class="l" for="vPhone">'+esc(t('waNumber'))+' <span class="req">*</span></label>'
-     +'<input type="tel" id="vPhone" inputmode="tel" placeholder="012-345 6789" value="'+esc(VPHONE||emp.phone||'')+'">'
-     +'<button type="button" class="btn-primary" id="vSend">'+esc(t('getCode'))+'</button>';
-  }else{
-    h+='<div class="msg info">'+esc(t(otp.sent?'codeSent':'codeWaiting',{phone:'+'+otp.phone}))+'</div>'
-     +'<label class="l" for="vCode">'+esc(t('codeLbl'))+'</label>'
-     +'<input type="text" id="vCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" style="font-size:22px;letter-spacing:.3em;text-align:center">'
-     +'<button type="button" class="btn-primary" id="vCheck">'+esc(t('verifyBtn'))+'</button>'
-     +'<button type="button" class="btn-ghost" id="vChange" style="width:100%;margin-top:8px">'+esc(t('changeNo'))+'</button>';
-  }
-  $('applyCard').innerHTML=h;
-}
-let VPHONE='';
-async function requestOtp(){
-  const ph=($('vPhone')||{}).value||''; VPHONE=ph;
-  if(ph.replace(/\D/g,'').length<9) return showMsg('verifyMsg','err',t('e_bad_phone'));
-  const b=$('vSend'); b.disabled=true;
-  try{ const {data,error}=await sb.rpc('portal_request_otp',{p_emp_no:CRED.emp_no,p_password:CRED.password,p_phone:ph});
-    if(error) throw error; if(!data||!data.ok) return showMsg('verifyMsg','err',t('e_'+((data&&data.code)||'generic'),{c:'?'}));
-    await refresh(true);
-  }catch(e){ showMsg('verifyMsg','err',t('offline')); } finally{ const x=$('vSend'); if(x) x.disabled=false; }
-}
-async function checkOtp(){
-  const c=(($('vCode')||{}).value||'').trim();
-  if(!/^\d{6}$/.test(c)) return showMsg('verifyMsg','err',t('e_wrong_code',{n:''}));
-  const b=$('vCheck'); b.disabled=true;
-  try{ const {data,error}=await sb.rpc('portal_verify_otp',{p_emp_no:CRED.emp_no,p_password:CRED.password,p_code:c});
-    if(error) throw error;
-    if(!data||!data.ok){ const code=(data&&data.code)||'generic';
-      if(code==='wrong_code') return showMsg('verifyMsg','err',t('e_wrong_code',{n:data.left>0? t('triesLeft',{n:data.left}):''}));
-      if(code==='no_request'||code==='too_many'){ await refresh(true); }
-      return showMsg('verifyMsg','err',t('e_'+code,{c:code})); }
-    await refresh(true); showMsg('topMsg','ok',t('verifiedOk'));
-  }catch(e){ showMsg('verifyMsg','err',t('offline')); } finally{ const x=$('vCheck'); if(x) x.disabled=false; }
-}
-
 function halfAllowed(ty){ return ty && ['annual','unpaid','timeoff','emergency'].includes(ty.code); }
 function renderApply(){
-  if(!(DATA.employee||{}).phone_verified){ renderVerify(); return; }
-  const ty=typeOf(FORM.type), today=todayKL(), emp=DATA.employee||{}, sup=DATA.superior;
+  const ty=typeOf(FORM.type), today=todayKL(), emp=DATA.employee||{};
+  if(!FORM.hodTouched && DATA.hod){ if(!FORM.hodName) FORM.hodName=DATA.hod.name||''; if(!FORM.hodPhone) FORM.hodPhone=DATA.hod.phone? '+'+DATA.hod.phone : ''; }
   const minStart = ty? (ty.min_notice_days>0? addDays(today, ty.min_notice_days) : (ty.late_days>0? addDays(today, -60) : today)) : '';
   const maxStart = ty && ty.code==='medical'? today : '';
   const req=docRequired(ty, FORM.start), docOk = ty && ty.doc_rule!=='none';
@@ -446,7 +497,7 @@ function renderApply(){
   let h='<h3>'+esc(t('applyTitle'))+'</h3>'
    +'<div class="formhead"><div><span>'+esc(t('empName'))+'</span><b>'+esc(emp.name)+'</b></div><div><span>'+esc(t('empNoL'))+'</span><b class="mono">'+esc(emp.emp_no)+'</b></div>'
    +'<div><span>'+esc(t('deptL'))+'</span><b>'+esc(emp.department||'—')+'</b></div><div><span>'+esc(t('desigL'))+'</span><b>'+esc(emp.position||'—')+'</b></div>'
-   +'<div><span>'+esc(t('dateReq'))+'</span><b>'+esc(fmtDate(today))+'</b></div><div><span>'+esc(t('superiorL'))+'</span><b>'+esc(sup? sup.name : t('noSuperior'))+'</b></div></div>'
+   +'<div><span>'+esc(t('dateReq'))+'</span><b>'+esc(fmtDate(today))+'</b></div><div><span>'+esc(t('myPhone'))+'</span><b class="mono">'+esc(emp.phone? '+'+emp.phone : '—')+'</b></div></div>'
    +'<div id="applyMsg"></div>'
    +'<label class="l" for="lvType">'+esc(t('leaveType'))+' <span class="req">*</span></label>'
    +'<select id="lvType"><option value="">—</option>'+(DATA.types||[]).map(x=>'<option value="'+esc(x.code)+'"'+(FORM.type===x.code?' selected':'')+'>'+esc(x.name)+(x.paid?'':' — '+t('unpaid'))+'</option>').join('')+'</select>';
@@ -479,10 +530,15 @@ function renderApply(){
    +'<textarea id="lvHandover" rows="2" maxlength="500" placeholder="'+esc(t('handoverPh'))+'">'+esc(FORM.handover)+'</textarea>'
    +'<label class="l" for="lvContact">'+esc(t('contact'))+'</label>'
    +'<input type="tel" id="lvContact" inputmode="tel" value="'+esc(FORM.contact)+'">'
+   +'<div class="hodbox"><b>'+esc(t('hodTitle'))+'</b><div class="muted" style="margin:2px 0 8px">'+esc(t('hodLead'))+'</div>'
+   +'<div class="row2"><div><label class="l" for="lvHodName">'+esc(t('hodName'))+' <span class="req">*</span></label>'
+   +'<input type="text" id="lvHodName" maxlength="80" value="'+esc(FORM.hodName)+'"></div>'
+   +'<div><label class="l" for="lvHodPhone">'+esc(t('hodPhone'))+' <span class="req">*</span></label>'
+   +'<input type="tel" id="lvHodPhone" inputmode="tel" placeholder="012-345 6789" value="'+esc(FORM.hodPhone)+'"></div></div></div>'
    +'<div class="declare"><label><input type="checkbox" id="lvDeclare"'+(FORM.declared?' checked':'')+'> <span>'+esc(t('declaration'))+'</span></label></div>'
    +'<label class="l" for="lvSign">'+esc(t('signature'))+' <span class="req">*</span></label>'
    +'<input type="text" id="lvSign" autocomplete="name" placeholder="'+esc(emp.name||'')+'" value="'+esc(FORM.signature)+'">'
-   +'<button type="button" class="btn-primary" id="submitBtn">'+esc(t(sup?'submitSup':'submit'))+'</button>';
+   +'<button type="button" class="btn-primary" id="submitBtn">'+esc(t('submitSup'))+'</button>';
   $('applyCard').innerHTML=h;
   liveCheck();
 }
@@ -584,7 +640,8 @@ document.addEventListener('input', e=>{
   if(id==='lvRelief'){ FORM.relief=e.target.value; }
   if(id==='lvHandover'){ FORM.handover=e.target.value; }
   if(id==='lvSign'){ FORM.signature=e.target.value; }
-  if(id==='vPhone'){ VPHONE=e.target.value; }
+  if(id==='lvHodName'){ FORM.hodName=e.target.value; FORM.hodTouched=true; }
+  if(id==='lvHodPhone'){ FORM.hodPhone=e.target.value; FORM.hodTouched=true; }
 });
 document.addEventListener('change', e=>{
   const id=e.target.id;
@@ -600,9 +657,6 @@ document.addEventListener('click', e=>{
   const d=e.target.closest('[data-docdel]'); if(d){ DOCS.splice(Number(d.dataset.docdel),1); renderApply(); return; }
   const rs=e.target.closest('[data-resend]'); if(rs){ resendSup(rs.dataset.resend); return; }
   if(e.target.id==='submitBtn') submitLeave();
-  if(e.target.id==='vSend') requestOtp();
-  if(e.target.id==='vCheck') checkOtp();
-  if(e.target.id==='vChange'){ DATA.otp=null; renderApply(); }
   if(e.target.id==='supWaBtn'){ setTimeout(()=>{ SUP_SEND=null; renderHistory(); showMsg('topMsg','ok',t('supSentOk')); }, 400); }
 });
 
@@ -654,6 +708,7 @@ async function submitLeave(){
   const r=check(), ty=typeOf(FORM.type);
   const nm=v=>String(v||'').toUpperCase().replace(/[^A-Z]/g,'');
   let err = r.code? r : (FORM.reason.trim().length<10? {code:'reason_short'} : (docRequired(ty,FORM.start) && !DOCS.length? {code:'doc_missing'}
+    : FORM.hodName.trim().length<2? {code:'hod_name'} : FORM.hodPhone.replace(/\D/g,'').length<9? {code:'hod_phone'}
     : !FORM.declared? {code:'no_declaration'} : nm(FORM.signature)!==nm((DATA.employee||{}).name)? {code:'sign_mismatch'} : null));
   if(err){ showMsg('applyMsg','err',errText(err)); $('applyCard').scrollIntoView({behavior:'smooth'}); return; }
   const btn=$('submitBtn'); btn.disabled=true; btn.textContent=t('sending');
@@ -666,7 +721,7 @@ async function submitLeave(){
       const { data, error } = await sb.rpc('portal_apply', {p_emp_no:CRED.emp_no, p_password:CRED.password,
         p:{id, type:FORM.type, start_date:FORM.start, end_date:(halfAllowed(ty)&&FORM.half)? FORM.start : FORM.end, half:(halfAllowed(ty)&&FORM.half)||'',
            reason:FORM.reason.trim(), contact:FORM.contact.trim(), relief:FORM.relief.trim(), handover:FORM.handover.trim(),
-           declared:FORM.declared?'true':'', signature:FORM.signature.trim(), doc_paths:paths, lang:LANG}});
+           declared:FORM.declared?'true':'', signature:FORM.signature.trim(), hod_name:FORM.hodName.trim(), hod_phone:FORM.hodPhone.trim(), doc_paths:paths, lang:LANG}});
       if(error) throw error;
       res=data; if(!(res && res.code==='dup_id')) break;
     }
@@ -675,7 +730,8 @@ async function submitLeave(){
       showMsg('applyMsg','err',errText(res||{code:'?'})); return;
     }
     const sent={type:FORM.type, start_date:FORM.start, end_date:(halfAllowed(ty)&&FORM.half)?FORM.start:FORM.end, days:res.days, reason:FORM.reason.trim(), half:(halfAllowed(ty)&&FORM.half)||''};
-    DOCS=[]; FORM=blankForm();
+    const keepHod={hodName:FORM.hodName, hodPhone:FORM.hodPhone, hodTouched:true};
+    DOCS=[]; FORM=Object.assign(blankForm(), keepHod);
     SUP_SEND = res.superior? {id:res.id, name:res.superior.name, link:supWaLink(res.superior.phone, res.token, sent)} : null;
     await refresh(true);
     showMsg('topMsg','ok',t(res.superior?'submittedSup':'submitted',{d:res.days, u:res.paid===false?t('unpaidSuffix'):''}));
@@ -684,7 +740,7 @@ async function submitLeave(){
     console.error(e);
     showMsg('applyMsg','err', e && e.upload? t('e_upload') : t('offline'));
   }finally{
-    const b=$('submitBtn'); if(b){ b.disabled=false; b.textContent=t('submit'); }
+    const b=$('submitBtn'); if(b){ b.disabled=false; b.textContent=t('submitSup'); }
   }
 }
 async function attachLater(id, files){
