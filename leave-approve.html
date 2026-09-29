@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>HE Manufacturing — Leave approval</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!--
+  Superior's leave approval page. The employee (or HR) sends this link to the superior by WhatsApp:
+  leave-approve.html?t=<36-hex token>. The token is single-application, expires after 21 days, and
+  is stored only as a SHA-256 hash in hem_leave_applications. superior_view / superior_decide are the
+  only things this page can call. The superior's decision + comment is recorded and the application
+  moves to HR for final approval.
+-->
+<style>
+  :root{ --wine:#522B39; --brass:#9C7434; --ink:#231a1c; --ink2:#5c4b51; --paper:#faf8f6; --card:#fff; --line:#e7dfdb; --muted:#8a7b76;
+    --ok:#2f6b46; --ok-bg:#e4f0e7; --bad:#a3312c; --bad-bg:#fbe4e2; --warn:#a86a10; --warn-bg:#fbeed9; --soft:#f4eeee; --r:10px; }
+  @media (prefers-color-scheme: dark){ :root{ --ink:#f1e9e6; --ink2:#c9bab5; --paper:#171214; --card:#211a1d; --line:#3a2f33; --muted:#9a8b86;
+    --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15; --soft:#2d2226; } }
+  *{box-sizing:border-box} body{margin:0;background:var(--paper);color:var(--ink);font:15.5px/1.5 'Archivo',system-ui,sans-serif}
+  .top{display:flex;align-items:center;gap:10px;padding:14px 16px;background:#522B39;color:#f7f0ee}
+  .crest{width:34px;height:34px;border-radius:8px;background:#9C7434;display:flex;align-items:center;justify-content:center;font:600 13px 'Fraunces',serif;color:#3c1f29}
+  .top b{font-family:'Fraunces',serif;font-weight:600} .top small{display:block;font-size:11.5px;opacity:.75}
+  .lang{margin-left:auto;display:flex;border:1px solid rgba(255,255,255,.3);border-radius:20px;overflow:hidden}
+  .lang button{background:transparent;color:#f7f0ee;border:0;padding:6px 10px;font:600 12px 'Archivo',sans-serif;cursor:pointer}
+  .lang button.on{background:#f7f0ee;color:#522B39}
+  .wrap{max-width:520px;margin:0 auto;padding:18px 16px 50px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+  h1{font:600 20px 'Fraunces',serif;margin:0 0 4px} .muted{color:var(--muted);font-size:13px}
+  dl{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;margin:12px 0 0;font-size:14.5px} dt{color:var(--muted)} dd{margin:0;font-weight:500}
+  .bal{background:var(--soft);border-radius:8px;padding:10px 12px;font-size:13.5px;margin-top:12px}
+  textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);font:16px 'Archivo',sans-serif;background:var(--card);color:var(--ink);margin:6px 0 12px}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  button.big{border:0;border-radius:var(--r);padding:15px 10px;font:700 16px 'Archivo',sans-serif;cursor:pointer}
+  .yes{background:#2f6b46;color:#fff} .no{background:#a3312c;color:#fff} button:disabled{opacity:.5}
+  .msg{border-radius:var(--r);padding:11px 13px;font-size:14px;margin-bottom:12px}
+  .msg.ok{background:var(--ok-bg);color:var(--ok)} .msg.err{background:var(--bad-bg);color:var(--bad)} .msg.warn{background:var(--warn-bg);color:var(--warn)}
+  .tag{font-size:11.5px;padding:2px 8px;border-radius:20px;font-weight:700} .tag.unpaid{background:var(--line);color:var(--ink2)}
+  .done{text-align:center;padding:26px 10px} .done .ic{font-size:44px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="top"><div class="crest">HE</div><div><b>HE Manufacturing</b><small id="sub"></small></div>
+  <div class="lang"><button type="button" data-lang="en" class="on">EN</button><button type="button" data-lang="ms">BM</button></div></div>
+<div class="wrap">
+  <div id="msg"></div>
+  <div class="card" id="loading"><span class="muted" data-t="loading"></span></div>
+  <div id="main" hidden>
+    <div class="card">
+      <h1 data-t="title"></h1>
+      <div class="muted" id="forWho"></div>
+      <dl id="details"></dl>
+      <div class="bal" id="bal"></div>
+    </div>
+    <div class="card" id="decideCard">
+      <b data-t="yourDecision"></b>
+      <textarea id="comment" rows="3" maxlength="500"></textarea>
+      <div class="btns">
+        <button type="button" class="big yes" id="yesBtn" data-t="approve"></button>
+        <button type="button" class="big no" id="noBtn" data-t="reject"></button>
+      </div>
+      <div class="muted" style="margin-top:10px" data-t="afterNote"></div>
+    </div>
+    <div class="card done" id="doneCard" hidden><div class="ic" id="doneIc"></div><h1 id="doneTitle"></h1><div class="muted" id="doneBody"></div></div>
+  </div>
+</div>
+<script>
+const sb = window.supabase && window.supabase.createClient('https://znxtvkpnwzrzevljdsgx.supabase.co','sb_publishable_3Q-qF58hDO6Q5Tr8Wr8X4A_WTBVR8z5',{auth:{persistSession:false}});
+const TOKEN = (new URLSearchParams(location.search).get('t')||'').toLowerCase();
+const TX={
+  sub:{en:'Leave approval', ms:'Kelulusan cuti'}, loading:{en:'Loading the application…', ms:'Memuatkan permohonan…'},
+  title:{en:'Leave application', ms:'Permohonan cuti'}, forYou:{en:'For your approval as superior{n}', ms:'Untuk kelulusan anda sebagai penyelia{n}'},
+  emp:{en:'Employee', ms:'Pekerja'}, dept:{en:'Department', ms:'Jabatan'}, type:{en:'Leave type', ms:'Jenis cuti'}, dates:{en:'Dates', ms:'Tarikh'},
+  days:{en:'Days', ms:'Hari'}, reason:{en:'Reason', ms:'Sebab'}, relief:{en:'Relief / cover', ms:'Pengganti'}, handover:{en:'Handover', ms:'Serahan tugas'},
+  docs:{en:'Documents', ms:'Dokumen'}, applied:{en:'Applied', ms:'Dimohon'}, unpaid:{en:'UNPAID', ms:'TANPA GAJI'},
+  bal:{en:'{type} this year: {taken} day(s) already taken{ent}.', ms:'{type} tahun ini: {taken} hari telah diambil{ent}.'}, of:{en:' of {n}', ms:' daripada {n}'},
+  yourDecision:{en:'Your decision — comment (required if not approving)', ms:'Keputusan anda — ulasan (wajib jika tidak diluluskan)'},
+  approve:{en:'✓ Approve', ms:'✓ Lulus'}, reject:{en:'✗ Not approve', ms:'✗ Tidak lulus'},
+  afterNote:{en:'Your decision goes to HR, who gives the final approval and informs the employee.', ms:'Keputusan anda dihantar kepada HR, yang akan memberi kelulusan akhir dan memaklumkan pekerja.'},
+  needComment:{en:'Please write a short reason for not approving.', ms:'Sila tulis sebab ringkas tidak meluluskan.'},
+  sending:{en:'Sending…', ms:'Menghantar…'},
+  doneYes:{en:'You approved this leave', ms:'Anda telah meluluskan cuti ini'}, doneNo:{en:'You did not approve this leave', ms:'Anda tidak meluluskan cuti ini'},
+  doneBody:{en:'HR has been informed and will give the final decision. You can close this page.', ms:'HR telah dimaklumkan dan akan membuat keputusan akhir. Anda boleh menutup halaman ini.'},
+  already:{en:'You already responded: {d}. {c}', ms:'Anda telah memberi maklum balas: {d}. {c}'},
+  closed:{en:'This application has already been {s} by HR — no action needed.', ms:'Permohonan ini telah {s} oleh HR — tiada tindakan diperlukan.'},
+  invalid:{en:'This approval link is not valid or has expired. Ask the employee or HR to send a new one.', ms:'Pautan kelulusan ini tidak sah atau telah tamat tempoh. Minta pekerja atau HR menghantar pautan baharu.'},
+  offline:{en:'Could not connect — check your internet and try again.', ms:'Tidak dapat disambungkan — semak internet anda dan cuba lagi.'},
+  approvedW:{en:'approved', ms:'diluluskan'}, rejectedW:{en:'not approved', ms:'tidak diluluskan'}, halfW:{en:'half day', ms:'separuh hari'}
+};
+let LANG='en', A=null;
+try{ const l=localStorage.getItem('hem_leave_lang'); if(l==='ms') LANG='ms'; }catch(e){}
+const $=id=>document.getElementById(id);
+const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function t(k,v){ let s=(TX[k]||{})[LANG]||(TX[k]||{}).en||k; if(v) Object.keys(v).forEach(x=>{ s=s.split('{'+x+'}').join(v[x]); }); return s; }
+const fd=s=>s? new Date(s+'T00:00:00Z').toLocaleDateString(LANG==='ms'?'ms-MY':'en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}) : '';
+function msg(kind,text){ $('msg').innerHTML=text?'<div class="msg '+kind+'">'+esc(text)+'</div>':''; }
+function render(){
+  document.documentElement.lang=LANG;
+  document.querySelectorAll('[data-t]').forEach(el=>el.textContent=t(el.dataset.t));
+  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on',b.dataset.lang===LANG));
+  $('sub').textContent=t('sub'); $('comment').placeholder=LANG==='ms'?'cth. Diluluskan — Aye akan menggantikan':'e.g. Approved — Aye will cover';
+  if(!A) return;
+  const e=A.employee||{};
+  $('forWho').textContent=t('forYou',{n:A.superior_name?' ('+A.superior_name+')':''});
+  const row=(k,v)=>v? '<dt>'+esc(t(k))+'</dt><dd>'+v+'</dd>' : '';
+  $('details').innerHTML=row('emp','<b>'+esc(e.name)+'</b> <span class="muted">'+esc(e.emp_no)+(e.position?' · '+esc(e.position):'')+'</span>')
+    +row('dept',esc(e.department||''))
+    +row('type',esc(A.type)+(A.paid===false?' <span class="tag unpaid">'+esc(t('unpaid'))+'</span>':''))
+    +row('dates',esc(fd(A.start_date))+(A.end_date!==A.start_date?' → '+esc(fd(A.end_date)):'')+(A.half?' ('+esc(A.half)+' '+esc(t('halfW'))+')':''))
+    +row('days','<b>'+esc(A.days)+'</b>')+row('reason',esc(A.reason))+row('relief',esc(A.relief||''))+row('handover',esc(A.handover||''))
+    +row('docs', A.docs? esc(A.docs):'')+row('applied',esc(String(A.applied_at||'').slice(0,10)));
+  $('bal').textContent=t('bal',{type:A.type, taken:A.taken, ent:Number(A.entitlement)>0? t('of',{n:A.entitlement}) : ''});
+  if(A.status!=='pending'){ $('decideCard').hidden=true; msg('warn', t('closed',{s:t(A.status==='approved'?'approvedW':'rejectedW')})); }
+  else if(A.decision){ msg('ok', t('already',{d:t(A.decision==='approved'?'approvedW':'rejectedW'), c:A.comment? '“'+A.comment+'”':''})); }
+}
+async function load(){
+  if(!sb || !/^[0-9a-f]{36}$/.test(TOKEN)){ $('loading').hidden=true; msg('err',t('invalid')); return; }
+  try{
+    const {data,error}=await sb.rpc('superior_view',{p_token:TOKEN});
+    $('loading').hidden=true;
+    if(error) throw error;
+    if(!data||!data.ok){ msg('err',t('invalid')); return; }
+    A=data; $('main').hidden=false; render();
+  }catch(e){ console.error(e); $('loading').hidden=true; msg('err',t('offline')); }
+}
+async function decide(decision){
+  const c=$('comment').value.trim();
+  if(decision==='rejected' && c.length<3){ msg('err',t('needComment')); $('comment').focus(); return; }
+  $('yesBtn').disabled=$('noBtn').disabled=true;
+  try{
+    const {data,error}=await sb.rpc('superior_decide',{p_token:TOKEN, p_decision:decision, p_comment:c});
+    if(error) throw error;
+    if(!data||!data.ok){ msg('err', data&&data.code==='closed'? t('closed',{s:t(data.status==='approved'?'approvedW':'rejectedW')}) : data&&data.code==='comment_needed'? t('needComment') : t('invalid')); return; }
+    msg('',''); $('decideCard').hidden=true; $('doneCard').hidden=false;
+    $('doneIc').textContent=decision==='approved'?'✅':'❌';
+    $('doneTitle').textContent=t(decision==='approved'?'doneYes':'doneNo'); $('doneBody').textContent=t('doneBody');
+  }catch(e){ console.error(e); msg('err',t('offline')); }
+  finally{ $('yesBtn').disabled=$('noBtn').disabled=false; }
+}
+$('yesBtn').addEventListener('click',()=>decide('approved'));
+$('noBtn').addEventListener('click',()=>decide('rejected'));
+document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click',()=>{ LANG=b.dataset.lang; try{localStorage.setItem('hem_leave_lang',LANG);}catch(e){} render(); }));
+render(); load();
+</script>
+</body>
+</html>

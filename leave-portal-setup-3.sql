@@ -23,3 +23,12 @@
 --   hem_employees: leave_scope ('full' | 'mc_only' | 'none'), annual_entitlement (per person), staff_type.
 --   _allowed_types() / _entitlement(); portal_data lists only allowed types with the person's entitlement;
 --   portal_apply refuses other types ('not_allowed') and checks balance against the person's entitlement.
+
+-- ---- 2026-09-29 (later): migration "leave_v3_otp_superior_halfday" — ALREADY APPLIED ----
+--   hem_employees: position, phone, phone_verified_at, superior_emp_no.
+--   hem_phone_verify: WhatsApp verification codes (HR-only table; HR sends the code by WhatsApp).
+--   portal_request_otp / portal_verify_otp; portal_apply requires a verified number, declaration +
+--   typed signature; supports half day (AM/PM = 0.5 day for annual/unpaid/day-off/emergency);
+--   records relief + handover; routes to the employee's superior first (stage 'superior').
+--   Superior approval link: leave-approve.html?t=<token>; superior_view / superior_decide (token
+--   stored as SHA-256, 21-day expiry); portal_superior_link / hr_superior_link issue fresh links.

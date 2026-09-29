@@ -94,6 +94,17 @@
   .file button{background:transparent;border:1px solid var(--line);color:var(--ink2);padding:5px 9px;font-size:12px}
   .docbox{border:1px dashed var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
   .docbox.need{border-color:var(--wine)}
+  .formhead{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;background:var(--wine-soft);border-radius:var(--r);padding:12px;margin-bottom:12px;font-size:13.5px}
+  .formhead span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .seg{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .seg label{flex:1;min-width:90px;border:1px solid var(--line);border-radius:22px;padding:8px 10px;font-size:13.5px;text-align:center;cursor:pointer;background:var(--field)}
+  .seg input{accent-color:var(--wine)} .seg label:has(input:checked){border-color:var(--wine);background:var(--wine-soft);font-weight:700}
+  .declare{border:1px solid var(--line);border-radius:var(--r);padding:11px 12px;margin-bottom:12px;font-size:13.5px;color:var(--ink2)}
+  .declare label{display:flex;gap:10px;align-items:flex-start;cursor:pointer} .declare input{width:auto;margin:3px 0 0;accent-color:var(--wine)}
+  .stage{font-size:12.5px;color:var(--info);margin-top:3px}
+  .linkbtn{background:none;border:0;padding:0;color:var(--wine);text-decoration:underline;font-size:12.5px;font-weight:600;cursor:pointer}
+  .supcard{border-color:#25D366}
+  .btn-wa{display:block;text-align:center;background:#25D366;color:#fff;border-radius:var(--r);padding:13px 16px;font-weight:700;text-decoration:none}
   [hidden]{display:none!important}
 </style>
 </head>
@@ -135,6 +146,7 @@
   <div id="noticesCard"></div>
   <div class="card"><h3 data-t="balanceTitle"></h3><div id="balanceList"></div></div>
   <div class="card" id="rulesCard"></div>
+  <div id="supSend"></div>
   <div class="card" id="applyCard"></div>
   <div class="card"><h3 data-t="historyTitle"></h3><div id="historyList"></div></div>
 </div>
@@ -210,6 +222,41 @@ const TX = {
   e_balance:{en:'Not enough balance — only {n} day(s) of {type} left. Apply the extra days as Unpaid Leave.', ms:'Baki tidak mencukupi — hanya {n} hari {type} lagi. Mohon hari tambahan sebagai Cuti Tanpa Gaji.'},
   e_not_allowed:{en:'This leave type is not available for your employment type. Please see HR.', ms:'Jenis cuti ini tidak tersedia untuk jenis pekerjaan anda. Sila jumpa HR.'},
   broughtFwd:{en:'Taken before the portal (brought forward)', ms:'Diambil sebelum portal (dibawa ke hadapan)'},
+  verifyTitle:{en:'Verify your WhatsApp number', ms:'Sahkan nombor WhatsApp anda'},
+  verifyLead:{en:'Before your first application, confirm the WhatsApp number HR and your superior will use to contact you.', ms:'Sebelum permohonan pertama, sahkan nombor WhatsApp yang akan digunakan oleh HR dan penyelia untuk menghubungi anda.'},
+  waNumber:{en:'Your WhatsApp number', ms:'Nombor WhatsApp anda'}, getCode:{en:'Get verification code', ms:'Dapatkan kod pengesahan'},
+  codeWaiting:{en:'Request sent. HR will send a 6-digit code to {phone} on WhatsApp shortly — enter it below.', ms:'Permintaan dihantar. HR akan menghantar kod 6 digit ke {phone} melalui WhatsApp sebentar lagi — masukkan di bawah.'},
+  codeSent:{en:'HR has sent your code to {phone} on WhatsApp. Enter it below.', ms:'HR telah menghantar kod ke {phone} melalui WhatsApp. Masukkan di bawah.'},
+  codeLbl:{en:'6-digit code', ms:'Kod 6 digit'}, verifyBtn:{en:'Verify', ms:'Sahkan'}, changeNo:{en:'Use a different number', ms:'Guna nombor lain'},
+  verifiedOk:{en:'WhatsApp number verified — you can now apply for leave.', ms:'Nombor WhatsApp disahkan — anda kini boleh memohon cuti.'},
+  triesLeft:{en:'({n} tries left)', ms:'({n} cubaan lagi)'},
+  e_bad_phone:{en:'Enter a valid Malaysian mobile number.', ms:'Masukkan nombor telefon bimbit yang sah.'},
+  e_too_many:{en:'Too many attempts today. Please see HR.', ms:'Terlalu banyak cubaan hari ini. Sila jumpa HR.'},
+  e_wrong_code:{en:'That code is not correct {n}', ms:'Kod itu tidak betul {n}'},
+  e_no_request:{en:'The code has expired — request a new one.', ms:'Kod telah tamat tempoh — minta kod baharu.'},
+  e_phone_unverified:{en:'Verify your WhatsApp number first.', ms:'Sahkan nombor WhatsApp anda dahulu.'},
+  e_no_declaration:{en:'Please tick the declaration.', ms:'Sila tandakan pengakuan.'},
+  e_no_signature:{en:'Type your full name as your signature.', ms:'Taip nama penuh anda sebagai tandatangan.'},
+  e_sign_mismatch:{en:'Your signature must be your full name exactly as shown above.', ms:'Tandatangan mestilah nama penuh anda seperti di atas.'},
+  e_bad_half:{en:'Half day is not available for this leave type.', ms:'Separuh hari tidak tersedia untuk jenis cuti ini.'},
+  empName:{en:'Employee', ms:'Pekerja'}, empNoL:{en:'Emp No.', ms:'No. Pekerja'}, deptL:{en:'Department', ms:'Jabatan'}, desigL:{en:'Designation', ms:'Jawatan'},
+  dateReq:{en:'Date requested', ms:'Tarikh permohonan'}, superiorL:{en:'Superior', ms:'Penyelia'}, noSuperior:{en:'— (goes to HR)', ms:'— (terus ke HR)'},
+  duration:{en:'Duration', ms:'Tempoh'}, fullDays:{en:'Full day(s)', ms:'Hari penuh'}, halfAM:{en:'Half day AM', ms:'Separuh hari pagi'}, halfPM:{en:'Half day PM', ms:'Separuh hari petang'},
+  dateL:{en:'Date', ms:'Tarikh'}, halfDays:{en:'Half day ({h}) — 0.5 day', ms:'Separuh hari ({h}) — 0.5 hari'},
+  relief:{en:'Relief person (who covers your work) — optional', ms:'Pengganti (yang menggantikan tugas anda) — pilihan'}, reliefPh:{en:'Name of colleague', ms:'Nama rakan sekerja'},
+  handover:{en:'Handover notes — optional', ms:'Nota serahan tugas — pilihan'}, handoverPh:{en:'Anything your team needs to know while you are away', ms:'Perkara yang perlu diketahui semasa anda tiada'},
+  declaration:{en:'I confirm the information above is true. I understand that leave is only confirmed after approval, and that false information may lead to disciplinary action.', ms:'Saya mengesahkan maklumat di atas adalah benar. Saya faham cuti hanya sah selepas diluluskan, dan maklumat palsu boleh membawa kepada tindakan tatatertib.'},
+  signature:{en:'Signature — type your full name', ms:'Tandatangan — taip nama penuh anda'},
+  submitSup:{en:'Submit & send to my superior', ms:'Hantar kepada penyelia saya'},
+  submittedSup:{en:'Application saved — {d} day(s){u}. Now send it to your superior on WhatsApp ↓', ms:'Permohonan disimpan — {d} hari{u}. Sekarang hantar kepada penyelia melalui WhatsApp ↓'},
+  sendSupTitle:{en:'Send to your superior {n}', ms:'Hantar kepada penyelia anda {n}'},
+  sendSupLead:{en:'Tap the button — WhatsApp opens with your application and an approval link. Press send there.', ms:'Tekan butang — WhatsApp akan dibuka dengan permohonan dan pautan kelulusan. Tekan hantar di sana.'},
+  sendSupBtn:{en:'Send on WhatsApp', ms:'Hantar melalui WhatsApp'},
+  supNoPhone:{en:'Your superior has no verified WhatsApp number yet. HR will forward your application.', ms:'Penyelia anda belum mempunyai nombor WhatsApp yang disahkan. HR akan memanjangkan permohonan anda.'},
+  supSentOk:{en:'Sent to your superior. You will see their decision here.', ms:'Dihantar kepada penyelia. Keputusan akan dipaparkan di sini.'},
+  stageSup:{en:'Waiting for superior {n}', ms:'Menunggu penyelia {n}'}, resendSup:{en:'Send again', ms:'Hantar semula'},
+  stageHr:{en:'With HR for final approval', ms:'Di HR untuk kelulusan akhir'},
+  supOk:{en:'Superior {n} approved', ms:'Penyelia {n} meluluskan'}, supNo:{en:'Superior {n} did not approve', ms:'Penyelia {n} tidak meluluskan'},
   e_dup_id:{en:'Please press Submit again.', ms:'Sila tekan Hantar sekali lagi.'},
   e_upload:{en:'Could not upload the document — check your internet and try again.', ms:'Tidak dapat memuat naik dokumen — semak internet anda dan cuba lagi.'},
   e_file_big:{en:'{f} is larger than 10 MB.', ms:'{f} melebihi 10 MB.'}, e_file_type:{en:'{f} is not a photo or PDF.', ms:'{f} bukan gambar atau PDF.'},
@@ -227,7 +274,8 @@ function t(k, vars){ let s=(TX[k]||{})[LANG]; if(s==null) s=(TX[k]||{}).en; if(s
 let CRED=null;              // {emp_no, password} — memory only, never stored
 let DATA=null;              // last portal_data result
 let DOCS=[];                // files chosen in the apply form [{blob,name,type,size,thumb}]
-let FORM={type:'', start:'', end:'', reason:'', contact:''};
+function blankForm(){ return {type:'', start:'', end:'', half:'', reason:'', contact:'', relief:'', handover:'', declared:false, signature:''}; }
+let FORM=blankForm();
 let refreshTimer=null, markReadTimer=null;
 
 /* ------------------------------------------------------------------ date helpers (KL calendar) */
@@ -280,7 +328,7 @@ $('loginForm').addEventListener('submit', async e=>{
   finally{ btn.disabled=false; btn.textContent=t('signIn'); }
 });
 function signOut(msg){
-  CRED=null; DATA=null; DOCS=[]; FORM={type:'',start:'',end:'',reason:'',contact:''};
+  CRED=null; DATA=null; DOCS=[]; FORM=blankForm(); SUP_SEND=null;
   clearInterval(refreshTimer); clearTimeout(markReadTimer);
   $('appScreen').hidden=true; $('loginScreen').hidden=false; $('logoutBtn').hidden=true;
   $('tbName').textContent='HE Manufacturing'; $('tbSub').textContent='';
@@ -343,19 +391,72 @@ function renderAll(keepForm){
 }
 function docRequired(ty, start){ if(!ty) return false;
   return ty.doc_rule==='required' || (ty.doc_rule==='required_if_started' && start && start<=todayKL()); }
+/* ---------- WhatsApp number verification (required once before applying) ----------
+   The employee enters their number → portal_request_otp stores a 6-digit code → HR taps
+   "Send code" in the ERP, which opens WhatsApp to that number with the code → the employee
+   types it here → portal_verify_otp marks the number verified. */
+function renderVerify(){
+  const otp=DATA.otp, emp=DATA.employee||{};
+  let h='<h3>📱 '+esc(t('verifyTitle'))+'</h3><div id="verifyMsg"></div><div class="note">'+esc(t('verifyLead'))+'</div>';
+  if(!otp){
+    h+='<label class="l" for="vPhone">'+esc(t('waNumber'))+' <span class="req">*</span></label>'
+     +'<input type="tel" id="vPhone" inputmode="tel" placeholder="012-345 6789" value="'+esc(VPHONE||emp.phone||'')+'">'
+     +'<button type="button" class="btn-primary" id="vSend">'+esc(t('getCode'))+'</button>';
+  }else{
+    h+='<div class="msg info">'+esc(t(otp.sent?'codeSent':'codeWaiting',{phone:'+'+otp.phone}))+'</div>'
+     +'<label class="l" for="vCode">'+esc(t('codeLbl'))+'</label>'
+     +'<input type="text" id="vCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" style="font-size:22px;letter-spacing:.3em;text-align:center">'
+     +'<button type="button" class="btn-primary" id="vCheck">'+esc(t('verifyBtn'))+'</button>'
+     +'<button type="button" class="btn-ghost" id="vChange" style="width:100%;margin-top:8px">'+esc(t('changeNo'))+'</button>';
+  }
+  $('applyCard').innerHTML=h;
+}
+let VPHONE='';
+async function requestOtp(){
+  const ph=($('vPhone')||{}).value||''; VPHONE=ph;
+  if(ph.replace(/\D/g,'').length<9) return showMsg('verifyMsg','err',t('e_bad_phone'));
+  const b=$('vSend'); b.disabled=true;
+  try{ const {data,error}=await sb.rpc('portal_request_otp',{p_emp_no:CRED.emp_no,p_password:CRED.password,p_phone:ph});
+    if(error) throw error; if(!data||!data.ok) return showMsg('verifyMsg','err',t('e_'+((data&&data.code)||'generic'),{c:'?'}));
+    await refresh(true);
+  }catch(e){ showMsg('verifyMsg','err',t('offline')); } finally{ const x=$('vSend'); if(x) x.disabled=false; }
+}
+async function checkOtp(){
+  const c=(($('vCode')||{}).value||'').trim();
+  if(!/^\d{6}$/.test(c)) return showMsg('verifyMsg','err',t('e_wrong_code',{n:''}));
+  const b=$('vCheck'); b.disabled=true;
+  try{ const {data,error}=await sb.rpc('portal_verify_otp',{p_emp_no:CRED.emp_no,p_password:CRED.password,p_code:c});
+    if(error) throw error;
+    if(!data||!data.ok){ const code=(data&&data.code)||'generic';
+      if(code==='wrong_code') return showMsg('verifyMsg','err',t('e_wrong_code',{n:data.left>0? t('triesLeft',{n:data.left}):''}));
+      if(code==='no_request'||code==='too_many'){ await refresh(true); }
+      return showMsg('verifyMsg','err',t('e_'+code,{c:code})); }
+    await refresh(true); showMsg('topMsg','ok',t('verifiedOk'));
+  }catch(e){ showMsg('verifyMsg','err',t('offline')); } finally{ const x=$('vCheck'); if(x) x.disabled=false; }
+}
+
+function halfAllowed(ty){ return ty && ['annual','unpaid','timeoff','emergency'].includes(ty.code); }
 function renderApply(){
-  const ty=typeOf(FORM.type), today=todayKL();
+  if(!(DATA.employee||{}).phone_verified){ renderVerify(); return; }
+  const ty=typeOf(FORM.type), today=todayKL(), emp=DATA.employee||{}, sup=DATA.superior;
   const minStart = ty? (ty.min_notice_days>0? addDays(today, ty.min_notice_days) : (ty.late_days>0? addDays(today, -60) : today)) : '';
   const maxStart = ty && ty.code==='medical'? today : '';
   const req=docRequired(ty, FORM.start), docOk = ty && ty.doc_rule!=='none';
-  let h='<h3>'+esc(t('applyTitle'))+'</h3><div id="applyMsg"></div>'
+  const half = halfAllowed(ty) && FORM.half;
+  let h='<h3>'+esc(t('applyTitle'))+'</h3>'
+   +'<div class="formhead"><div><span>'+esc(t('empName'))+'</span><b>'+esc(emp.name)+'</b></div><div><span>'+esc(t('empNoL'))+'</span><b class="mono">'+esc(emp.emp_no)+'</b></div>'
+   +'<div><span>'+esc(t('deptL'))+'</span><b>'+esc(emp.department||'—')+'</b></div><div><span>'+esc(t('desigL'))+'</span><b>'+esc(emp.position||'—')+'</b></div>'
+   +'<div><span>'+esc(t('dateReq'))+'</span><b>'+esc(fmtDate(today))+'</b></div><div><span>'+esc(t('superiorL'))+'</span><b>'+esc(sup? sup.name : t('noSuperior'))+'</b></div></div>'
+   +'<div id="applyMsg"></div>'
    +'<label class="l" for="lvType">'+esc(t('leaveType'))+' <span class="req">*</span></label>'
    +'<select id="lvType"><option value="">—</option>'+(DATA.types||[]).map(x=>'<option value="'+esc(x.code)+'"'+(FORM.type===x.code?' selected':'')+'>'+esc(x.name)+(x.paid?'':' — '+t('unpaid'))+'</option>').join('')+'</select>';
   if(ty) h+='<div class="note">'+(ty.paid?'':'<b>'+esc(t('unpaid'))+'.</b> ')+esc(tNote(ty))+'</div>';
-  h+='<div class="row2"><div><label class="l" for="lvStart">'+esc(t('start'))+' <span class="req">*</span></label>'
+  if(halfAllowed(ty)) h+='<label class="l">'+esc(t('duration'))+'</label><div class="seg">'
+     +[['',t('fullDays')],['AM',t('halfAM')],['PM',t('halfPM')]].map(o=>'<label><input type="radio" name="lvHalf" value="'+o[0]+'"'+((FORM.half||'')===o[0]?' checked':'')+'> '+esc(o[1])+'</label>').join('')+'</div>';
+  h+='<div class="row2"><div><label class="l" for="lvStart">'+esc(half? t('dateL') : t('start'))+' <span class="req">*</span></label>'
    +'<input type="date" id="lvStart" value="'+esc(FORM.start)+'"'+(minStart?' min="'+minStart+'"':'')+(maxStart?' max="'+maxStart+'"':'')+'></div>'
-   +'<div><label class="l" for="lvEnd">'+esc(t('end'))+' <span class="req">*</span></label>'
-   +'<input type="date" id="lvEnd" value="'+esc(FORM.end)+'"'+(FORM.start?' min="'+esc(FORM.start)+'"':'')+(maxStart?' max="'+maxStart+'"':'')+'></div></div>'
+   +(half? '<div></div>' : '<div><label class="l" for="lvEnd">'+esc(t('end'))+' <span class="req">*</span></label>'
+   +'<input type="date" id="lvEnd" value="'+esc(FORM.end)+'"'+(FORM.start?' min="'+esc(FORM.start)+'"':'')+(maxStart?' max="'+maxStart+'"':'')+'></div>')+'</div>'
    +'<div id="liveCheck"></div>'
    +'<label class="l" for="lvReason">'+esc(t('reason'))+' <span class="req">*</span></label>'
    +'<textarea id="lvReason" rows="3" maxlength="1000" placeholder="'+esc(t('reasonPh'))+'">'+esc(FORM.reason)+'</textarea>'
@@ -372,28 +473,36 @@ function renderApply(){
         +'<button type="button" data-docdel="'+i+'">'+esc(t('remove'))+'</button></div>').join('')
       +'</div>';
   }
-  h+='<label class="l" for="lvContact">'+esc(t('contact'))+'</label>'
+  h+='<label class="l" for="lvRelief">'+esc(t('relief'))+'</label>'
+   +'<input type="text" id="lvRelief" maxlength="120" placeholder="'+esc(t('reliefPh'))+'" value="'+esc(FORM.relief)+'">'
+   +'<label class="l" for="lvHandover">'+esc(t('handover'))+'</label>'
+   +'<textarea id="lvHandover" rows="2" maxlength="500" placeholder="'+esc(t('handoverPh'))+'">'+esc(FORM.handover)+'</textarea>'
+   +'<label class="l" for="lvContact">'+esc(t('contact'))+'</label>'
    +'<input type="tel" id="lvContact" inputmode="tel" value="'+esc(FORM.contact)+'">'
-   +'<button type="button" class="btn-primary" id="submitBtn">'+esc(t('submit'))+'</button>';
+   +'<div class="declare"><label><input type="checkbox" id="lvDeclare"'+(FORM.declared?' checked':'')+'> <span>'+esc(t('declaration'))+'</span></label></div>'
+   +'<label class="l" for="lvSign">'+esc(t('signature'))+' <span class="req">*</span></label>'
+   +'<input type="text" id="lvSign" autocomplete="name" placeholder="'+esc(emp.name||'')+'" value="'+esc(FORM.signature)+'">'
+   +'<button type="button" class="btn-primary" id="submitBtn">'+esc(t(sup?'submitSup':'submit'))+'</button>';
   $('applyCard').innerHTML=h;
   liveCheck();
 }
 /* the same rules the server enforces, run as the employee types so they see the problem first */
 function check(){
-  const ty=typeOf(FORM.type), today=todayKL(), s=FORM.start, e=FORM.end;
+  const ty=typeOf(FORM.type), today=todayKL(), s=FORM.start, half=halfAllowed(ty)&&FORM.half, e=half? FORM.start : FORM.end;
   if(!ty) return {code:'bad_type'};
   if(!s||!e||e<s) return {code:'bad_dates'};
   if(s.slice(0,4)!==e.slice(0,4)) return {code:'span_year'};
-  const days=workDays(s,e);
+  let days=workDays(s,e);
   if((new Date(e)-new Date(s))/864e5>90) return {code:'too_long'};
   if(days<1) return {code:'no_workdays'};
+  if(half) days=0.5;
   if(ty.min_notice_days>0 && s<addDays(today,ty.min_notice_days)) return {code:'notice', need:ty.min_notice_days, earliest:addDays(today,ty.min_notice_days), days};
   if(s<today && addDays(e,ty.late_days)<today) return {code:'too_late', late_days:ty.late_days, days};
   if(ty.code==='medical' && s>today) return {code:'mc_future', days};
-  const mine=(DATA.apps||[]).filter(a=>a.status==='pending'||a.status==='approved');
-  if(mine.some(a=>a.start_date<=e && a.end_date>=s)) return {code:'overlap', days};
+  const mine=(DATA.apps||[]).filter(a=>(a.status==='pending'||a.status==='approved') && !String(a.id).startsWith('OB-'));
+  if(mine.some(a=>a.start_date<=e && a.end_date>=s && !(half && a.details && a.details.half && a.details.half!==half))) return {code:'overlap', days};
   if(ty.paid && Number(ty.default_days)>0){
-    const used=mine.filter(a=>a.type===ty.code && Number(a.year)===Number(s.slice(0,4))).reduce((x,a)=>x+Number(a.days||0),0);
+    const used=(DATA.apps||[]).filter(a=>(a.status==='pending'||a.status==='approved') && a.type===ty.code && Number(a.year)===Number(s.slice(0,4))).reduce((x,a)=>x+Number(a.days||0),0);
     if(used+days>Number(ty.default_days)) return {code:'balance', left:Math.max(0,Number(ty.default_days)-used), days};
   }
   return {code:'', days};
@@ -410,28 +519,61 @@ function errText(r){
 }
 function liveCheck(){
   const box=$('liveCheck'); if(!box) return;
-  const r = (FORM.type && FORM.start && FORM.end)? check() : null;
-  const ty=typeOf(FORM.type);
+  const ty=typeOf(FORM.type), half=halfAllowed(ty)&&FORM.half;
+  const r = (FORM.type && FORM.start && (FORM.end||half))? check() : null;
   box.innerHTML = !r? '' : r.code? '<div class="msg warn">'+esc(errText(r))+'</div>'
-    : '<div class="msg info">'+esc(t('workDays',{n:r.days}))+(ty&&!ty.paid?' — '+esc(t('unpaid')):'')+'</div>';
+    : '<div class="msg info">'+esc(half? t('halfDays',{h:half}) : t('workDays',{n:r.days}))+(ty&&!ty.paid?' — '+esc(t('unpaid')):'')+'</div>';
   const rc=$('reasonCount'); if(rc){ const n=FORM.reason.trim().length; rc.textContent=t('chars',{n}); rc.style.color=n>=10?'var(--ok)':''; }
+}
+function supWaLink(phone, token, app){
+  const url=location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-approve.html?t='+token;
+  const emp=DATA.employee||{}, ty=typeOf(app.type);
+  const d=fmtDate(app.start_date)+(app.end_date&&app.end_date!==app.start_date?' – '+fmtDate(app.end_date):'')+(app.half?' ('+app.half+')':'');
+  const text='HE Manufacturing — Leave approval needed / Kelulusan cuti diperlukan\n'+emp.name+' ('+emp.emp_no+')'+(emp.position?', '+emp.position:'')
+    +'\n'+(ty?ty.name:app.type)+': '+d+' · '+app.days+' day(s)\nReason: '+app.reason+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
+  const n=String(phone||'').replace(/\D/g,'');
+  return n? 'https://wa.me/'+n+'?text='+encodeURIComponent(text) : '';
+}
+let SUP_SEND=null;   // {id, link, name} shown after submit / on request
+function supSendHtml(){
+  if(!SUP_SEND) return '';
+  return '<div class="card supcard"><h3>👤 '+esc(t('sendSupTitle',{n:SUP_SEND.name||''}))+'</h3>'
+    +(SUP_SEND.link? '<div class="muted" style="margin-bottom:10px">'+esc(t('sendSupLead'))+'</div>'
+      +'<a class="btn-wa" id="supWaBtn" href="'+esc(SUP_SEND.link)+'" target="_blank" rel="noopener">'+esc(t('sendSupBtn'))+'</a>'
+      : '<div class="msg warn">'+esc(t('supNoPhone'))+'</div>')+'</div>';
 }
 function renderHistory(){
   const apps=DATA.apps||[];
+  $('supSend').innerHTML=supSendHtml();
   $('historyList').innerHTML = apps.length? apps.map(a=>{
     if(String(a.id).startsWith('OB-')) return Number(a.days)? '<div class="hist"><b>'+esc((typeOf(a.type)||{}).name||a.type)+'</b>'
       +'<div class="muted">'+esc(t('broughtFwd'))+': '+esc(a.days)+' '+esc(t('daysW'))+'</div></div>' : '';
     const ty=typeOf(a.type), needLater = a.status==='pending' && ty && ty.doc_rule==='required_if_started' && !Number(a.docs);
+    const half=a.details&&a.details.half;
+    let stage='';
+    if(a.status==='pending'){
+      if(a.stage==='superior') stage='<div class="stage">⏳ '+esc(t('stageSup',{n:a.sup_name||''}))
+        +' <button type="button" class="linkbtn" data-resend="'+esc(a.id)+'">'+esc(t('resendSup'))+'</button></div>';
+      else stage='<div class="stage">🗂 '+esc(t('stageHr'))+(a.sup_decision? ' · '+esc(t(a.sup_decision==='approved'?'supOk':'supNo',{n:a.sup_name||''}))+(a.sup_comment?': “'+esc(a.sup_comment)+'”':'') : '')+'</div>';
+    }
     return '<div class="hist"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>'+esc(ty?ty.name:a.type)+'</b>'
       +'<span>'+(a.paid===false?'<span class="tag unpaid">'+esc(t('unpaid'))+'</span> ':'')+'<span class="tag '+esc(a.status)+'">'+esc((TX.st[LANG]||TX.st.en)[a.status]||a.status)+'</span></span></div>'
-      +'<div class="muted mono">'+esc(fmtDate(a.start_date))+(a.end_date!==a.start_date?' → '+esc(fmtDate(a.end_date)):'')+' · '+esc(a.days)+' '+esc(t('daysW'))
+      +'<div class="muted mono">'+esc(fmtDate(a.start_date))+(a.end_date!==a.start_date?' → '+esc(fmtDate(a.end_date)):'')+(half?' ('+esc(half)+')':'')+' · '+esc(a.days)+' '+esc(t('daysW'))
       +(Number(a.docs)?' · '+esc(t('docs',{n:a.docs})):'')+'</div>'
-      +(a.reason?'<div class="muted">'+esc(a.reason)+'</div>':'')
+      +(a.reason?'<div class="muted">'+esc(a.reason)+'</div>':'')+stage
       +(a.status==='rejected'&&a.reject_reason?'<div style="color:var(--bad);font-size:13px"><b>'+esc(t('rejReason'))+':</b> '+esc(a.reject_reason)+'</div>':'')
       +(needLater?'<div class="msg warn" style="margin:6px 0 0">'+esc(t('needDocLater'))
         +'<div class="cvbtns" style="margin-bottom:0"><label><input type="file" data-later="'+esc(a.id)+'" accept="application/pdf,image/*">📄 '+esc(t('uploadNow'))+'</label></div></div>':'')
       +'</div>';
   }).join('') : '<div class="muted">'+esc(t('none'))+'</div>';
+}
+async function resendSup(id){
+  try{ const {data,error}=await sb.rpc('portal_superior_link',{p_emp_no:CRED.emp_no,p_password:CRED.password,p_id:id});
+    if(error) throw error; if(!data||!data.ok) return showMsg('topMsg','err',t('e_generic',{c:(data&&data.code)||'?'}));
+    const app=(DATA.apps||[]).find(a=>a.id===id)||{};
+    SUP_SEND={id, name:data.superior_name, link:supWaLink(data.superior_phone, data.token, {type:app.type,start_date:app.start_date,end_date:app.end_date,days:app.days,reason:app.reason,half:app.details&&app.details.half})};
+    renderHistory(); $('supSend').scrollIntoView({behavior:'smooth'});
+  }catch(e){ showMsg('topMsg','err',t('offline')); }
 }
 
 /* ------------------------------------------------------------------ form events */
@@ -439,18 +581,29 @@ document.addEventListener('input', e=>{
   const id=e.target.id;
   if(id==='lvReason'){ FORM.reason=e.target.value; liveCheck(); }
   if(id==='lvContact'){ FORM.contact=e.target.value; }
+  if(id==='lvRelief'){ FORM.relief=e.target.value; }
+  if(id==='lvHandover'){ FORM.handover=e.target.value; }
+  if(id==='lvSign'){ FORM.signature=e.target.value; }
+  if(id==='vPhone'){ VPHONE=e.target.value; }
 });
 document.addEventListener('change', e=>{
   const id=e.target.id;
-  if(id==='lvType'){ FORM.type=e.target.value; FORM.start=''; FORM.end=''; showMsg('applyMsg','',''); renderApply(); }
-  if(id==='lvStart'){ FORM.start=e.target.value; if(!FORM.end || FORM.end<FORM.start) FORM.end=FORM.start; renderApply(); }
+  if(id==='lvType'){ FORM.type=e.target.value; FORM.start=''; FORM.end=''; FORM.half=''; showMsg('applyMsg','',''); renderApply(); }
+  if(e.target.name==='lvHalf'){ FORM.half=e.target.value; if(FORM.half) FORM.end=FORM.start; renderApply(); }
+  if(id==='lvStart'){ FORM.start=e.target.value; if(FORM.half || !FORM.end || FORM.end<FORM.start) FORM.end=FORM.start; renderApply(); }
   if(id==='lvEnd'){ FORM.end=e.target.value; liveCheck(); }
+  if(id==='lvDeclare'){ FORM.declared=e.target.checked; }
   if(id==='docCam' || id==='docPick'){ addDocs(e.target.files).then(()=>renderApply()); }
   if(e.target.dataset && e.target.dataset.later){ attachLater(e.target.dataset.later, e.target.files); }
 });
 document.addEventListener('click', e=>{
   const d=e.target.closest('[data-docdel]'); if(d){ DOCS.splice(Number(d.dataset.docdel),1); renderApply(); return; }
+  const rs=e.target.closest('[data-resend]'); if(rs){ resendSup(rs.dataset.resend); return; }
   if(e.target.id==='submitBtn') submitLeave();
+  if(e.target.id==='vSend') requestOtp();
+  if(e.target.id==='vCheck') checkOtp();
+  if(e.target.id==='vChange'){ DATA.otp=null; renderApply(); }
+  if(e.target.id==='supWaBtn'){ setTimeout(()=>{ SUP_SEND=null; renderHistory(); showMsg('topMsg','ok',t('supSentOk')); }, 400); }
 });
 
 /* photos are resized on the phone (long edge 2000px JPEG) — an MC photo stays readable at a
@@ -499,7 +652,9 @@ async function uploadDocs(id, files, startAt, onProgress){
 async function submitLeave(){
   showMsg('applyMsg','','');
   const r=check(), ty=typeOf(FORM.type);
-  let err = r.code? r : (FORM.reason.trim().length<10? {code:'reason_short'} : (docRequired(ty,FORM.start) && !DOCS.length? {code:'doc_missing'} : null));
+  const nm=v=>String(v||'').toUpperCase().replace(/[^A-Z]/g,'');
+  let err = r.code? r : (FORM.reason.trim().length<10? {code:'reason_short'} : (docRequired(ty,FORM.start) && !DOCS.length? {code:'doc_missing'}
+    : !FORM.declared? {code:'no_declaration'} : nm(FORM.signature)!==nm((DATA.employee||{}).name)? {code:'sign_mismatch'} : null));
   if(err){ showMsg('applyMsg','err',errText(err)); $('applyCard').scrollIntoView({behavior:'smooth'}); return; }
   const btn=$('submitBtn'); btn.disabled=true; btn.textContent=t('sending');
   try{
@@ -509,7 +664,9 @@ async function submitLeave(){
       const paths = DOCS.length? await uploadDocs(id, DOCS, 0, (n,tot)=>{ btn.textContent=t('uploading',{n,t:tot}); }) : [];
       btn.textContent=t('sending');
       const { data, error } = await sb.rpc('portal_apply', {p_emp_no:CRED.emp_no, p_password:CRED.password,
-        p:{id, type:FORM.type, start_date:FORM.start, end_date:FORM.end, reason:FORM.reason.trim(), contact:FORM.contact.trim(), doc_paths:paths, lang:LANG}});
+        p:{id, type:FORM.type, start_date:FORM.start, end_date:(halfAllowed(ty)&&FORM.half)? FORM.start : FORM.end, half:(halfAllowed(ty)&&FORM.half)||'',
+           reason:FORM.reason.trim(), contact:FORM.contact.trim(), relief:FORM.relief.trim(), handover:FORM.handover.trim(),
+           declared:FORM.declared?'true':'', signature:FORM.signature.trim(), doc_paths:paths, lang:LANG}});
       if(error) throw error;
       res=data; if(!(res && res.code==='dup_id')) break;
     }
@@ -517,10 +674,12 @@ async function submitLeave(){
       if(res && res.code==='auth') return signOut(t('e_auth'));
       showMsg('applyMsg','err',errText(res||{code:'?'})); return;
     }
-    DOCS=[]; FORM={type:'',start:'',end:'',reason:'',contact:''};
+    const sent={type:FORM.type, start_date:FORM.start, end_date:(halfAllowed(ty)&&FORM.half)?FORM.start:FORM.end, days:res.days, reason:FORM.reason.trim(), half:(halfAllowed(ty)&&FORM.half)||''};
+    DOCS=[]; FORM=blankForm();
+    SUP_SEND = res.superior? {id:res.id, name:res.superior.name, link:supWaLink(res.superior.phone, res.token, sent)} : null;
     await refresh(true);
-    showMsg('topMsg','ok',t('submitted',{d:res.days, u:res.paid===false?t('unpaidSuffix'):''}));
-    window.scrollTo({top:0,behavior:'smooth'});
+    showMsg('topMsg','ok',t(res.superior?'submittedSup':'submitted',{d:res.days, u:res.paid===false?t('unpaidSuffix'):''}));
+    (SUP_SEND? $('supSend') : document.body).scrollIntoView({behavior:'smooth'});
   }catch(e){
     console.error(e);
     showMsg('applyMsg','err', e && e.upload? t('e_upload') : t('offline'));

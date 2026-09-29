@@ -4342,21 +4342,46 @@ function leaveTabHtml(){
   h += filterBar([selCtl('lyear', years.map(y=>({v:String(y),t:String(y)})), String(year), 'Year'),
     btn('Apply leave','leave-apply',null,'btn primary'), btn('Annual leave report','leave-report',String(year)),
     btn('Add employee','emp-new'), btn('Batch import employees','emp-import'), btn('Batch import leave records','leave-import'),
-    btn('Upload leave report (PDF)','leave-pdf-import','','btn primary')]);
+    btn('Upload leave report (PDF)','leave-pdf-import','','btn primary'), btn('Print blank leave form','leave-print','','btn')]);
 
+  if(OTP_QUEUE.length) h += sect('WhatsApp number verification ('+OTP_QUEUE.length+')',
+    '<div class="note" style="margin-bottom:8px">These employees asked to verify their WhatsApp number in the leave portal. Tap <b>Send code</b> — WhatsApp opens with their code — press send. They type the code in the portal to finish.</div>'
+    +T([{h:'Employee', f:r=>'<b>'+esc(employee(r.emp_no).name)+'</b><div class="sub mono">'+esc(r.emp_no)+'</div>'},
+        {h:'Number', f:r=>'<span class="mono">+'+esc(r.phone)+'</span>'},
+        {h:'Requested', f:r=>'<span class="mono">'+esc(String(r.created_at).slice(0,16).replace('T',' '))+'</span>'},
+        {h:'', f:r=>'<a class="btn sm '+(r.sent_at?'':'primary')+'" data-act="otp-sent" data-arg="'+esc(r.id)+'" href="'+esc(waLink(r.phone,'HE Manufacturing — your leave portal verification code is '+r.code+'.\nKod pengesahan portal cuti anda: '+r.code+'\nDo not share this code. / Jangan kongsi kod ini.'))+'" target="_blank" rel="noopener">'+(r.sent_at?'Send again':'Send code')+'</a>'
+          +(r.sent_at?' <span class="tag t-ok">sent</span>':'')}], OTP_QUEUE));
   if(pending.length) h += sect('Pending approval', T([
       {h:'Employee', f:a=>'<b>'+esc(employee(a.empNo).name)+'</b><div class="sub mono">'+esc(a.empNo)+(employee(a.empNo).department?' · '+esc(employee(a.empNo).department):'')+'</div>'},
       {h:'Type', f:a=>'<span style="color:'+esc(leaveType(a.type).color)+'">●</span> '+esc(leaveType(a.type).name)+(leaveType(a.type).paid===false?' <span class="tag t-mute">unpaid</span>':'')},
-      {h:'Dates', f:a=>'<span class="mono">'+esc(a.start)+(a.end!==a.start?' → '+esc(a.end):'')+'</span>'},
+      {h:'Dates', f:a=>'<span class="mono">'+esc(a.start)+(a.end!==a.start?' → '+esc(a.end):'')+'</span>'+(a.half?'<div class="sub">half day '+esc(a.half)+'</div>':'')},
       {h:'Days', c:'num', f:a=>nf(a.days)},
       {h:'Reason', f:a=>'<span class="sub">'+esc(a.reason||'—')+'</span>'+(a.contact?'<div class="sub mono">☎ '+esc(a.contact)+'</div>':'')
+        +(a.relief?'<div class="sub">Relief: '+esc(a.relief)+'</div>':'')
         +(a.meeting?'<div class="sub"><span class="tag t-info">HR meeting '+esc(a.meeting.when)+'</span></div>':'')},
+      {h:'Superior', f:a=>{ const s=a.superior||{};
+        if(!s.emp_no && !s.name) return '<span class="sub">—</span>';
+        const nm='<div class="sub">'+esc(s.name||employee(s.emp_no).name)+'</div>';
+        if(s.decision==='approved') return '<span class="tag t-ok">approved</span>'+nm+(s.comment?'<div class="sub">“'+esc(s.comment)+'”</div>':'');
+        if(s.decision==='rejected') return '<span class="tag t-bad">not approved</span>'+nm+(s.comment?'<div class="sub">“'+esc(s.comment)+'”</div>':'');
+        return '<span class="tag t-warn">waiting</span>'+nm+btn('Send to superior','leave-sup-link',a.id,'btn sm'); }},
       {h:'Document', f:a=>(a.docPaths||[]).length? btn('View ('+a.docPaths.length+')','leave-docs',a.id,'btn sm')
         : a.docSeen? '<span class="tag t-ok">paper seen</span>' : leaveDocNeeded(a)? '<span class="tag t-bad">missing</span>' : '<span class="sub">—</span>'},
       {h:'Checks', f:a=>leaveChecks(a).map(c=>'<span class="tag '+c.cls+'" style="margin:0 3px 3px 0;display:inline-block">'+esc(c.t)+'</span>').join('')||'<span class="tag t-ok">OK</span>'},
       {h:'Applied', f:a=>'<span class="mono">'+esc(a.appliedAt)+'</span><div class="sub">'+(a.source==='portal'?'portal':'by HR')+'</div>'},
-      {h:'', f:a=>btn('Approve','leave-approve',a.id,'btn sm primary')+btn('Reject','leave-reject',a.id,'btn sm danger')+btn('Call to HR','leave-meet',a.id,'btn sm')}
+      {h:'', f:a=>btn('Approve','leave-approve',a.id,'btn sm primary')+btn('Reject','leave-reject',a.id,'btn sm danger')+btn('Call to HR','leave-meet',a.id,'btn sm')+btn('Print','leave-print',a.id,'btn sm')}
     ], pending));
+
+  const decided=sortBy(apps.filter(a=>a.source!=='opening' && (a.status==='approved'||a.status==='rejected') && a.approvedAt && daysFromToday(String(a.approvedAt).slice(0,10))>=-30),'approvedAt','desc');
+  if(decided.length) h += sect('Recently decided — last 30 days ('+decided.length+')', T([
+      {h:'Employee', f:a=>'<b>'+esc(employee(a.empNo).name)+'</b><div class="sub mono">'+esc(a.empNo)+'</div>'},
+      {h:'Type', f:a=>esc(leaveType(a.type).name)+(a.half?' <span class="sub">('+esc(a.half)+')</span>':'')},
+      {h:'Dates', f:a=>'<span class="mono">'+esc(a.start)+(a.end!==a.start?' → '+esc(a.end):'')+'</span>'},
+      {h:'Days', c:'num', f:a=>nf(a.days,1)},
+      {h:'Superior', f:a=>{ const s=a.superior||{}; return s.decision? tag(s.decision==='approved'?'approved':'rejected')+'<div class="sub">'+esc(s.name||'')+'</div>' : s.hrOverride? '<span class="sub">HR override</span>' : '<span class="sub">—</span>'; }},
+      {h:'Decision', f:a=>tag(a.status)+'<div class="sub mono">'+esc(a.approvedBy||'')+' · '+esc(String(a.approvedAt).slice(0,10))+'</div>'},
+      {h:'', f:a=>btn('Print','leave-print',a.id,'btn sm')}
+    ], decided));
 
   h += sect('Employees — '+year, T([
       {h:'Emp No.', f:e=>'<span class="mono">'+esc(e.empNo)+'</span>'},
@@ -8550,6 +8575,8 @@ ACT['leave-apply']=a=>{
       {k:'empNo',label:'Employee',type:'select',opts:(S.employees||[]).map(e=>({v:e.empNo,t:e.empNo+' — '+e.name})),req:true},
       {k:'type',label:'Leave type',type:'select',opts:(S.leaveTypes||[]).map(t=>({v:t.code,t:t.name})),blank:false},
       {k:'start',label:'Start date',type:'date',req:true},{k:'end',label:'End date',type:'date',req:true},
+      {k:'half',label:'Duration',type:'select',blank:false,opts:[{v:'',t:'Full day(s)'},{v:'AM',t:'Half day — AM (0.5)'},{v:'PM',t:'Half day — PM (0.5)'}]},
+      {k:'relief',label:'Relief person (optional)'},
       {k:'reason',label:'Reason (be specific — min. 10 characters)',type:'textarea',full:true,req:true},
       {k:'docSeen',label:'MC / hospital letter seen (paper copy)',type:'select',blank:false,opts:[{v:'',t:'Not applicable / not yet'},{v:'yes',t:'Yes — HR has seen the original'}],full:true}],
     after:'<div class="note" style="margin-top:10px;font-size:12.5px">Rules: Annual leave 14 days\' notice · MC needs the certificate (up to 2 days after) · Hospitalisation needs the hospital letter · Emergency leave is UNPAID · Unpaid leave 7 days\' notice · Day off 3 days\' notice · Sundays are not counted. As HR you may enter late applications — they are flagged, not blocked.</div>',
@@ -8558,12 +8585,14 @@ ACT['leave-apply']=a=>{
       if(!v.empNo||!v.start||!v.end) return toast('Employee, start and end date are required','bad');
       if(v.end<v.start) return toast('End date must be on or after the start date','bad');
       if(String(v.reason||'').trim().length<10) return toast('Please enter a specific reason (at least 10 characters)','bad');
-      const days=workingDays(v.start,v.end);
+      if(v.half) v.end=v.start;
+      let days=workingDays(v.start,v.end);
       if(days<1) return toast('Those dates have no working days (Sundays are not counted)','bad');
+      if(v.half) days=0.5;
       const id='LV-'+String(1000+(S.leaveApplications||[]).length);
       S.leaveApplications.push({id, empNo:v.empNo, type:v.type, start:v.start, end:v.end, days, year:Number(v.start.slice(0,4)),
         status:'pending', reason:v.reason.trim(), appliedAt:today(), appliedBy:UI.user||'SS', approvedBy:'', approvedAt:'', source:'app',
-        paid:leaveType(v.type).paid!==false, docSeen:v.docSeen==='yes'});
+        paid:leaveType(v.type).paid!==false, docSeen:v.docSeen==='yes', half:v.half||'', relief:v.relief||'', stage:'hr'});
       const r=leaveRule(v.type);
       if(r.notice && v.start<new Date(Date.now()+r.notice*864e5).toISOString().slice(0,10)) toast('Note: less than '+r.notice+' days\' notice for '+leaveType(v.type).name,'warn');
       logAudit('Leave application submitted', id, v.empNo+' — '+v.type+' '+v.start+' to '+v.end+' ('+days+'d)');
@@ -9125,6 +9154,17 @@ function doApprove(id){
 ACT['leave-approve']=id=>{
   const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
   const ch=leaveChecks(l), blocks=ch.filter(c=>c.block), warns=ch.filter(c=>c.warn);
+  const sup=l.superior||{};
+  if(!blocks.length && (sup.emp_no||sup.name) && sup.decision!=='approved' && !sup.hrOverride){
+    const nm=esc(sup.name||employee(sup.emp_no).name);
+    modal(sup.decision==='rejected'? 'Superior did not approve' : 'Superior has not responded yet',
+      sup.decision==='rejected'
+        ? '<div class="banner bad" style="margin-bottom:10px">'+nm+' did not approve'+(sup.comment?': “'+esc(sup.comment)+'”':'.')+'</div><div style="font-size:13px;color:var(--ink2)">Usually you would reject with the superior\'s reason. You can still approve if you have agreed it with them.</div>'
+        : '<div class="banner warn" style="margin-bottom:10px">Waiting for '+nm+' to approve on WhatsApp.</div><div style="font-size:13px;color:var(--ink2)">Send them the approval link again, or approve now if you have their OK another way.</div>',
+      (sup.decision==='rejected'? btn('Reject','leave-reject',l.id,'btn danger') : btn('Send to superior','leave-sup-link',l.id,'btn'))
+      +btn('Approve anyway','leave-approve-force',l.id,'btn primary'));
+    return;
+  }
   if(blocks.length){
     modal('Cannot approve yet', '<div class="banner bad" style="margin-bottom:10px">'+blocks.map(b=>esc(b.t)).join('<br>')+'</div>'
       +'<div style="font-size:13px;color:var(--ink2)">'+(blocks.some(b=>/missing/.test(b.t))
@@ -9142,6 +9182,78 @@ ACT['leave-approve']=id=>{
   doApprove(id);
 };
 ACT['leave-approve-confirm']=id=>doApprove(id);
+ACT['leave-approve-force']=id=>{ const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
+  l.superior=Object.assign({}, l.superior, {hrOverride:true, hrOverrideBy:UI.user||'', hrOverrideAt:new Date().toISOString()});
+  logAudit('Leave: superior step overridden by HR', l.id, (l.superior.decision||'no response')); ACT['leave-approve'](id); };
+/* HR asks the server for a fresh approval link and sends it to the superior on WhatsApp */
+ACT['leave-sup-link']=id=>{
+  const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
+  if(!window.HEM_AUTH) return toast('Sign in first','bad');
+  const e=employee(l.empNo), supNo=(l.superior||{}).emp_no || e.superiorEmpNo, sup=employee(supNo);
+  window.HEM_AUTH.rpc('hr_superior_link',{p_id:id}).then(({data,error})=>{
+    if(error||!data||!data.ok) return toast('Could not create a link — '+((error&&error.message)||(data&&data.code)||''),'bad');
+    const url=location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-approve.html?t='+data.token;
+    const text='HE Manufacturing — Leave approval needed / Kelulusan cuti diperlukan\n'+e.name+' ('+e.empNo+')\n'+leaveType(l.type).name+': '+fmtLeaveDates(l)
+      +(l.half?' ('+l.half+')':'')+'\nReason: '+(l.reason||'')+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
+    const link=waLink(empWa(sup), text);
+    modal('Send to superior — '+esc(sup.name||'?'), '<div class="note" style="margin-bottom:10px">The link lets '+esc(sup.name||'the superior')+' approve or not approve with a comment, without logging in. It works for 21 days.</div>'
+      +'<pre style="white-space:pre-wrap;font-family:inherit;background:var(--sunk);border-radius:8px;padding:10px 12px">'+esc(text)+'</pre>'
+      +(link? '<a class="btn primary" href="'+esc(link)+'" target="_blank" rel="noopener">Send WhatsApp to '+esc(sup.name)+'</a>'
+            : '<div class="banner warn">'+esc(sup.name||'The superior')+' has no WhatsApp number on file — add it under HR → Employees.</div>'), '', true);
+  }, ()=>toast('Could not reach the server','bad'));
+};
+
+/* ---- the leave application form, printed in the company layout (blank, or filled for one application) ---- */
+ACT['leave-print']=id=>{
+  const l=id? (S.leaveApplications||[]).find(x=>x.id===id) : null;
+  const e=l? employee(l.empNo) : {}, sup=l? (l.superior||{}) : {};
+  const v=x=>x? esc(x) : '&nbsp;';
+  const box=on=>'<span style="display:inline-block;width:13px;height:13px;border:1.4px solid #333;vertical-align:-2px;margin-right:6px;text-align:center;line-height:12px;font-size:11px;font-weight:700">'+(on?'✓':'')+'</span>';
+  const types=[['annual','Annual Leave'],['medical','Medical Leave (MC)'],['hospitalization','Hospitalisation'],['emergency','Emergency Leave (unpaid)'],['unpaid','Unpaid Leave'],['timeoff','Day off / replacement']];
+  const cell='border:1px solid #555;padding:6px 8px;vertical-align:top', lbl='font-size:10.5px;color:#555;display:block';
+  const d8=x=>x? new Date(x+'T00:00:00Z').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}) : '';
+  const html='<div style="font-family:Archivo,Arial,sans-serif;color:#111;max-width:720px;margin:0 auto">'
+   +'<div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #522B39;padding-bottom:8px;margin-bottom:10px">'
+   +'<div style="width:46px;height:46px;border-radius:50%;border:2px solid #522B39;display:flex;align-items:center;justify-content:center;font:700 15px Fraunces,serif;color:#522B39">HE</div>'
+   +'<div><div style="font:700 15px Fraunces,serif">HE MANUFACTURING (M) SDN BHD</div><div style="font-size:11px;color:#555">Human Resources · Form HR/LV-01 rev.2</div></div>'
+   +'<div style="margin-left:auto;text-align:right"><div style="font:700 17px Fraunces,serif">LEAVE APPLICATION FORM</div><div style="font-size:11px" class="mono">'+(l?esc(l.id):'Ref: ____________')+'</div></div></div>'
+   +'<div style="font-size:11px;font-weight:700;color:#522B39;margin:8px 0 4px">A. EMPLOYEE DETAILS</div>'
+   +'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr>'
+   +'<td style="'+cell+';width:50%"><span style="'+lbl+'">Employee name</span>'+v(e.name)+'</td><td style="'+cell+'"><span style="'+lbl+'">Employee no.</span>'+v(e.empNo)+'</td></tr><tr>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Department</span>'+v(e.department)+'</td><td style="'+cell+'"><span style="'+lbl+'">Designation</span>'+v(l&&l.position||e.position)+'</td></tr><tr>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Date requested</span>'+v(l&&d8(l.appliedAt))+'</td><td style="'+cell+'"><span style="'+lbl+'">Contact no. while on leave</span>'+v(l&&(l.contact||empWa(e)))+'</td></tr></table>'
+   +'<div style="font-size:11px;font-weight:700;color:#522B39;margin:12px 0 4px">B. LEAVE REQUESTED</div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 16px;font-size:12.5px;border:1px solid #555;padding:8px 10px">'
+   +types.map(tp=>'<div>'+box(l&&l.type===tp[0])+tp[1]+'</div>').join('')
+   +'<div>'+box(l&&l.half==='AM')+'Half day — AM</div><div>'+box(l&&l.half==='PM')+'Half day — PM</div></div>'
+   +'<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px"><tr>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">From</span>'+v(l&&d8(l.start))+'</td><td style="'+cell+'"><span style="'+lbl+'">To</span>'+v(l&&d8(l.end))+'</td>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">No. of days (excl. Sundays)</span>'+v(l&&String(l.days))+'</td>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Balance before</span>'+v(l&&(()=>{ const b=leaveBalance(l.empNo,l.year).find(x=>x.type===l.type); return b&&b.entitlement? nf(b.entitlement-b.taken+(l.status==='approved'?Number(l.days):0),1)+' / '+nf(b.entitlement,1):'n/a'; })())+'</td></tr>'
+   +'<tr><td colspan="4" style="'+cell+';height:44px"><span style="'+lbl+'">Reason for leave</span>'+v(l&&l.reason)+'</td></tr>'
+   +'<tr><td colspan="2" style="'+cell+'"><span style="'+lbl+'">Relief person (covering duties)</span>'+v(l&&l.relief)+'</td>'
+   +'<td colspan="2" style="'+cell+'"><span style="'+lbl+'">Supporting document (MC / letter)</span>'+(l? ((l.docPaths||[]).length? nf(l.docPaths.length)+' file(s) attached in system' : l.docSeen? 'Original sighted by HR':'—') : '&nbsp;')+'</td></tr>'
+   +'<tr><td colspan="4" style="'+cell+';height:36px"><span style="'+lbl+'">Handover notes</span>'+v(l&&l.handover)+'</td></tr></table>'
+   +'<div style="font-size:11px;margin:8px 0;color:#333">I confirm the information above is true. I understand leave is only confirmed after approval and that false information may lead to disciplinary action.</div>'
+   +'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr><td style="'+cell+';width:60%;height:42px"><span style="'+lbl+'">Employee signature</span>'
+   +(l&&l.signature? '<i style="font-family:Fraunces,serif;font-size:15px">'+esc(l.signature)+'</i> <span style="font-size:10px;color:#555">(e-signed via leave portal)</span>':'&nbsp;')+'</td>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Date</span>'+v(l&&d8(String(l.declaredAt||l.appliedAt||'').slice(0,10)))+'</td></tr></table>'
+   +'<div style="font-size:11px;font-weight:700;color:#522B39;margin:12px 0 4px">C. SUPERIOR / HOD</div>'
+   +'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr>'
+   +'<td style="'+cell+';width:34%"><span style="'+lbl+'">Name</span>'+v(sup.name||(e.superiorEmpNo?employee(e.superiorEmpNo).name:''))+'</td>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Decision</span>'+box(sup.decision==='approved')+'Recommend &nbsp; '+box(sup.decision==='rejected')+'Not recommended</td>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Date</span>'+v(sup.decided_at&&d8(String(sup.decided_at).slice(0,10)))+'</td></tr>'
+   +'<tr><td colspan="3" style="'+cell+';height:34px"><span style="'+lbl+'">Comment</span>'+v(sup.comment)+(sup.decision?' <span style="font-size:10px;color:#555">(recorded via WhatsApp approval link)</span>':'')+'</td></tr></table>'
+   +'<div style="font-size:11px;font-weight:700;color:#522B39;margin:12px 0 4px">D. HUMAN RESOURCES</div>'
+   +'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr>'
+   +'<td style="'+cell+';width:34%"><span style="'+lbl+'">Decision</span>'+box(l&&l.status==='approved')+'Approved &nbsp; '+box(l&&l.status==='rejected')+'Rejected</td>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Paid / unpaid</span>'+(l? (leaveType(l.type).paid===false||l.paid===false?'Unpaid':'Paid') : box(false)+'Paid &nbsp; '+box(false)+'Unpaid')+'</td>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Approved by / date</span>'+v(l&&l.approvedBy? l.approvedBy+' · '+d8(l.approvedAt):'')+'</td></tr>'
+   +'<tr><td colspan="3" style="'+cell+';height:34px"><span style="'+lbl+'">Remarks</span>'+v(l&&l.rejectReason)+'</td></tr></table>'
+   +'<div style="font-size:10px;color:#666;margin-top:10px;line-height:1.5">Rules: Annual leave — apply at least 14 days before. MC — certificate required, apply within 2 days after. Hospitalisation — hospital letter required. '
+   +'Emergency leave is unpaid. Unpaid leave — 7 days\' notice. Sundays are not counted. Apply online: scan the Leave QR at HR.</div></div>';
+  printModal(l? 'Leave application '+l.id : 'Leave application form (blank)', html);
+};
 ACT['leave-doc-seen']=id=>{ const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
   l.docSeen=true; logAudit('Leave document seen (paper)', l.id, l.empNo); save(); closeModal(); render(); toast('Marked — you can approve now','ok'); };
 ACT['leave-reject']=id=>{
@@ -9236,6 +9348,30 @@ ACT['leave-set-password'] = a=>{
     }});
 };
 let LAST_LEAVE_SYNC=0;
+/* verified WhatsApp numbers (from the portal) → employee records; and HR's queue of codes to send */
+let OTP_QUEUE=[];
+function syncPortalPhones(){
+  if(!window.HEM_AUTH) return;
+  try{
+    window.HEM_AUTH.from('hem_employees').select('emp_no,phone,phone_verified_at').then(({data,error})=>{
+      if(error||!data) return; let n=0;
+      data.forEach(r=>{ if(!r.phone_verified_at) return; const e=(S.employees||[]).find(x=>x.empNo===r.emp_no); if(!e) return;
+        if(e.phoneVerified!==r.phone_verified_at || e.phoneVerifiedNo!==r.phone){ e.phoneVerified=r.phone_verified_at; e.phoneVerifiedNo=r.phone;
+          if(waNumber(e.whatsapp||e.phone)!==r.phone) e.whatsapp=r.phone; n++; } });
+      if(n){ logAudit('Verified WhatsApp numbers synced','',n+' employee(s)'); save(); render(); }
+    });
+    window.HEM_AUTH.from('hem_phone_verify').select('*').eq('status','waiting').then(({data,error})=>{
+      if(error||!data) return;
+      const fresh=data.filter(r=>Date.now()-new Date(r.created_at).getTime()<2*864e5);
+      const changed=JSON.stringify(fresh.map(r=>r.id+':'+(r.sent_at||'')))!==JSON.stringify(OTP_QUEUE.map(r=>r.id+':'+(r.sent_at||'')));
+      OTP_QUEUE=fresh; if(changed && UI.view==='people') render();
+    });
+  }catch(e){}
+}
+ACT['otp-sent']=id=>{ const r=OTP_QUEUE.find(x=>String(x.id)===String(id)); if(!r) return;
+  r.sent_at=new Date().toISOString(); logAudit('Verification code sent', r.emp_no, '+'+r.phone);
+  try{ window.HEM_AUTH.from('hem_phone_verify').update({sent_at:r.sent_at}).eq('id', r.id).then(()=>{}); }catch(e){}
+  setTimeout(render, 300); };
 function syncPortalLeave(silent){
   if(!window.HEM_AUTH){ if(!silent) toast('Portal connection not available on this page','bad'); return; }
   if(!silent) toast('Checking the portal for new requests…','ok');
@@ -9248,15 +9384,21 @@ function syncPortalLeave(silent){
       const paths=Array.isArray(r.doc_paths)? r.doc_paths : [];
       if(ex){  // documents uploaded after applying (planned hospitalisation, clearer MC photo)
         if(ex.status==='pending' && paths.length>(ex.docPaths||[]).length){ ex.docPaths=paths; docs++; }
+        // superior's decision arriving from the WhatsApp approval link
+        const sup=r.superior||{};
+        if(ex.status==='pending' && (ex.stage!==r.stage || (sup.decision||'')!==((ex.superior||{}).decision||''))){ ex.stage=r.stage; ex.superior=sup; docs++; }
         return;
       }
       S.leaveApplications.push({id:r.id, empNo:r.emp_no, type:r.type, start:r.start_date, end:r.end_date,
         days:Number(r.days)||0, year:r.year, status:'pending', reason:r.reason||'',
         appliedAt:(r.applied_at||'').slice(0,10), appliedBy:'portal', approvedBy:'', approvedAt:'', source:'portal',
-        paid:r.paid!==false, docPaths:paths, contact:((r.details||{}).contact)||''});
+        paid:r.paid!==false, docPaths:paths, contact:((r.details||{}).contact)||'',
+        stage:r.stage||'hr', superior:r.superior||{}, half:(r.details||{}).half||'', relief:(r.details||{}).relief||'', handover:(r.details||{}).handover||'',
+        signature:(r.details||{}).signature||'', declaredAt:(r.details||{}).declared_at||'', position:(r.details||{}).position||''});
       added++;
     });
-    if(docs){ logAudit('Leave documents synced from portal','',docs+' application(s)'); if(!added){ save(); render(); } }
+    if(docs){ logAudit('Leave updates synced from portal','',docs+' application(s)'); if(!added){ save(); render(); } }
+    syncPortalPhones();
     if(added){ logAudit('Leave requests synced from portal', '', added+' new pending request(s)'); save(); render(); }
     if(!silent) toast(added? added+' new request(s) pulled in from the portal':'No new requests waiting','ok');
     else if(added) toast(added+' new leave request(s) just came in from the portal','ok');
@@ -9284,7 +9426,10 @@ function pushEmployeesToPortal(empNos, quiet){
   if(!window.HEM_AUTH) return Promise.resolve(false);
   const list=(S.employees||[]).filter(e=>!empNos||empNos.includes(e.empNo))
     .map(e=>({emp_no:e.empNo, name:e.name, department:e.department||'', status:e.status||'active',
-      leave_scope:e.leaveScope||'full', staff_type:e.staffType||null,
+      leave_scope:e.leaveScope||'full', staff_type:e.staffType||null, position:e.position||null,
+      superior_emp_no:(e.superiorEmpNo && e.superiorEmpNo!==e.empNo)? e.superiorEmpNo : null,
+      phone: waNumber(empWa(e)) || null,
+      phone_verified_at: (e.phoneVerified && waNumber(e.phoneVerifiedNo) && waNumber(e.phoneVerifiedNo)===waNumber(empWa(e)))? e.phoneVerified : null,
       annual_entitlement:(e.annualEntitlement===''||e.annualEntitlement==null||isNaN(Number(e.annualEntitlement)))? null : Number(e.annualEntitlement)}));
   if(!list.length) return Promise.resolve(true);
   try{
@@ -9478,8 +9623,10 @@ function staffTabHtml(){
   const COLS=[
     {h:'Emp No.', f:e=>'<b class="mono">'+esc(e.empNo)+'</b>'+(e.attendanceId?'<div class="sub mono" title="iVMS Person ID">att '+esc(e.attendanceId)+'</div>':'')},
     {h:'Name', f:e=>'<b>'+esc(e.name)+'</b><div class="sub">'+esc([e.gender, e.nationality].filter(Boolean).join(' · '))+'</div>'},
-    {h:'Type', f:e=>esc(e.staffType||'—')+(e.staffType!=='Part-time' && e.grade?' · <b>'+esc(e.grade)+'</b>':'')+'<div class="sub">'+esc(e.department||'')+(e.position?' · '+esc(e.position):'')+'</div>'},
-    {h:'WhatsApp', f:e=>{ const n=empWa(e); return n? '<span class="mono" style="font-size:12px">'+esc(n)+'</span>'+(waNumber(n)?'':'<div class="sub"><span class="tag t-bad">check number</span></div>') : '<span class="tag t-warn">missing</span>'; }},
+    {h:'Type', f:e=>esc(e.staffType||'—')+(e.staffType!=='Part-time' && e.grade?' · <b>'+esc(e.grade)+'</b>':'')+'<div class="sub">'+esc(e.department||'')+(e.position?' · '+esc(e.position):'')+'</div>'
+      +(e.superiorEmpNo?'<div class="sub">↑ '+esc(employee(e.superiorEmpNo).name)+'</div>':'')},
+    {h:'WhatsApp', f:e=>{ const n=empWa(e); return n? '<span class="mono" style="font-size:12px">'+esc(n)+'</span>'+(waNumber(n)?'':'<div class="sub"><span class="tag t-bad">check number</span></div>')
+        +(e.phoneVerified && waNumber(e.phoneVerifiedNo)===waNumber(n)?'<div class="sub"><span class="tag t-ok">verified ✓</span></div>':'') : '<span class="tag t-warn">missing</span>'; }},
     {h:'Leave', f:e=>{ const sc=e.leaveScope||'full';
       return '<span class="tag '+(sc==='full'?'t-ok':sc==='mc_only'?'t-info':'t-mute')+'">'+(sc==='full'?'full':sc==='mc_only'?'MC only':'none')+'</span>'
         +(annualEntitlementOf(e.empNo)!=null?'<div class="sub">'+nf(annualEntitlementOf(e.empNo))+' d annual</div>':''); }},
@@ -9523,7 +9670,9 @@ function staffForm(e, isNew){
         {k:'staffType',label:'Staff type',type:'select',blank:false,opts:STAFF_TYPES},
         {k:'grade',label:'Category (permanent staff)',type:'select',opts:GRADES,hint:'Executive or Non-executive. Not used for part-time.'},
         {k:'department',label:'Department',ph:'Production, Filling, QC…'},
-        {k:'position',label:'Position'},
+        {k:'position',label:'Position / designation'},
+        {k:'superiorEmpNo',label:'Superior (approves leave first)',type:'select',opts:sortBy((S.employees||[]).filter(o=>empActive(o) && o.empNo!==v.empNo),'name').map(o=>({v:o.empNo,t:o.name+' ('+o.empNo+')'})),
+          hint:'Leave goes to this person on WhatsApp before HR. Blank = straight to HR.'},
         {k:'joinDate',label:'Date joined',type:'date'},
         {k:'leaveScope',label:'Leave & portal access',type:'select',blank:false,opts:LEAVE_SCOPES},
         {k:'annualEntitlement',label:'Annual leave days / year',type:'number',step:'0.5',hint:'Blank = company default ('+nf(leaveType('annual').defaultDays)+').'},
@@ -9613,7 +9762,7 @@ ACT['staff-import-ivms-confirm']=()=>{
 
 /* ---------- employee list as Excel: download, edit, upload ---------- */
 const STAFF_COLS=[['Emp No','empNo',10],['Attendance ID','attendanceId',11],['Name','name',34],['Gender','gender',8],['Staff type','staffType',11],['Category','grade',13],
-  ['Department','department',14],['Position','position',16],['Mobile','phone',14],['WhatsApp','whatsapp',14],['Email','email',22],
+  ['Department','department',14],['Position','position',16],['Superior (Emp No)','superiorEmpNo',12],['Mobile','phone',14],['WhatsApp','whatsapp',14],['Email','email',22],
   ['IC / Passport','icNo',16],['Nationality','nationality',12],['Date of birth','dob',12],['Date joined','joinDate',12],
   ['Annual leave days','annualEntitlement',10],['Leave access','leaveScope',12],['Emergency contact','emergencyName',18],
   ['Emergency phone','emergencyPhone',14],['Address','address',30],['Status','status',9],['Notes','notes',20]];
