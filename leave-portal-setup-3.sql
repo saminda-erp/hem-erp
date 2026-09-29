@@ -50,3 +50,16 @@
 --   the public read removed in v2), and hem_employees had no policies at all → the ERP could not
 --   see portal applications and its employee pushes were refused. Added "staff all …" policies
 --   (authenticated only); anon still has no direct access to either table.
+
+-- ---------------------------------------------------------------------------
+-- Migration hod_must_sign_in_to_decide (2026-09-29)
+-- The approval link alone is no longer enough: the HOD must sign in with their OWN
+-- Employee ID + leave-portal password on leave-approve.html.
+--   superior_decide(p_token, p_emp_no, p_password, p_decision, p_comment)
+--   codes: invalid | locked | auth (counts toward 5-try lock) | self (applicant) |
+--          not_hod (returns sent_to) | closed | bad_decision | comment_needed
+--   Allowed signer: registered phone = phone the employee entered for the HOD,
+--   OR emp_no = superior.emp_no, OR emp_no = applicant's Superior set in the ERP.
+--   On success superior gets {emp_no, name (real signer), signed_in:true}, stage='hr'.
+-- Old 3-argument superior_decide(text,text,text) dropped.
+-- ---------------------------------------------------------------------------

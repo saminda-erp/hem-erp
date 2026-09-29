@@ -44,6 +44,10 @@
   .done{text-align:center;padding:26px 10px}
   .btn-wa{display:block;text-align:center;background:#25D366;color:#fff;border-radius:var(--r);padding:14px 16px;font-weight:700;text-decoration:none;margin-top:10px}
   .btn-wa.sec{background:transparent;color:var(--ink);border:1px solid var(--line)} .done .ic{font-size:44px}
+  .signin{border-top:1px solid var(--line);padding-top:12px;margin:2px 0 14px}
+  .signin label{display:block;font-size:13px;color:var(--ink2);margin:8px 0 4px;font-weight:600}
+  .signin input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);font:16px 'Archivo',sans-serif;background:var(--card);color:var(--ink)}
+  .who{font-size:13.5px;margin-top:5px;min-height:1px} .who.ok{color:var(--ok);font-weight:600} .who.bad{color:var(--bad)}
   [hidden]{display:none!important}
 </style>
 </head>
@@ -63,6 +67,15 @@
     <div class="card" id="decideCard">
       <b data-t="yourDecision"></b>
       <textarea id="comment" rows="3" maxlength="500"></textarea>
+      <div class="signin">
+        <b data-t="signTitle"></b>
+        <div class="muted" data-t="signNote" style="margin-bottom:8px"></div>
+        <label for="hodEmp" data-t="yourId"></label>
+        <input id="hodEmp" autocomplete="username" autocapitalize="characters" inputmode="text" maxlength="20">
+        <div class="who" id="hodWho"></div>
+        <label for="hodPw" data-t="yourPw"></label>
+        <input id="hodPw" type="password" autocomplete="current-password" maxlength="64">
+      </div>
       <div class="btns">
         <button type="button" class="big yes" id="yesBtn" data-t="approve"></button>
         <button type="button" class="big no" id="noBtn" data-t="reject"></button>
@@ -97,6 +110,16 @@ const TX={
   closed:{en:'This application has already been {s} by HR — no action needed.', ms:'Permohonan ini telah {s} oleh HR — tiada tindakan diperlukan.'},
   invalid:{en:'This approval link is not valid or has expired. Ask the employee or HR to send a new one.', ms:'Pautan kelulusan ini tidak sah atau telah tamat tempoh. Minta pekerja atau HR menghantar pautan baharu.'},
   offline:{en:'Could not connect — check your internet and try again.', ms:'Tidak dapat disambungkan — semak internet anda dan cuba lagi.'},
+  signTitle:{en:'Sign in to confirm it is you', ms:'Log masuk untuk mengesahkan ini anda'},
+  signNote:{en:'Use your own Employee ID and leave-portal password. The employee cannot approve their own leave.', ms:'Gunakan ID Pekerja dan kata laluan portal cuti anda sendiri. Pekerja tidak boleh meluluskan cuti sendiri.'},
+  yourId:{en:'Your Employee ID (HOD)', ms:'ID Pekerja anda (Ketua Jabatan)'}, yourPw:{en:'Your password', ms:'Kata laluan anda'},
+  whoNotFound:{en:'Employee ID not found', ms:'ID Pekerja tidak dijumpai'}, whoNotReg:{en:'{n} — not registered on the leave portal yet', ms:'{n} — belum mendaftar di portal cuti'},
+  needSign:{en:'Enter your Employee ID and password to approve.', ms:'Masukkan ID Pekerja dan kata laluan anda untuk meluluskan.'},
+  eAuth:{en:'Wrong Employee ID or password. Not registered yet? Register at the leave portal first: {u}', ms:'ID Pekerja atau kata laluan salah. Belum daftar? Daftar di portal cuti dahulu: {u}'},
+  eLocked:{en:'Too many wrong attempts — try again in 15 minutes.', ms:'Terlalu banyak cubaan salah — cuba lagi selepas 15 minit.'},
+  eSelf:{en:'You cannot approve your own leave application.', ms:'Anda tidak boleh meluluskan permohonan cuti anda sendiri.'},
+  eNotHod:{en:'Only the Head of Department this was sent to{n} can decide. Your registered WhatsApp number must match the number the employee entered — ask HR if it is wrong.', ms:'Hanya Ketua Jabatan yang dihantar{n} boleh membuat keputusan. Nombor WhatsApp berdaftar anda mesti sama dengan nombor yang dimasukkan pekerja — hubungi HR jika salah.'},
+  signedAs:{en:'Signed by {n}', ms:'Ditandatangani oleh {n}'},
   approvedW:{en:'approved', ms:'diluluskan'}, rejectedW:{en:'not approved', ms:'tidak diluluskan'}, halfW:{en:'half day', ms:'separuh hari'}
 };
 let LANG='en', A=null;
@@ -140,12 +163,27 @@ async function load(){
 async function decide(decision){
   const c=$('comment').value.trim();
   if(decision==='rejected' && c.length<3){ msg('err',t('needComment')); $('comment').focus(); return; }
+  const me=$('hodEmp').value.trim(), pw=$('hodPw').value;
+  if(!me || !pw){ msg('err',t('needSign')); (me?$('hodPw'):$('hodEmp')).focus(); return; }
   $('yesBtn').disabled=$('noBtn').disabled=true;
   try{
-    const {data,error}=await sb.rpc('superior_decide',{p_token:TOKEN, p_decision:decision, p_comment:c});
+    const {data,error}=await sb.rpc('superior_decide',{p_token:TOKEN, p_emp_no:me, p_password:pw, p_decision:decision, p_comment:c});
     if(error) throw error;
-    if(!data||!data.ok){ msg('err', data&&data.code==='closed'? t('closed',{s:t(data.status==='approved'?'approvedW':'rejectedW')}) : data&&data.code==='comment_needed'? t('needComment') : t('invalid')); return; }
-    msg('',''); $('decideCard').hidden=true; $('doneCard').hidden=false;
+    if(!data||!data.ok){
+      const code=data&&data.code;
+      const portal=new URL('leave-portal.html',location.href).href;
+      const m= code==='closed'? t('closed',{s:t(data.status==='approved'?'approvedW':'rejectedW')})
+        : code==='comment_needed'? t('needComment')
+        : code==='auth'? t('eAuth',{u:portal})
+        : code==='locked'? t('eLocked')
+        : code==='self'? t('eSelf')
+        : code==='not_hod'? t('eNotHod',{n:data.sent_to?' ('+data.sent_to+')':''})
+        : t('invalid');
+      if(code==='auth'){ $('hodPw').value=''; $('hodPw').focus(); }
+      msg('err',m); window.scrollTo({top:0,behavior:'smooth'}); return; }
+    $('hodPw').value='';
+    A.superior_name=data.name||A.superior_name;
+    msg('ok',t('signedAs',{n:data.name||me})); $('decideCard').hidden=true; $('doneCard').hidden=false;
     $('doneIc').textContent=decision==='approved'?'✅':'❌';
     $('doneTitle').textContent=t(decision==='approved'?'doneYes':'doneNo');
     A.decision=decision; A.comment=c; renderInform();
@@ -169,6 +207,21 @@ function renderInform(){
   $('informBox').innerHTML=(hr?'<a class="btn-wa" id="hrWa" href="'+esc(hr)+'" target="_blank" rel="noopener">'+esc(t('informHr'))+(A.hr_name?' ('+esc(A.hr_name)+')':'')+'</a>':'')
     +(em?'<a class="btn-wa sec" href="'+esc(em)+'" target="_blank" rel="noopener">'+esc(t('informEmp',{n:e.name}))+'</a>':'');
 }
+/* show the HOD's name as they type their Employee ID */
+let WHO_T=null;
+$('hodEmp').addEventListener('input',()=>{
+  const v=$('hodEmp').value.trim(), box=$('hodWho'); clearTimeout(WHO_T);
+  if(v.length<3||!sb){ box.textContent=''; box.className='who'; return; }
+  WHO_T=setTimeout(async()=>{
+    try{ const {data}=await sb.rpc('portal_whois',{p_emp_no:v});
+      if($('hodEmp').value.trim()!==v) return;
+      if(!data||!data.ok){ box.className='who bad'; box.textContent=t('whoNotFound'); return; }
+      if(!data.registered){ box.className='who bad'; box.textContent=t('whoNotReg',{n:data.name}); return; }
+      box.className='who ok'; box.textContent='✓ '+data.name;
+    }catch(e){ box.textContent=''; }
+  },350);
+});
+$('hodPw').addEventListener('keydown',e=>{ if(e.key==='Enter') e.preventDefault(); });
 $('yesBtn').addEventListener('click',()=>decide('approved'));
 $('noBtn').addEventListener('click',()=>decide('rejected'));
 document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click',()=>{ LANG=b.dataset.lang; try{localStorage.setItem('hem_leave_lang',LANG);}catch(e){} render(); }));
