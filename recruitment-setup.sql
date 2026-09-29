@@ -54,3 +54,27 @@ grant insert on hem_candidates to anon;
 grant select, insert, update, delete on hem_candidates to authenticated;
 
 create index if not exists hem_candidates_submitted_idx on hem_candidates (submitted_at desc);
+
+-- ============================================================
+-- CV uploads (added 2026-09-29) — private Storage bucket 'hem-cvs'
+--   * anonymous (apply.html) -> upload only, into <reference no.>/<file>, max 10 MB, PDF/images.
+--     Cannot list, download, overwrite or delete anything.
+--   * authenticated ERP users -> view (via short-lived signed links) and delete.
+-- ============================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('hem-cvs','hem-cvs', false, 10485760,
+        array['application/pdf','image/jpeg','image/png','image/webp','image/heic','image/heif'])
+on conflict (id) do update set public=false, file_size_limit=excluded.file_size_limit, allowed_mime_types=excluded.allowed_mime_types;
+
+drop policy if exists "hem-cvs anon upload" on storage.objects;
+create policy "hem-cvs anon upload" on storage.objects
+  for insert to anon
+  with check (bucket_id = 'hem-cvs' and name ~ '^C[0-9]{4}-[0-9]{4}/[A-Za-z0-9._-]{1,80}$');
+
+drop policy if exists "hem-cvs staff read" on storage.objects;
+create policy "hem-cvs staff read" on storage.objects
+  for select to authenticated using (bucket_id = 'hem-cvs');
+
+drop policy if exists "hem-cvs staff delete" on storage.objects;
+create policy "hem-cvs staff delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'hem-cvs');

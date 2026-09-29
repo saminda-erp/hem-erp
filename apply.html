@@ -108,6 +108,18 @@
   .done{text-align:center;padding:40px 18px}
   .done .cid{font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:500;color:var(--wine);letter-spacing:.04em;margin:10px 0 4px}
   .tick{width:64px;height:64px;border-radius:50%;background:var(--ok-bg);color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 12px}
+  .cvbox{border:1px dashed var(--line);border-radius:var(--r);padding:12px;margin-bottom:14px}
+  .cvbtns{display:flex;gap:8px;margin:8px 0}
+  .cvbtns label{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--wine);color:var(--wine);
+    border-radius:var(--r);padding:11px 8px;font-weight:600;font-size:14px;cursor:pointer;background:var(--field)}
+  .cvbtns input{display:none}
+  .cvlist{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+  .cvitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--field)}
+  .cvitem .th{width:44px;height:56px;border-radius:4px;background:var(--wine-soft);flex:none;object-fit:cover;display:flex;align-items:center;justify-content:center;
+    font:600 11px 'IBM Plex Mono',monospace;color:var(--wine)}
+  .cvitem .nm{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cvitem .sz{font-size:11.5px;color:var(--muted)}
+  .cvitem button{background:transparent;border:1px solid var(--line);color:var(--ink2);padding:6px 10px;font-size:12.5px}
   [hidden]{display:none!important}
 </style>
 </head>
@@ -276,8 +288,19 @@ const TX = {
   shifts:{en:'Willing to work shifts?', ms:'Sanggup bekerja syif?'},
   ot:{en:'Willing to work overtime?', ms:'Sanggup bekerja lebih masa?'},
   yes:{en:'Yes', ms:'Ya'}, no:{en:'No', ms:'Tidak'},
-  cvLink:{en:'Link to your CV — optional', ms:'Pautan CV anda — pilihan'},
-  cvHint:{en:'Google Drive, LinkedIn or Dropbox link. You can also bring a printed copy.', ms:'Pautan Google Drive, LinkedIn atau Dropbox. Anda juga boleh bawa salinan bercetak.'},
+  cvTitle:{en:'Your CV / resume — optional', ms:'CV / resume anda — pilihan'},
+  cvLead:{en:'Upload a PDF, or take a clear photo of each page. Up to 5 files.', ms:'Muat naik PDF, atau ambil gambar yang jelas bagi setiap halaman. Maksimum 5 fail.'},
+  cvPhoto:{en:'Take photo', ms:'Ambil gambar'},
+  cvFile:{en:'Choose file', ms:'Pilih fail'},
+  cvFileHint:{en:'"Choose file" opens your gallery, Files, Google Drive or iCloud.', ms:'"Pilih fail" membuka galeri, Fail, Google Drive atau iCloud anda.'},
+  cvRemove:{en:'Remove', ms:'Buang'},
+  cvTooBig:{en:'{f} is larger than 10 MB. Please choose a smaller file or take a photo instead.', ms:'{f} melebihi 10 MB. Sila pilih fail yang lebih kecil atau ambil gambar.'},
+  cvBadType:{en:'{f} is not a PDF or image.', ms:'{f} bukan PDF atau gambar.'},
+  cvMax:{en:'You can add up to 5 files.', ms:'Anda boleh menambah sehingga 5 fail.'},
+  cvPreparing:{en:'Preparing…', ms:'Menyediakan…'},
+  cvUploading:{en:'Uploading CV {n} of {t}…', ms:'Memuat naik CV {n} daripada {t}…'},
+  cvLink:{en:'Or paste a link to your CV — optional', ms:'Atau tampal pautan CV anda — pilihan'},
+  cvHint:{en:'Google Drive, LinkedIn or Dropbox link.', ms:'Pautan Google Drive, LinkedIn atau Dropbox.'},
 
   commuteTitle:{en:'Getting to work', ms:'Perjalanan ke tempat kerja'},
   commuteLead:{en:'This helps us plan shifts and transport. It does not decide the result on its own.', ms:'Ini membantu kami merancang syif dan pengangkutan. Ia tidak menentukan keputusan dengan sendirinya.'},
@@ -428,7 +451,7 @@ function stepHtml(){
       h+= '<div class="row2"><div>'+radios('shifts', t('shifts'), ['Yes','No'], [t('yes'), t('no')], {req:true})+'</div>'
         + '<div>'+radios('ot', t('ot'), ['Yes','No'], [t('yes'), t('no')], {req:true})+'</div></div>';
     }
-    h+= fld('cvLink', t('cvLink'), {type:'url', inputmode:'url', ph:'https://', hint:t('cvHint')}) + '</div>';
+    h+= cvHtml() + fld('cvLink', t('cvLink'), {type:'url', inputmode:'url', ph:'https://', hint:t('cvHint')}) + '</div>';
     return h;
   }
   if(step===4){
@@ -597,6 +620,88 @@ $('backBtn').addEventListener('click', ()=>{
 });
 document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click', ()=>{ LANG=b.dataset.lang; keepScroll(render); }));
 
+/* ------------------------------------------------------------------ CV upload
+   Files are held in memory (CV_FILES) until the final Submit, then uploaded to the private
+   Supabase Storage bucket 'hem-cvs' under <reference no.>/cv-N.ext. The public key may only
+   upload there — it can never list, open or overwrite anything, so one candidate cannot see
+   another's CV. Photos are resized on the phone (long edge 2000px, JPEG) before upload: a phone
+   camera photo of a page is typically 3–6 MB and stays perfectly readable at ~300–600 KB, which
+   matters on mobile data at reception. PDFs are sent as-is (max 10 MB, the bucket limit). */
+const CV_MAX_FILES = 5, CV_MAX_BYTES = 10*1024*1024;
+let CV_FILES = [];      // [{blob, name, type, size, thumb}]
+function fmtSize(b){ return b>=1048576? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' KB'; }
+function cvHtml(){
+  return '<div class="cvbox"><label class="l">'+esc(t('cvTitle'))+'</label>'
+    +'<div class="hint" style="margin:0 0 4px">'+esc(t('cvLead'))+'</div>'
+    +'<div class="cvbtns">'
+    +'<label><input type="file" id="cvCam" accept="image/*" capture="environment">📷 '+esc(t('cvPhoto'))+'</label>'
+    +'<label><input type="file" id="cvPick" accept="application/pdf,image/*" multiple>📄 '+esc(t('cvFile'))+'</label>'
+    +'</div><div class="hint" style="margin:0">'+esc(t('cvFileHint'))+'</div>'
+    +'<div class="cvlist" id="cvList">'+CV_FILES.map((f,i)=>'<div class="cvitem">'
+      +(f.thumb?'<img class="th" src="'+f.thumb+'" alt="">':'<div class="th">'+(f.type==='application/pdf'?'PDF':'IMG')+'</div>')
+      +'<div class="nm">'+esc(f.name)+'<div class="sz">'+fmtSize(f.size)+'</div></div>'
+      +'<button type="button" data-cvdel="'+i+'">'+esc(t('cvRemove'))+'</button></div>').join('')+'</div></div>';
+}
+function refreshCv(){ const box=document.querySelector('.cvbox'); if(box) box.outerHTML=cvHtml(); }
+/* resize an image to JPEG; resolves null if the browser cannot decode it (e.g. HEIC on Android),
+   in which case the original file is uploaded unchanged */
+function shrinkImage(file){
+  return new Promise(res=>{
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{
+      try{
+        const max=2000, k=Math.min(1, max/Math.max(img.naturalWidth,img.naturalHeight));
+        const w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,w,h); g.drawImage(img,0,0,w,h);
+        const tc=document.createElement('canvas'), tk=120/Math.max(w,h); tc.width=Math.round(w*tk); tc.height=Math.round(h*tk);
+        tc.getContext('2d').drawImage(c,0,0,tc.width,tc.height);
+        const thumb=tc.toDataURL('image/jpeg',0.7);
+        c.toBlob(b=>{ URL.revokeObjectURL(url); res(b? {blob:b, thumb} : null); }, 'image/jpeg', 0.82);
+      }catch(e){ URL.revokeObjectURL(url); res(null); }
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); res(null); };
+    img.src=url;
+  });
+}
+async function addCvFiles(list){
+  $('errBox').hidden=true;
+  for(const f of Array.from(list||[])){
+    if(CV_FILES.length>=CV_MAX_FILES){ fail(t('cvMax')); break; }
+    const isPdf = f.type==='application/pdf' || /\.pdf$/i.test(f.name);
+    const isImg = /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name);
+    if(!isPdf && !isImg){ fail(t('cvBadType',{f:f.name})); continue; }
+    if(isImg){
+      const r=await shrinkImage(f);
+      if(r){ CV_FILES.push({blob:r.blob, name:f.name.replace(/\.[^.]+$/,'')+'.jpg', type:'image/jpeg', size:r.blob.size, thumb:r.thumb}); continue; }
+    }
+    if(f.size>CV_MAX_BYTES){ fail(t('cvTooBig',{f:f.name})); continue; }
+    const type = isPdf? 'application/pdf' : (f.type || (/\.heif$/i.test(f.name)?'image/heif':'image/heic'));
+    CV_FILES.push({blob:f, name:f.name, type, size:f.size, thumb:null});
+  }
+  refreshCv();
+}
+document.addEventListener('change', e=>{
+  if(e.target.id==='cvCam' || e.target.id==='cvPick'){ const files=e.target.files; addCvFiles(files).then(()=>{ try{ e.target.value=''; }catch(x){} }); }
+});
+document.addEventListener('click', e=>{
+  const d=e.target.closest('[data-cvdel]'); if(!d) return;
+  CV_FILES.splice(Number(d.dataset.cvdel),1); refreshCv();
+});
+function cvExt(f){ return f.type==='application/pdf'?'pdf': f.type==='image/png'?'png': f.type==='image/webp'?'webp': /hei[cf]/.test(f.type)?'heic':'jpg'; }
+/* uploads every CV file under the given reference; returns [{path,name,type,size}] */
+async function uploadCvFiles(id){
+  const out=[];
+  for(let i=0;i<CV_FILES.length;i++){
+    const f=CV_FILES[i], path=id+'/cv-'+(i+1)+'.'+cvExt(f);
+    $('nextBtn').textContent=t('cvUploading',{n:i+1, t:CV_FILES.length});
+    const { error } = await sb.storage.from('hem-cvs').upload(path, f.blob, {contentType:f.type, upsert:false, cacheControl:'3600'});
+    if(error) throw error;
+    out.push({path, name:f.name, type:f.type, size:f.size});
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ submit */
 function newId(){
   const d=new Date(), y=String(d.getFullYear()).slice(2), m=String(d.getMonth()+1).padStart(2,'0');
@@ -623,8 +728,19 @@ async function submit(){
   LAST_PURPOSE = D.purpose||'interview';
   try{
     if(!sb) throw new Error('no client');
-    let { error } = await sb.from('hem_candidates').insert(row);
-    if(error && /duplicate|unique/i.test(error.message||'')){ row.id=newId(); ({ error } = await sb.from('hem_candidates').insert(row)); }
+    let error=null;
+    for(let attempt=0; attempt<3; attempt++){
+      try{ row.data.cvFiles = CV_FILES.length? await uploadCvFiles(row.id) : []; error=null; }
+      catch(upErr){
+        // same reference already used by someone else's upload — take a new one and retry
+        if(/exist|duplicate|409/i.test(String(upErr.message||upErr.statusCode||''))){ row.id=newId(); error=upErr; continue; }
+        throw upErr;
+      }
+      btn.textContent=t('sending');
+      ({ error } = await sb.from('hem_candidates').insert(row));
+      if(error && /duplicate|unique/i.test(error.message||'')){ row.id=newId(); continue; }
+      break;
+    }
     if(error) throw error;
     done(row.id);
   }catch(err){
@@ -650,7 +766,7 @@ function done(id){
 }
 function restart(){
   clearInterval(resetHandle); clearInterval(timerHandle);
-  D={}; TEST={started:false, finished:false, startAt:0, seconds:0, answers:{}}; step=1;
+  D={}; CV_FILES=[]; TEST={started:false, finished:false, startAt:0, seconds:0, answers:{}}; step=1;
   $('formWrap').hidden=false; $('navBar').hidden=false; $('doneWrap').hidden=true;
   $('nextBtn').disabled=false; $('errBox').hidden=true;
   render(); window.scrollTo(0,0);

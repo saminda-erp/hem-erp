@@ -8643,6 +8643,14 @@ function candFlags(c){
 }
 function salaryJump(c){ const d=c.data||{}, p=Number(d.presentSalary), e=Number(d.expectedSalary);
   if(!p||!e) return null; return Math.round((e-p)/p*100); }
+function candCvFiles(c){ return ((c&&c.data)||{}).cvFiles||[]; }
+function cvTag(c){ const n=candCvFiles(c).length; return n? ' <span class="tag t-info" title="CV uploaded">CV'+(n>1?' ×'+n:'')+'</span>':''; }
+/* removes a candidate's uploaded CV files from private storage (best effort) */
+function removeCvStorage(paths){
+  if(!paths.length || !window.HEM_AUTH || !window.HEM_AUTH.storage) return;
+  try{ window.HEM_AUTH.storage.from('hem-cvs').remove(paths).then(({error})=>{
+    if(error) toast('Record removed; the uploaded CV file(s) could not be deleted — '+error.message,'warn'); }); }catch(e){}
+}
 function safeUrl(u){ return /^https?:\/\/\S+$/i.test(String(u||''))? String(u) : ''; }
 
 /* ---- HR → Recruitment tab ---- */
@@ -8687,7 +8695,7 @@ function interviewsHtml(){
   h+=sect('Candidates', T([
     {h:'Ref', f:c=>'<b class="mono">'+esc(c.id)+'</b><div class="sub mono">'+esc((c.submittedAt||'').slice(0,16).replace('T',' '))+'</div>'},
     {h:'Candidate', f:c=>{ const a=candAge((c.data||{}).dob);
-      return '<b>'+esc(c.name||'—')+'</b><div class="sub">'+esc(c.phone||'')+(a!=null?' · '+a+' yrs':'')+'</div>'; }},
+      return '<b>'+esc(c.name||'—')+'</b>'+cvTag(c)+'<div class="sub">'+esc(c.phone||'')+(a!=null?' · '+a+' yrs':'')+'</div>'; }},
     {h:'Position', f:c=>esc(c.position||'—')+'<div class="sub"><span class="tag '+(c.category==='executive'?'t-info':'t-mute')+'">'+(c.category==='executive'?'Executive':'General')+'</span></div>'},
     {h:'Test', f:c=>{ const s=candScore(c); if(!s) return '<span class="sub">not taken</span>';
       return '<b class="mono">'+s.right+' / '+s.total+'</b> <span class="sub">'+s.band+'</span>'
@@ -8769,7 +8777,7 @@ function talentPoolHtml(){
     {h:'Ref', f:c=>'<b class="mono">'+esc(c.id)+'</b><div class="sub mono">'+esc((c.submittedAt||'').slice(0,10))+'</div>'
       +'<div class="sub">'+(candAgeDays(c)<1?'today':nf(candAgeDays(c))+'d ago')+'</div>'},
     {h:'Candidate', f:c=>{ const a=candAge((c.data||{}).dob);
-      return '<b>'+esc(c.name||'—')+'</b><div class="sub"><a href="tel:'+esc(String(c.phone||'').replace(/[^\d+]/g,''))+'">'+esc(c.phone||'')+'</a>'+(a!=null?' · '+a+' yrs':'')+'</div>'; }},
+      return '<b>'+esc(c.name||'—')+'</b>'+cvTag(c)+'<div class="sub"><a href="tel:'+esc(String(c.phone||'').replace(/[^\d+]/g,''))+'">'+esc(c.phone||'')+'</a>'+(a!=null?' · '+a+' yrs':'')+'</div>'; }},
     {h:'Wants', f:c=>{ const also=(c.data||{}).alsoInterested||[];
       return esc(c.position||'—')+(also.length?'<div class="sub">also: '+esc(also.join(', '))+'</div>':'')
         +'<div class="sub"><span class="tag '+((c.data||{}).purpose==='future'?'t-mute':'t-info')+'">'+((c.data||{}).purpose==='future'?'walk-in':'interviewed')+'</span></div>'; }},
@@ -8797,6 +8805,7 @@ ACT['cand-purge-expired'] = ()=>{
     fields:[{k:'confirm',label:'Type DELETE to confirm',full:true}], saveLabel:'Delete',
     onSave:v=>{
       if(v.confirm!=='DELETE') return toast('Type DELETE to confirm','bad');
+      removeCvStorage(list.flatMap(c=>candCvFiles(c).map(f=>f.path)));
       list.forEach(c=>{ const i=S.candidates.indexOf(c);
         S.candidates[i]={id:c.id, deleted:true, deletedAt:new Date().toISOString(), deletedBy:UI.user||'', status:'deleted', submittedAt:c.submittedAt}; });
       if(window.HEM_AUTH){ try{ window.HEM_AUTH.from('hem_candidates').delete().in('id', list.map(c=>c.id)).then(({error})=>{
@@ -8857,7 +8866,10 @@ function candDetailHtml(c, forPrint){
       ['Expected salary','<b class="mono">'+rm(d.expectedSalary)+'</b>'+(j!=null?' <span class="tag '+(j>30?'t-warn':'t-mute')+'">'+(j>=0?'+':'')+j+'% on present</span>':'')],
       ['Notice period', e(d.notice)], ['Earliest start', d.availableFrom?'<span class="mono">'+e(d.availableFrom)+'</span>':''],
       ['Shifts / overtime', c.category==='general'? e(d.shifts||'—')+' / '+e(d.ot||'—') : null],
-      ['CV', cv? (forPrint? '<span class="mono" style="font-size:11px;word-break:break-all">'+e(cv)+'</span>' : '<a href="'+e(cv)+'" target="_blank" rel="noopener noreferrer">Open CV link ↗</a>') : '<span class="sub">none given — ask for a printed copy</span>']
+      ['CV file', candCvFiles(c).length? (forPrint? nf(candCvFiles(c).length)+' file(s) uploaded — open in the system to view'
+          : btn('View CV ('+candCvFiles(c).length+' file'+(candCvFiles(c).length>1?'s':'')+')','cand-cv',c.id,'btn sm primary')
+            +'<div class="sub">'+candCvFiles(c).map(f=>esc(f.name)).join(', ')+'</div>') : '<span class="sub">no file uploaded</span>'],
+      ['CV link', cv? (forPrint? '<span class="mono" style="font-size:11px;word-break:break-all">'+e(cv)+'</span>' : '<a href="'+e(cv)+'" target="_blank" rel="noopener noreferrer">Open CV link ↗</a>') : (candCvFiles(c).length? null : '<span class="sub">none given — ask for a printed copy</span>')]
     ])+'</div></div>'
     +'<div class="cols2" style="margin-bottom:14px">'
     +'<div class="card"><h3>Experience & education</h3>'+dl([
@@ -8917,6 +8929,34 @@ ACT['cand-view'] = id=>{
   modal(esc(c.id+' — '+(c.name||'Candidate')), candDetailHtml(c,false),
     btn('Delete','cand-delete',c.id,'btn')+btn('Print','cand-print',c.id,'btn')+btn('Record interview outcome','cand-outcome',c.id,'btn primary'), true);
 };
+/* CV viewer — files sit in a PRIVATE bucket; each view asks Supabase for short-lived (10 min)
+   signed links, so a copied link stops working soon after. Shown inside a modal rather than
+   window.open(), which phone browsers block when it follows an async call. */
+ACT['cand-cv'] = id=>{
+  const c=candidate(id); if(!c) return;
+  const files=candCvFiles(c);
+  if(!files.length) return toast('No CV uploaded','bad');
+  if(!window.HEM_AUTH || !window.HEM_AUTH.storage) return toast('Sign in to view CV files','bad');
+  modal(esc('CV — '+(c.name||c.id)), '<div class="note">Loading '+files.length+' file(s)…</div>',
+    btn('Back to candidate','cand-view',c.id,'btn'), true);
+  const seq=MODAL_SEQ;
+  Promise.all(files.map(f=>window.HEM_AUTH.storage.from('hem-cvs').createSignedUrl(f.path, 600)
+      .then(({data,error})=>({f, url:error?null:(data&&data.signedUrl), err:error&&error.message}))
+      .catch(e=>({f, url:null, err:String(e&&e.message||e)}))))
+  .then(list=>{
+    if(seq!==MODAL_SEQ) return;   // user already moved on to another window
+    const body=list.map((x,i)=>{
+      const head='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0 6px">'
+        +'<b>'+(i+1)+'. '+esc(x.f.name)+'</b><span class="sub mono">'+esc(Math.round((x.f.size||0)/1024))+' KB</span>'
+        +(x.url?'<a class="btn sm" href="'+esc(x.url)+'" target="_blank" rel="noopener">Open / download ↗</a>':'')+'</div>';
+      if(!x.url) return head+'<div class="banner bad">Could not open this file — '+esc(x.err||'unknown error')+'</div>';
+      if(x.f.type==='application/pdf') return head+'<iframe src="'+esc(x.url)+'" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:8px;background:#fff" title="CV page '+(i+1)+'"></iframe>';
+      if(/hei[cf]/.test(x.f.type)) return head+'<div class="note">HEIC photo — your browser may not preview it; use Open / download.</div><img src="'+esc(x.url)+'" style="max-width:100%;border:1px solid var(--line);border-radius:8px" alt="">';
+      return head+'<img src="'+esc(x.url)+'" style="max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fff" alt="CV page '+(i+1)+'">';
+    }).join('');
+    const mb=document.querySelector('#modal-root .mbody'); if(mb) mb.innerHTML=body+'<div class="sub" style="margin-top:12px">Links expire after 10 minutes — reopen this window for fresh ones.</div>';
+  });
+};
 ACT['cand-print'] = id=>{
   const c=candidate(id); if(!c) return;
   printModal('Candidate '+c.id, '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px">'
@@ -8952,11 +8992,12 @@ ACT['cand-outcome'] = id=>{
 ACT['cand-delete'] = id=>{
   const c=candidate(id); if(!c) return;
   formModal({title:'Delete candidate '+c.id,
-    intro:'Permanently removes '+esc(c.name||'this candidate')+'\'s personal details, salary and test answers from this system and from the online applications table. Only the reference number stays, so the record is not imported again. Use this when a candidate asks to be removed, or when you no longer need an unsuccessful application.',
+    intro:'Permanently removes '+esc(c.name||'this candidate')+'\'s personal details, salary, test answers and uploaded CV from this system and from the online applications table. Only the reference number stays, so the record is not imported again. Use this when a candidate asks to be removed, or when you no longer need an unsuccessful application.',
     fields:[{k:'confirm',label:'Type DELETE to confirm',full:true}], saveLabel:'Delete',
     onSave:v=>{
       if(v.confirm!=='DELETE') return toast('Type DELETE to confirm','bad');
       const i=S.candidates.indexOf(c);
+      removeCvStorage(candCvFiles(c).map(f=>f.path));
       S.candidates[i]={id:c.id, deleted:true, deletedAt:new Date().toISOString(), deletedBy:UI.user||'', status:'deleted', submittedAt:c.submittedAt};
       if(window.HEM_AUTH){ try{ window.HEM_AUTH.from('hem_candidates').delete().eq('id',c.id).then(({error})=>{
         if(error) toast('Removed here; the online copy could not be deleted — '+error.message,'warn'); }); }catch(e){} }
