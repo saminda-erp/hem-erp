@@ -9065,9 +9065,9 @@ ACT['cand-qr-print'] = ()=>{
    ============================================================ */
 const LEAVE_RULES = {
   annual:{notice:14, late:0, doc:'none'},
-  medical:{notice:0, late:2, doc:'required', docLabel:'MC'},
+  medical:{notice:0, late:0, doc:'deadline', docLabel:'MC', sameDay:true},   // apply on the day; MC upload by midnight next day
   hospitalization:{notice:0, late:2, doc:'required_if_started', docLabel:'Hospital letter'},
-  emergency:{notice:0, late:2, doc:'none'},
+  emergency:{notice:0, late:2, doc:'none', noticeHours:4, lateFactor:1.5},    // under 4h before 8:00am start → 1.5 days' salary per day
   unpaid:{notice:7, late:0, doc:'none'},
   timeoff:{notice:3, late:0, doc:'none'}
 };
@@ -9075,7 +9075,7 @@ function leaveRule(code){ return LEAVE_RULES[code] || {notice:0, late:0, doc:'no
 /* working days, Sundays excluded (factory rest day) — must match _leave_days() in the database */
 function workingDays(start,end){ return datesInRange(start,end).filter(d=>new Date(d+'T00:00:00Z').getUTCDay()!==0).length; }
 function leaveDocNeeded(l){ const r=leaveRule(l.type);
-  return r.doc==='required' || (r.doc==='required_if_started' && l.start<=today()); }
+  return r.doc==='required' || r.doc==='deadline' || (r.doc==='required_if_started' && l.start<=today()); }
 function leaveHasDoc(l){ return (l.docPaths||[]).length>0 || !!l.docSeen; }
 /* one-time, idempotent: emergency leave became UNPAID with no entitlement (company rule) */
 function migrateLeaveRules(){
@@ -9087,6 +9087,9 @@ function migrateLeaveRules(){
 function leaveChecks(l){
   const out=[], lt=leaveType(l.type), emp=employee(l.empNo);
   if(leaveDocNeeded(l) && !leaveHasDoc(l)) out.push({cls:'t-bad', block:true, t:(leaveRule(l.type).docLabel||'Document')+' missing'});
+  if(l.docDeadline && !leaveHasDoc(l)){ const past=Date.now()>Date.parse(l.docDeadline);
+    out.push({cls:past?'t-bad':'t-warn', t:(leaveRule(l.type).docLabel||'Document')+(past?' NOT uploaded by deadline ':' due by ')+fmtDeadlineKL(l.docDeadline)}); }
+  if(l.lateNotice) out.push({cls:'t-bad', t:'Late notice (<'+(l.lateNotice.notice_hours||4)+'h) — deduct '+(+l.lateNotice.deduct_days)+' day(s) salary'});
   if(lt.paid!==false && Number(lt.defaultDays)>0){
     const b=leaveBalance(l.empNo, l.year).find(x=>x.type===l.type);
     const left=b? b.entitlement-b.taken : 0;
@@ -9101,6 +9104,7 @@ function leaveChecks(l){
   }
   return out;
 }
+function fmtDeadlineKL(iso){ return new Date(Date.parse(iso)-60e3).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit',hour12:true,timeZone:'Asia/Kuala_Lumpur'}); }
 function fmtLeaveDates(l){
   const f=d=>new Date(d+'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
   return f(l.start)+(l.end!==l.start?' – '+f(l.end):'')+' ('+nf(l.days)+' day'+(Number(l.days)===1?'':'s')+')';
@@ -9144,9 +9148,9 @@ function doApprove(id){
   save(); render(); pushLeaveStatusToPortal(l);
   const e=employee(l.empNo);
   pushNotice({emp_no:l.empNo, kind:'approved', leave_id:l.id, title:lt.name+' approved',
-    body:fmtLeaveDates(l)+(l.paid?'':'\nThis leave is UNPAID.')});
+    body:fmtLeaveDates(l)+(l.paid?'':'\nThis leave is UNPAID.')+(l.lateNotice?'\nLate notice: '+(+l.lateNotice.deduct_days)+' day(s) salary will be deducted.':'')});
   notifyModal(l.empNo, 'Approved — notify '+e.name,
-    'HE Manufacturing — Leave APPROVED ✅\n'+e.name+' ('+e.empNo+')\n'+lt.name+': '+fmtLeaveDates(l)+(l.paid?'':'\n(Unpaid / Tanpa gaji)')
+    'HE Manufacturing — Leave APPROVED ✅\n'+e.name+' ('+e.empNo+')\n'+lt.name+': '+fmtLeaveDates(l)+(l.paid?'':'\n(Unpaid / Tanpa gaji)')+(l.lateNotice?'\n⚠ Late notice — '+(+l.lateNotice.deduct_days)+' day(s) salary deducted / gaji '+(+l.lateNotice.deduct_days)+' hari dipotong':'')
     +'\n\nCuti anda telah DILULUSKAN.');
 }
 ACT['leave-approve']=id=>{
@@ -9263,11 +9267,11 @@ ACT['leave-print']=id=>{
    +'<div style="font-size:11px;font-weight:700;color:#522B39;margin:12px 0 4px">D. HUMAN RESOURCES</div>'
    +'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr>'
    +'<td style="'+cell+';width:34%"><span style="'+lbl+'">Decision</span>'+box(l&&l.status==='approved')+'Approved &nbsp; '+box(l&&l.status==='rejected')+'Rejected</td>'
-   +'<td style="'+cell+'"><span style="'+lbl+'">Paid / unpaid</span>'+(l? (leaveType(l.type).paid===false||l.paid===false?'Unpaid':'Paid') : box(false)+'Paid &nbsp; '+box(false)+'Unpaid')+'</td>'
+   +'<td style="'+cell+'"><span style="'+lbl+'">Paid / unpaid</span>'+(l? (leaveType(l.type).paid===false||l.paid===false?'Unpaid':'Paid')+(l.lateNotice?'<br><b style="color:#a3312c">Late notice — deduct '+(+l.lateNotice.deduct_days)+' day(s) salary</b>':'') : box(false)+'Paid &nbsp; '+box(false)+'Unpaid')+'</td>'
    +'<td style="'+cell+'"><span style="'+lbl+'">Approved by / date</span>'+v(l&&l.approvedBy? l.approvedBy+' · '+d8(l.approvedAt):'')+'</td></tr>'
    +'<tr><td colspan="3" style="'+cell+';height:34px"><span style="'+lbl+'">Remarks</span>'+v(l&&l.rejectReason)+'</td></tr></table>'
-   +'<div style="font-size:10px;color:#666;margin-top:10px;line-height:1.5">Rules: Annual leave — apply at least 14 days before. MC — certificate required, apply within 2 days after. Hospitalisation — hospital letter required. '
-   +'Emergency leave is unpaid. Unpaid leave — 7 days\' notice. Sundays are not counted. Apply online: scan the Leave QR at HR.</div></div>';
+   +'<div style="font-size:10px;color:#666;margin-top:10px;line-height:1.5">Rules: Annual leave — apply at least 14 days before. MC — apply on the same day; upload the MC by 12:00 midnight the next day. Hospitalisation — hospital letter required. '
+   +'Emergency leave is unpaid; apply at least 4 hours before work starts, otherwise 1½ days\' salary is deducted per day. Unpaid leave — 7 days\' notice. Sundays are not counted. Apply online: scan the Leave QR at HR.</div></div>';
   printModal(l? 'Leave application '+l.id : 'Leave application form (blank)', html);
 };
 ACT['leave-doc-seen']=id=>{ const l=(S.leaveApplications||[]).find(x=>x.id===id); if(!l) return;
@@ -9414,7 +9418,8 @@ function syncPortalLeave(silent){
         appliedAt:(r.applied_at||'').slice(0,10), appliedBy:'portal', approvedBy:'', approvedAt:'', source:'portal',
         paid:r.paid!==false, docPaths:paths, contact:((r.details||{}).contact)||'',
         stage:r.stage||'hr', superior:r.superior||{}, half:(r.details||{}).half||'', relief:(r.details||{}).relief||'', handover:(r.details||{}).handover||'',
-        signature:(r.details||{}).signature||'', declaredAt:(r.details||{}).declared_at||'', position:(r.details||{}).position||''});
+        signature:(r.details||{}).signature||'', declaredAt:(r.details||{}).declared_at||'', position:(r.details||{}).position||'',
+        lateNotice:(r.details||{}).late_notice||null, docDeadline:(r.details||{}).doc_deadline||'', deductDays:Number(((r.details||{}).late_notice||{}).deduct_days)||0});
       added++;
     });
     if(docs){ logAudit('Leave updates synced from portal','',docs+' application(s)'); if(!added){ save(); render(); } }

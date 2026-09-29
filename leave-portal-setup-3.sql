@@ -63,3 +63,17 @@
 --   On success superior gets {emp_no, name (real signer), signed_in:true}, stage='hr'.
 -- Old 3-argument superior_decide(text,text,text) dropped.
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- Migration leave_rules_emergency_4h_mc_same_day (2026-09-29)
+--  * hem_leave_types: + notice_hours, late_deduct_factor, doc_deadline_days
+--  * hem_portal_settings: work_start = 08:00, work_start_pm = 13:00 (PM half day)
+--  * Emergency: notice_hours 4, late_deduct_factor 1.5. Accepted when late, but each day applied
+--    < 4h before work starts is recorded in details.late_notice {late_days, deduct_days, factor}
+--    (half day = 0.5 late → 0.75 deducted). Uses server time (_late_days / _work_start_at).
+--  * Medical: must be applied on the day (mc_same_day / mc_future), late_days 0, doc_rule 'deadline',
+--    doc_deadline_days 1 → details.doc_deadline = midnight at the end of the next day (KL);
+--    portal_attach_docs refuses after it (code doc_deadline). HR still cannot approve without the MC.
+--  * portal_data also returns now / work_start / work_start_pm and the new type columns.
+--  * Leave balance card removed from the employee portal (balance is still enforced).
+-- ---------------------------------------------------------------------------

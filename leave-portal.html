@@ -181,7 +181,6 @@
   <h2 id="welcome" style="font-family:'Fraunces',serif;font-size:20px;margin:0 0 12px"></h2>
   <div id="topMsg"></div>
   <div id="noticesCard"></div>
-  <div class="card"><h3 data-t="balanceTitle"></h3><div id="balanceList"></div></div>
   <div class="card" id="rulesCard"></div>
   <div id="supSend"></div>
   <div class="card" id="applyCard"></div>
@@ -253,6 +252,15 @@ const TX = {
   e_notice:{en:'{type} must be applied at least {n} days before. The earliest first day you can choose is {date}.', ms:'{type} mesti dimohon sekurang-kurangnya {n} hari lebih awal. Hari pertama paling awal ialah {date}.'},
   e_too_late:{en:'Too late to apply — {type} can be applied at most {n} day(s) after the last day. Please see HR.', ms:'Sudah terlewat — {type} hanya boleh dimohon sehingga {n} hari selepas hari terakhir. Sila jumpa HR.'},
   e_too_late0:{en:'The first day has already passed. {type} must be applied in advance.', ms:'Hari pertama telah berlalu. {type} mesti dimohon lebih awal.'},
+  e_mc_same_day:{en:'Medical leave must be applied on the same day you are sick. For an earlier date, contact HR.', ms:'Cuti sakit mesti dimohon pada hari yang sama anda sakit. Untuk tarikh lebih awal, hubungi HR.'},
+  lateWarn:{en:'Late notice: you are applying less than {h} hours before work starts. {d} day(s) will be recorded late and {x} day(s) of salary will be deducted.', ms:'Notis lewat: anda memohon kurang daripada {h} jam sebelum kerja bermula. {d} hari direkod lewat dan gaji {x} hari akan dipotong.'},
+  lateAck:{en:'I understand that {x} day(s) of salary will be deducted.', ms:'Saya faham bahawa gaji {x} hari akan dipotong.'},
+  e_late_ack:{en:'Please tick that you understand the salary deduction for late emergency leave.', ms:'Sila tandakan bahawa anda faham potongan gaji untuk cuti kecemasan lewat.'},
+  lateTag:{en:'Late — {x} day(s) salary deducted', ms:'Lewat — gaji {x} hari dipotong'},
+  docTitleBy:{en:'{doc} — upload now, or by {d}', ms:'{doc} — muat naik sekarang, atau sebelum {d}'},
+  needMcBy:{en:'Upload your MC by {d}. After that it cannot be accepted.', ms:'Muat naik MC anda sebelum {d}. Selepas itu ia tidak akan diterima.'},
+  mcOverdue:{en:'MC not uploaded by {d} — please see HR.', ms:'MC tidak dimuat naik sebelum {d} — sila jumpa HR.'},
+  e_doc_deadline:{en:'The time to upload this document has passed — please see HR.', ms:'Masa untuk memuat naik dokumen ini telah tamat — sila jumpa HR.'},
   e_mc_future:{en:'Medical leave can only be applied once you have your MC (not for future dates).', ms:'Cuti sakit hanya boleh dimohon selepas mendapat MC (bukan untuk tarikh akan datang).'},
   e_doc_missing:{en:'Please attach your {doc}.', ms:'Sila lampirkan {doc} anda.'},
   e_overlap:{en:'You already have an application for some of these days.', ms:'Anda sudah mempunyai permohonan untuk sebahagian hari tersebut.'},
@@ -344,6 +352,7 @@ function t(k, vars){ let s=(TX[k]||{})[LANG]; if(s==null) s=(TX[k]||{}).en; if(s
 /* ------------------------------------------------------------------ state */
 let CRED=null;              // {emp_no, password} — memory only, never stored
 let DATA=null;              // last portal_data result
+let CLOCK_OFF=0;            // server time − phone time, so a wrong phone clock cannot dodge the 4-hour rule
 let DOCS=[];                // files chosen in the apply form [{blob,name,type,size,thumb}]
 function blankForm(){ return {type:'', start:'', end:'', half:'', reason:'', contact:'', relief:'', handover:'', declared:false, signature:'', hodName:'', hodPhone:'', hodTouched:false}; }
 let FORM=blankForm();
@@ -356,6 +365,18 @@ function workDays(a, b){ if(!a||!b||b<a) return 0; let n=0, d=a;
   for(let i=0;i<400 && d<=b;i++){ if(new Date(d+'T00:00:00Z').getUTCDay()!==0) n++; d=addDays(d,1); } return n; }
 function fmtDate(s){ if(!s) return ''; const d=new Date(s+'T00:00:00Z');
   return d.toLocaleDateString(LANG==='ms'?'ms-MY':'en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}); }
+function nowMs(){ return Date.now()+CLOCK_OFF; }
+/* emergency-type rule: a day counts as late if applied less than notice_hours before work starts (KL time).
+   Mirrors _late_days() in the database, which is what is actually recorded. */
+function workStartMs(day, half){ const hm=String((half==='PM'? DATA&&DATA.work_start_pm : DATA&&DATA.work_start) || (half==='PM'?'13:00':'08:00')).split(':');
+  return Date.parse(day+'T'+hm[0].padStart(2,'0')+':'+(hm[1]||'00').padStart(2,'0')+':00+08:00'); }
+function lateDays(ty, s, e, half){
+  if(!ty || !(Number(ty.notice_hours)>0) || !s || !e) return 0; let n=0, d=s;
+  for(let i=0;i<100 && d<=e;i++){ if(new Date(d+'T00:00:00Z').getUTCDay()!==0 && nowMs() > workStartMs(d,half)-ty.notice_hours*3600e3) n+= half?0.5:1; d=addDays(d,1); }
+  return n; }
+function fmtDeadline(iso){ if(!iso) return ''; const d=new Date(iso), t0=new Date(d.getTime()-60e3);
+  return t0.toLocaleString(LANG==='ms'?'ms-MY':'en-GB',{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit',hour12:true,timeZone:'Asia/Kuala_Lumpur'}); }
+function docDeadline(a){ return a && a.details && a.details.doc_deadline; }
 function todayKL(){ return (DATA&&DATA.today) || new Date(Date.now()+8*3600e3).toISOString().slice(0,10); }
 function typeOf(code){ return ((DATA&&DATA.types)||[]).find(x=>x.code===code); }
 function typeName(ty){ return ty? ty.name : ''; }
@@ -382,7 +403,7 @@ async function load(){
   const { data, error } = await sb.rpc('portal_data', {p_emp_no:CRED.emp_no, p_password:CRED.password});
   if(error) throw error;
   if(!data || !data.ok) return false;
-  DATA=data; return true;
+  DATA=data; CLOCK_OFF = data.now? Date.parse(data.now)-Date.now() : 0; return true;
 }
 $('loginForm').addEventListener('submit', async e=>{
   e.preventDefault();
@@ -505,7 +526,7 @@ function renderAll(keepForm){
       + '</div>').join('') + '</div>' : '';
 
   // balances
-  $('balanceList').innerHTML = balances().map(b=>'<div class="balrow"><span><span class="dot" style="background:'+esc(b.ty.color||'#888')+'"></span>'+esc(b.ty.name)
+  if($('balanceList')) $('balanceList').innerHTML = balances().map(b=>'<div class="balrow"><span><span class="dot" style="background:'+esc(b.ty.color||'#888')+'"></span>'+esc(b.ty.name)
       + (b.ty.paid?'':' <span class="tag unpaid">'+esc(t('unpaid'))+'</span>')+'</span><span class="mono" style="font-size:13px">'
       + (b.tracked? '<b style="font-size:15px">'+b.left+'</b> '+esc(t('left'))+' <span class="muted">· '+b.taken+' '+esc(t('taken'))+(b.pend?' · '+b.pend+' '+esc(t('pendingW')):'')+'</span>'
                   : (b.taken? b.taken+' '+esc(t('taken')) : '<span class="muted">'+esc(t('notTracked'))+'</span>'))
@@ -542,14 +563,14 @@ function renderApply(){
   h+='<div class="row2"><div><label class="l" for="lvStart">'+esc(half? t('dateL') : t('start'))+' <span class="req">*</span></label>'
    +'<input type="date" id="lvStart" value="'+esc(FORM.start)+'"'+(minStart?' min="'+minStart+'"':'')+(maxStart?' max="'+maxStart+'"':'')+'></div>'
    +(half? '<div></div>' : '<div><label class="l" for="lvEnd">'+esc(t('end'))+' <span class="req">*</span></label>'
-   +'<input type="date" id="lvEnd" value="'+esc(FORM.end)+'"'+(FORM.start?' min="'+esc(FORM.start)+'"':'')+(maxStart?' max="'+maxStart+'"':'')+'></div>')+'</div>'
+   +'<input type="date" id="lvEnd" value="'+esc(FORM.end)+'"'+(FORM.start?' min="'+esc(FORM.start)+'"':'')+'></div>')+'</div>'
    +'<div id="liveCheck"></div>'
    +'<label class="l" for="lvReason">'+esc(t('reason'))+' <span class="req">*</span></label>'
    +'<textarea id="lvReason" rows="3" maxlength="1000" placeholder="'+esc(t('reasonPh'))+'">'+esc(FORM.reason)+'</textarea>'
    +'<div class="count" id="reasonCount"></div>';
   if(ty){
     h+='<div class="docbox'+(req?' need':'')+'"><label class="l">'
-      +esc(docOk? (req? t('docTitleReq',{doc:docLabel(ty)}) : t('docTitleLater',{doc:docLabel(ty)})) : t('docTitleOpt'))
+      +esc(docOk? (req? t('docTitleReq',{doc:docLabel(ty)}) : ty.doc_rule==='deadline'? t('docTitleBy',{doc:docLabel(ty), d:fmtDeadline(addDays(FORM.start||today, (Number(ty.doc_deadline_days)||1)+1)+'T00:00:00+08:00')}) : t('docTitleLater',{doc:docLabel(ty)})) : t('docTitleOpt'))
       +(req?' <span class="req">*</span>':'')+'</label>'
       +'<div class="cvbtns"><label><input type="file" id="docCam" accept="image/*" capture="environment">📷 '+esc(t('photo'))+'</label>'
       +'<label><input type="file" id="docPick" accept="application/pdf,image/*" multiple>📄 '+esc(t('file'))+'</label></div>'
@@ -589,6 +610,7 @@ function check(){
   if(days<1) return {code:'no_workdays'};
   if(half) days=0.5;
   if(ty.min_notice_days>0 && s<addDays(today,ty.min_notice_days)) return {code:'notice', need:ty.min_notice_days, earliest:addDays(today,ty.min_notice_days), days};
+  if(ty.code==='medical' && s<today) return {code:'mc_same_day', days};
   if(s<today && addDays(e,ty.late_days)<today) return {code:'too_late', late_days:ty.late_days, days};
   if(ty.code==='medical' && s>today) return {code:'mc_future', days};
   const mine=(DATA.apps||[]).filter(a=>(a.status==='pending'||a.status==='approved') && !String(a.id).startsWith('OB-'));
@@ -614,8 +636,16 @@ function liveCheck(){
   const ty=typeOf(FORM.type), half=halfAllowed(ty)&&FORM.half;
   const r = (FORM.type && FORM.start && (FORM.end||half))? check() : null;
   box.innerHTML = !r? '' : r.code? '<div class="msg warn">'+esc(errText(r))+'</div>'
-    : '<div class="msg info">'+esc(half? t('halfDays',{h:half}) : t('workDays',{n:r.days}))+(ty&&!ty.paid?' — '+esc(t('unpaid')):'')+'</div>';
+    : '<div class="msg info">'+esc(half? t('halfDays',{h:half}) : t('workDays',{n:r.days}))+(ty&&!ty.paid?' — '+esc(t('unpaid')):'')+'</div>'
+      + lateHtml(ty, half);
   const rc=$('reasonCount'); if(rc){ const n=FORM.reason.trim().length; rc.textContent=t('chars',{n}); rc.style.color=n>=10?'var(--ok)':''; }
+}
+function curLate(){ const ty=typeOf(FORM.type), half=halfAllowed(ty)&&FORM.half; return lateDays(ty, FORM.start, half? FORM.start : FORM.end, half||null); }
+function lateHtml(ty, half){
+  const n=curLate(); if(!n) return '';
+  const x=+(n*(Number(ty.late_deduct_factor)||1)).toFixed(2);
+  return '<div class="msg err" id="lateBox"><b>⚠ '+esc(t('lateWarn',{h:ty.notice_hours, d:n, x}))+'</b>'
+    +'<label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-weight:600"><input type="checkbox" id="lvLateAck"'+(FORM.lateAck?' checked':'')+' style="width:auto;margin-top:3px"> <span>'+esc(t('lateAck',{x}))+'</span></label></div>';
 }
 function supWaLink(phone, token, app){
   const url=location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-approve.html?t='+token;
@@ -624,7 +654,7 @@ function supWaLink(phone, token, app){
   const nm=(emp.name && emp.name!==emp.emp_no)? emp.name : '';
   const text='HE Manufacturing — Leave approval needed / Kelulusan cuti diperlukan\n\n'
     +'👤 Employee: *'+(nm||('Emp No '+emp.emp_no))+'*\nEmp No: '+emp.emp_no+(emp.department?' · '+emp.department:'')+(emp.position?' · '+emp.position:'')
-    +'\n📅 '+(ty?ty.name:app.type)+': '+d+' · '+app.days+' day(s)\n📝 Reason: '+app.reason+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
+    +'\n📅 '+(ty?ty.name:app.type)+': '+d+' · '+app.days+' day(s)'+(app.late?'\n⚠ LATE notice (under '+app.late.notice_hours+'h) — '+app.late.deduct_days+' day(s) salary to be deducted':'')+'\n📝 Reason: '+app.reason+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
   const n=String(phone||'').replace(/\D/g,'');
   return n? 'https://wa.me/'+n+'?text='+encodeURIComponent(text) : '';
 }
@@ -642,7 +672,10 @@ function renderHistory(){
   $('historyList').innerHTML = apps.length? apps.map(a=>{
     if(String(a.id).startsWith('OB-')) return Number(a.days)? '<div class="hist"><b>'+esc((typeOf(a.type)||{}).name||a.type)+'</b>'
       +'<div class="muted">'+esc(t('broughtFwd'))+': '+esc(a.days)+' '+esc(t('daysW'))+'</div></div>' : '';
-    const ty=typeOf(a.type), needLater = a.status==='pending' && ty && ty.doc_rule==='required_if_started' && !Number(a.docs);
+    const ty=typeOf(a.type), dl=docDeadline(a), dlPassed = dl && nowMs()>Date.parse(dl);
+    const needLater = a.status==='pending' && ty && (ty.doc_rule==='required_if_started' || dl) && !Number(a.docs) && !dlPassed;
+    const overdue = a.status==='pending' && dl && dlPassed && !Number(a.docs);
+    const ln=a.details&&a.details.late_notice;
     const half=a.details&&a.details.half;
     let stage='';
     if(a.status==='pending'){
@@ -656,7 +689,9 @@ function renderHistory(){
       +(Number(a.docs)?' · '+esc(t('docs',{n:a.docs})):'')+'</div>'
       +(a.reason?'<div class="muted">'+esc(a.reason)+'</div>':'')+stage
       +(a.status==='rejected'&&a.reject_reason?'<div style="color:var(--bad);font-size:13px"><b>'+esc(t('rejReason'))+':</b> '+esc(a.reject_reason)+'</div>':'')
-      +(needLater?'<div class="msg warn" style="margin:6px 0 0">'+esc(t('needDocLater'))
+      +(ln?'<div style="color:var(--bad);font-size:13px;font-weight:600">⚠ '+esc(t('lateTag',{x:ln.deduct_days}))+'</div>':'')
+      +(overdue?'<div class="msg err" style="margin:6px 0 0">'+esc(t('mcOverdue',{d:fmtDeadline(dl)}))+'</div>':'')
+      +(needLater?'<div class="msg warn" style="margin:6px 0 0">'+esc(dl? t('needMcBy',{d:fmtDeadline(dl)}) : t('needDocLater'))
         +'<div class="cvbtns" style="margin-bottom:0"><label><input type="file" data-later="'+esc(a.id)+'" accept="application/pdf,image/*">📄 '+esc(t('uploadNow'))+'</label></div></div>':'')
       +'</div>';
   }).join('') : '<div class="muted">'+esc(t('none'))+'</div>';
@@ -665,7 +700,7 @@ async function resendSup(id){
   try{ const {data,error}=await sb.rpc('portal_superior_link',{p_emp_no:CRED.emp_no,p_password:CRED.password,p_id:id});
     if(error) throw error; if(!data||!data.ok) return showMsg('topMsg','err',t('e_generic',{c:(data&&data.code)||'?'}));
     const app=(DATA.apps||[]).find(a=>a.id===id)||{};
-    SUP_SEND={id, name:data.superior_name, link:supWaLink(data.superior_phone, data.token, {type:app.type,start_date:app.start_date,end_date:app.end_date,days:app.days,reason:app.reason,half:app.details&&app.details.half})};
+    SUP_SEND={id, name:data.superior_name, link:supWaLink(data.superior_phone, data.token, {type:app.type,start_date:app.start_date,end_date:app.end_date,days:app.days,reason:app.reason,half:app.details&&app.details.half,late:app.details&&app.details.late_notice})};
     renderHistory(); $('supSend').scrollIntoView({behavior:'smooth'});
   }catch(e){ showMsg('topMsg','err',t('offline')); }
 }
@@ -682,11 +717,12 @@ document.addEventListener('input', e=>{
 });
 document.addEventListener('change', e=>{
   const id=e.target.id;
-  if(id==='lvType'){ FORM.type=e.target.value; FORM.start=''; FORM.end=''; FORM.half=''; showMsg('applyMsg','',''); renderApply(); }
-  if(e.target.name==='lvHalf'){ FORM.half=e.target.value; if(FORM.half) FORM.end=FORM.start; renderApply(); }
-  if(id==='lvStart'){ FORM.start=e.target.value; if(FORM.half || !FORM.end || FORM.end<FORM.start) FORM.end=FORM.start; renderApply(); }
-  if(id==='lvEnd'){ FORM.end=e.target.value; liveCheck(); }
+  if(id==='lvType'){ FORM.type=e.target.value; FORM.start=''; FORM.end=''; FORM.half=''; FORM.lateAck=false; showMsg('applyMsg','',''); renderApply(); }
+  if(e.target.name==='lvHalf'){ FORM.half=e.target.value; FORM.lateAck=false; if(FORM.half) FORM.end=FORM.start; renderApply(); }
+  if(id==='lvStart'){ FORM.start=e.target.value; FORM.lateAck=false; if(FORM.half || !FORM.end || FORM.end<FORM.start) FORM.end=FORM.start; renderApply(); }
+  if(id==='lvEnd'){ FORM.end=e.target.value; FORM.lateAck=false; liveCheck(); }
   if(id==='lvDeclare'){ FORM.declared=e.target.checked; renderApply(); }
+  if(id==='lvLateAck'){ FORM.lateAck=e.target.checked; }
   if(id==='docCam' || id==='docPick'){ addDocs(e.target.files).then(()=>renderApply()); }
   if(e.target.dataset && e.target.dataset.later){ attachLater(e.target.dataset.later, e.target.files); }
 });
@@ -746,7 +782,7 @@ async function submitLeave(){
   const nm=v=>String(v||'').toUpperCase().replace(/[^A-Z]/g,'');
   let err = r.code? r : (FORM.reason.trim().length<10? {code:'reason_short'} : (docRequired(ty,FORM.start) && !DOCS.length? {code:'doc_missing'}
     : FORM.hodName.trim().length<2? {code:'hod_name'} : FORM.hodPhone.replace(/\D/g,'').length<9? {code:'hod_phone'}
-    : !FORM.declared? {code:'no_declaration'} : null));
+    : !FORM.declared? {code:'no_declaration'} : (curLate()>0 && !FORM.lateAck)? {code:'late_ack'} : null));
   if(err){ showMsg('applyMsg','err',errText(err)); $('applyCard').scrollIntoView({behavior:'smooth'}); return; }
   const btn=$('submitBtn'); btn.disabled=true; btn.textContent=t('sending');
   try{
@@ -766,7 +802,7 @@ async function submitLeave(){
       if(res && res.code==='auth') return signOut(t('e_auth'));
       showMsg('applyMsg','err',errText(res||{code:'?'})); return;
     }
-    const sent={type:FORM.type, start_date:FORM.start, end_date:(halfAllowed(ty)&&FORM.half)?FORM.start:FORM.end, days:res.days, reason:FORM.reason.trim(), half:(halfAllowed(ty)&&FORM.half)||''};
+    const sent={type:FORM.type, start_date:FORM.start, end_date:(halfAllowed(ty)&&FORM.half)?FORM.start:FORM.end, days:res.days, reason:FORM.reason.trim(), half:(halfAllowed(ty)&&FORM.half)||'', late:res.late_notice||null};
     const keepHod={hodName:FORM.hodName, hodPhone:FORM.hodPhone, hodTouched:true};
     DOCS=[]; FORM=Object.assign(blankForm(), keepHod);
     SUP_SEND = res.superior? {id:res.id, name:res.superior.name, link:supWaLink(res.superior.phone, res.token, sent)} : null;
@@ -786,6 +822,7 @@ async function attachLater(id, files){
     const app=(DATA.apps||[]).find(a=>a.id===id); const start=Number(app&&app.docs)||0;
     const paths=await uploadDocs(id, got, start + Math.floor(Math.random()*5)*MAX_DOCS);
     const { data, error } = await sb.rpc('portal_attach_docs', {p_emp_no:CRED.emp_no, p_password:CRED.password, p_id:id, p_paths:paths});
+    if(data && data.code==='doc_deadline'){ await refresh(true); showMsg('topMsg','err',t('e_doc_deadline')); window.scrollTo({top:0,behavior:'smooth'}); return; }
     if(error || !data || !data.ok) throw error||new Error((data&&data.code)||'attach');
     await refresh(true); showMsg('topMsg','ok',t('docAdded')); window.scrollTo({top:0,behavior:'smooth'});
   }catch(e){ console.error(e); showMsg('topMsg','err',t('e_upload')); window.scrollTo({top:0,behavior:'smooth'}); }
