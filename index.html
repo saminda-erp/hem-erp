@@ -9406,6 +9406,15 @@ ACT['emp-import-confirm']=()=>{
    reconcile() is union-by-id and a deleted record would come back on the next merge.
    ============================================================ */
 const STAFF_TYPES = ['Permanent','Part-time','Contract','Intern'];
+const GRADES = ['Executive','Non-executive'];
+/* grouping used across the register: permanent staff split by grade, part-time on its own */
+const STAFF_GROUPS = [
+  {k:'exec',    t:'Permanent — Executive',     f:e=>(e.staffType||'')!=='Part-time' && e.grade==='Executive'},
+  {k:'nonexec', t:'Permanent — Non-executive', f:e=>(e.staffType||'')!=='Part-time' && e.grade==='Non-executive'},
+  {k:'parttime',t:'Part-time',                 f:e=>e.staffType==='Part-time'},
+  {k:'unclass', t:'Permanent — not yet classified', f:e=>(e.staffType||'')!=='Part-time' && !GRADES.includes(e.grade)}
+];
+function staffGroupOf(e){ return STAFF_GROUPS.find(g=>g.f(e)); }
 const LEAVE_SCOPES = [{v:'full',t:'Full leave (all types)'},{v:'mc_only',t:'MC / hospital / emergency only'},{v:'none',t:'No leave / no portal'}];
 function empWa(e){ return (e && (e.whatsapp || e.phone)) || ''; }
 function empActive(e){ return (e.status||'active')==='active'; }
@@ -9438,22 +9447,26 @@ function col(row, ...names){ const keys=Object.keys(row); for(const n of names){
 /* ---------- the tab ---------- */
 function staffTabHtml(){
   const all=S.employees||[];
-  const q=(F('sq','')||'').toLowerCase().trim(), ty=F('stype',''), dep=F('sdept',''), st=F('sstat','active');
+  const q=(F('sq','')||'').toLowerCase().trim(), ty=F('stype',''), dep=F('sdept',''), st=F('sstat','active'), grp=F('sgrp','');
   const depts=[...new Set(all.map(e=>e.department).filter(Boolean))].sort();
   const rows=sortBy(all.filter(e=>{
     if(st && (e.status||'active')!==st) return false;
     if(ty && (e.staffType||'')!==ty) return false;
+    if(grp && !(STAFF_GROUPS.find(g=>g.k===grp)||{f:()=>true}).f(e)) return false;
     if(dep && (e.department||'')!==dep) return false;
     if(q && ![e.empNo,e.attendanceId,e.name,e.department,e.position,e.phone,e.whatsapp,e.icNo].join(' ').toLowerCase().includes(q)) return false;
     return true; }),'name');
   const act=all.filter(empActive);
   const noWa=act.filter(e=>!waNumber(empWa(e))), noLogin=act.filter(e=>(e.leaveScope||'full')!=='none' && !e.portalLoginAt);
   let h=KPI([
-    {k:'Active employees', v:nf(act.length), d:nf(act.filter(e=>e.staffType==='Permanent').length)+' permanent · '+nf(act.filter(e=>e.staffType==='Part-time').length)+' part-time'},
+    {k:'Active employees', v:nf(act.length), d:STAFF_GROUPS.map(g=>{ const n=act.filter(g.f).length; return n? nf(n)+' '+(g.k==='exec'?'executive':g.k==='nonexec'?'non-executive':g.k==='parttime'?'part-time':'unclassified'):''; }).filter(Boolean).join(' · ')},
     {k:'No WhatsApp number', v:nf(noWa.length), d:noWa.length?'can\'t be messaged yet':'everyone reachable', cls:noWa.length?'warn':'ok'},
     {k:'No portal login', v:nf(noLogin.length), d:noLogin.length?'can\'t apply leave on phone yet':'all set', cls:noLogin.length?'warn':'ok'},
     {k:'Linked to attendance', v:nf(act.filter(e=>e.attendanceId).length)+' / '+nf(act.length), d:'iVMS Person ID on file'}
   ]);
+  h+='<div class="pillrow" style="margin:0 0 10px">'+[{k:'',t:'All'}].concat(STAFF_GROUPS).map(g=>{
+      const n=act.filter(e=>!g.f||g.f(e)).length; if(g.k==='unclass' && !n) return '';
+      return '<button class="chip'+(grp===g.k?' on':'')+'" data-chip="sgrp" data-val="'+g.k+'" type="button">'+esc(g.t)+' ('+nf(n)+')</button>'; }).join('')+'</div>';
   h+=filterBar([searchCtl('sq', F('sq',''), 'Search name, number, IC, phone…'),
     selCtl('stype', STAFF_TYPES, ty, 'All types'), selCtl('sdept', depts, dep, 'All departments'),
     selCtl('sstat', [{v:'active',t:'Active'},{v:'inactive',t:'Left / inactive'}], st, 'Any status')]);
@@ -9462,10 +9475,10 @@ function staffTabHtml(){
     +btn('Download employee list (.xlsx)','staff-export',null,'btn')+btn('Upload edited list (.xlsx)','staff-import-list',null,'btn')
     +btn('Leave taken so far (.xlsx)','leave-ob-export',null,'btn')+btn('Upload leave taken','leave-ob-import',null,'btn')
     +btn('WhatsApp a group','wa-group',null,'btn')+btn('Create portal logins','portal-logins',null,'btn')+'</div>';
-  h+=sect('Employees', T([
+  const COLS=[
     {h:'Emp No.', f:e=>'<b class="mono">'+esc(e.empNo)+'</b>'+(e.attendanceId?'<div class="sub mono" title="iVMS Person ID">att '+esc(e.attendanceId)+'</div>':'')},
     {h:'Name', f:e=>'<b>'+esc(e.name)+'</b><div class="sub">'+esc([e.gender, e.nationality].filter(Boolean).join(' · '))+'</div>'},
-    {h:'Type', f:e=>esc(e.staffType||'—')+'<div class="sub">'+esc(e.department||'')+(e.position?' · '+esc(e.position):'')+'</div>'},
+    {h:'Type', f:e=>esc(e.staffType||'—')+(e.staffType!=='Part-time' && e.grade?' · <b>'+esc(e.grade)+'</b>':'')+'<div class="sub">'+esc(e.department||'')+(e.position?' · '+esc(e.position):'')+'</div>'},
     {h:'WhatsApp', f:e=>{ const n=empWa(e); return n? '<span class="mono" style="font-size:12px">'+esc(n)+'</span>'+(waNumber(n)?'':'<div class="sub"><span class="tag t-bad">check number</span></div>') : '<span class="tag t-warn">missing</span>'; }},
     {h:'Leave', f:e=>{ const sc=e.leaveScope||'full';
       return '<span class="tag '+(sc==='full'?'t-ok':sc==='mc_only'?'t-info':'t-mute')+'">'+(sc==='full'?'full':sc==='mc_only'?'MC only':'none')+'</span>'
@@ -9473,7 +9486,16 @@ function staffTabHtml(){
     {h:'Portal', f:e=>(e.leaveScope||'full')==='none'? '<span class="sub">—</span>' : e.portalLoginAt? '<span class="tag t-ok">login set</span>' : '<span class="tag t-warn">no login</span>'},
     {h:'Status', f:e=>tag(empActive(e)?'active':'inactive')},
     {h:'', f:e=>(waNumber(empWa(e))?btn('WhatsApp','wa-msg',e.empNo,'btn sm primary'):'')+btn('Edit','emp-edit',e.empNo,'btn sm')+btn('Call to HR','leave-meet','emp:'+e.empNo,'btn sm')}
-  ], rows, {empty: all.length?'No employee matches — clear a filter.':'No employees yet — import from iVMS or add one.'}));
+  ];
+  const empty=all.length?'No employee matches — clear a filter.':'No employees yet — import from iVMS or add one.';
+  const groups = grp? STAFF_GROUPS.filter(g=>g.k===grp) : STAFF_GROUPS;
+  let shown=0;
+  groups.forEach(g=>{
+    const list=rows.filter(g.f); if(!list.length) return; shown+=list.length;
+    const cols = g.k==='unclass'? COLS.concat([{h:'Classify', f:e=>btn('Executive','emp-grade',e.empNo+'|Executive','btn sm')+btn('Non-exec','emp-grade',e.empNo+'|Non-executive','btn sm')}]) : COLS;
+    h+=sect(g.t+' ('+list.length+')', (g.k==='unclass'?'<div class="note" style="margin-bottom:8px">Classify each permanent employee as Executive or Non-executive.</div>':'')+T(cols, list));
+  });
+  if(!shown) h+=sect('Employees', T(COLS, [], {empty}));
   return h;
 }
 
@@ -9499,6 +9521,7 @@ function staffForm(e, isNew){
         {k:'emergencyPhone',label:'Emergency contact phone',type:'tel'}]},
       {legend:'Employment', fields:[
         {k:'staffType',label:'Staff type',type:'select',blank:false,opts:STAFF_TYPES},
+        {k:'grade',label:'Category (permanent staff)',type:'select',opts:GRADES,hint:'Executive or Non-executive. Not used for part-time.'},
         {k:'department',label:'Department',ph:'Production, Filling, QC…'},
         {k:'position',label:'Position'},
         {k:'joinDate',label:'Date joined',type:'date'},
@@ -9531,6 +9554,8 @@ function staffForm(e, isNew){
     }});
 }
 ACT['staff-new']=()=>staffForm(null,true);
+ACT['emp-grade']=arg=>{ const [no,g]=String(arg).split('|'); const e=(S.employees||[]).find(x=>x.empNo===no); if(!e||!GRADES.includes(g)) return;
+  e.grade=g; if(!e.staffType) e.staffType='Permanent'; logAudit('Employee classified', no, g); save(); render(); toast(e.name+' → '+g,'ok'); };
 ACT['emp-edit']=empNo=>{ const e=(S.employees||[]).find(x=>x.empNo===empNo); if(e) staffForm(clone(e), false); };
 ACT['emp-new']=ACT['staff-new'];
 
@@ -9587,7 +9612,7 @@ ACT['staff-import-ivms-confirm']=()=>{
 };
 
 /* ---------- employee list as Excel: download, edit, upload ---------- */
-const STAFF_COLS=[['Emp No','empNo',10],['Attendance ID','attendanceId',11],['Name','name',34],['Gender','gender',8],['Staff type','staffType',11],
+const STAFF_COLS=[['Emp No','empNo',10],['Attendance ID','attendanceId',11],['Name','name',34],['Gender','gender',8],['Staff type','staffType',11],['Category','grade',13],
   ['Department','department',14],['Position','position',16],['Mobile','phone',14],['WhatsApp','whatsapp',14],['Email','email',22],
   ['IC / Passport','icNo',16],['Nationality','nationality',12],['Date of birth','dob',12],['Date joined','joinDate',12],
   ['Annual leave days','annualEntitlement',10],['Leave access','leaveScope',12],['Emergency contact','emergencyName',18],
@@ -9601,6 +9626,7 @@ ACT['staff-export']=()=>{
       ['Emp No identifies the person — do not change it. A new Emp No adds a new employee.'],
       ['Mobile / WhatsApp: Malaysian numbers like 012-345 6789. Leave WhatsApp blank if it is the same as Mobile.'],
       ['Leave access: Full, MC only (part-time) or None.  Status: active or inactive.'],
+      ['Category (permanent staff only): Executive or Non-executive.'],
       ['Dates: YYYY-MM-DD.  Blank cells are ignored (they do not erase what is already in the system).']]}]);
 };
 function toIsoDate(v){ if(!v) return ''; if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
@@ -9617,6 +9643,7 @@ ACT['staff-import-list']=()=>pickXlsx((wb,fname)=>{
     STAFF_COLS.forEach(([hdr,key])=>{ if(key==='empNo') return; let v=col(r,hdr); if(v==='') return;
       if(key==='leaveScope') v=/mc/i.test(v)?'mc_only':/none|no/i.test(v)?'none':'full';
       if(key==='status') v=/inact|left|resign/i.test(v)?'inactive':'active';
+      if(key==='grade'){ v=/non/i.test(v)?'Non-executive':/exec/i.test(v)?'Executive':''; if(!v){ bad.push('Row '+(i+2)+' '+empNo+': Category must be Executive or Non-executive'); return; } }
       if(key==='dob'||key==='joinDate') v=toIsoDate(v);
       if(key==='name') v=v.toUpperCase();
       if(key==='annualEntitlement'){ v=Number(v); if(isNaN(v)){ bad.push('Row '+(i+2)+': annual leave days not a number'); return; } }
@@ -9740,14 +9767,14 @@ ACT['wa-group']=()=>{
   const depts=[...new Set(act.map(e=>e.department).filter(Boolean))].sort();
   formModal({title:'WhatsApp a group', values:{grp:'all', tpl:'', msg:''},
     fields:[{k:'grp',label:'Send to',type:'select',blank:false,full:true,opts:[{v:'all',t:'All active employees ('+act.length+')'},
-        {v:'type:Permanent',t:'Permanent staff'},{v:'type:Part-time',t:'Part-time staff'}].concat(depts.map(d=>({v:'dept:'+d,t:'Department: '+d})))},
+        {v:'type:Permanent',t:'Permanent staff'},{v:'grade:Executive',t:'Permanent — Executive'},{v:'grade:Non-executive',t:'Permanent — Non-executive'},{v:'type:Part-time',t:'Part-time staff'}].concat(depts.map(d=>({v:'dept:'+d,t:'Department: '+d})))},
       {k:'tpl',label:'Template',type:'select',blank:false,opts:WA_TEMPLATES.map(x=>({v:x.v,t:x.t})),full:true},
       {k:'msg',label:'Message',type:'textarea',rows:5,full:true,hint:'{name} is replaced with each person\'s name.'}],
     saveLabel:'Next',
     onSave:v=>{
       const m=String(v.msg||'').trim()||String(v.tpl||'').trim(); if(!m) return toast('Write a message or pick a template','bad');
       const g=v.grp||'all';
-      const list=sortBy(act.filter(e=> g==='all' || (g.startsWith('type:') && e.staffType===g.slice(5)) || (g.startsWith('dept:') && e.department===g.slice(5))),'name');
+      const list=sortBy(act.filter(e=> g==='all' || (g.startsWith('type:') && e.staffType===g.slice(5)) || (g.startsWith('grade:') && e.staffType!=='Part-time' && e.grade===g.slice(6)) || (g.startsWith('dept:') && e.department===g.slice(5))),'name');
       WA_GROUP={m, list, sent:new Set()};
       logAudit('WhatsApp group message prepared', g, list.length+' recipient(s): '+m.slice(0,60));
       save(); waGroupModal();
