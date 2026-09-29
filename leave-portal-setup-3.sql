@@ -18,3 +18,8 @@
 --       login_employee / set_employee_password now use bcrypt.
 --   * Storage bucket 'hem-leave-docs' (private, 10 MB, PDF/images): portal upload-only, staff read/delete.
 -- ============================================================
+
+-- ---- 2026-09-29 (later): migration "employee_leave_scope_entitlement" — ALREADY APPLIED ----
+--   hem_employees: leave_scope ('full' | 'mc_only' | 'none'), annual_entitlement (per person), staff_type.
+--   _allowed_types() / _entitlement(); portal_data lists only allowed types with the person's entitlement;
+--   portal_apply refuses other types ('not_allowed') and checks balance against the person's entitlement.

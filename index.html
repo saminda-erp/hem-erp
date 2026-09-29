@@ -4259,13 +4259,14 @@ function leaveBalance(empNo, year){
   return (S.leaveTypes||[]).map(lt=>{
     const taken=apps.filter(a=>a.type===lt.code).reduce((s,a)=>s+(Number(a.days)||0),0);
     const pending=pendingApps.filter(a=>a.type===lt.code).reduce((s,a)=>s+(Number(a.days)||0),0);
-    return {type:lt.code, name:lt.name, color:lt.color, entitlement:lt.defaultDays, taken, pending, balance:Math.max(0,lt.defaultDays-taken)};
+    const ent=(lt.code==='annual' && annualEntitlementOf(empNo)!=null)? annualEntitlementOf(empNo) : lt.defaultDays;
+    return {type:lt.code, name:lt.name, color:lt.color, entitlement:ent, taken, pending, balance:Math.max(0,ent-taken)};
   });
 }
 /* map of date -> array of {empNo,name,type,color} for calendar highlighting, one employee or all */
 function leaveDayMap(year, empNo){
   const map=new Map();
-  (S.leaveApplications||[]).filter(a=>a.year===year && a.status==='approved' && (!empNo||a.empNo===empNo)).forEach(a=>{
+  (S.leaveApplications||[]).filter(a=>a.year===year && a.status==='approved' && a.source!=='opening' && (!empNo||a.empNo===empNo)).forEach(a=>{
     datesInRange(a.start,a.end).forEach(d=>{
       const cur=map.get(d)||[]; cur.push({empNo:a.empNo, name:employee(a.empNo).name, type:a.type, color:leaveType(a.type).color});
       map.set(d,cur);
@@ -4275,13 +4276,14 @@ function leaveDayMap(year, empNo){
 }
 
 function V_people(){
-  const tab=F('ptab','training');
-  const tabs=[{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'},{k:'recruit',t:'Recruitment'}].map(x=>
+  const tab=F('ptab','staff');
+  const tabs=[{k:'staff',t:'Employees'},{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'},{k:'recruit',t:'Recruitment'}].map(x=>
     '<button class="chip'+(tab===x.k?' on':'')+'" data-chip="ptab" data-val="'+x.k+'" type="button">'+x.t
     +(x.k==='leave' && (S.leaveApplications||[]).filter(a=>a.status==='pending').length? ' ('+(S.leaveApplications||[]).filter(a=>a.status==='pending').length+')':'')
     +(x.k==='recruit' && (S.candidates||[]).filter(c=>c.status==='new').length? ' ('+(S.candidates||[]).filter(c=>c.status==='new').length+')':'')
     +'</button>').join('');
   if(tab==='leave') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+leaveTabHtml();
+  if(tab==='staff') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+staffTabHtml();
   if(tab==='recruit') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+recruitTabHtml();
   if(tab==='equipment'){
     const eq=S.equipment||[];
@@ -9208,21 +9210,6 @@ ACT['leave-docs']=id=>{
     }).join('')+'<div class="sub" style="margin-top:10px">Check the clinic/hospital name, dates and doctor\'s stamp match the leave dates. Links expire after 10 minutes.</div>';
   });
 };
-ACT['emp-edit']=empNo=>{
-  const e0=(S.employees||[]).find(x=>x.empNo===empNo); if(!e0) return;
-  formModal({title:'Employee — '+e0.name, values:{name:e0.name, department:e0.department||'', phone:e0.phone||'', status:e0.status||'active'},
-    fields:[{k:'name',label:'Name',req:true,full:true},{k:'department',label:'Department'},{k:'phone',label:'Mobile (for WhatsApp)',type:'tel',ph:'012-345 6789'},
-      {k:'status',label:'Status',type:'select',blank:false,opts:[{v:'active',t:'Active'},{v:'inactive',t:'Left / inactive (portal login blocked)'}]}],
-    saveLabel:'Save',
-    onSave:v=>{
-      if(!String(v.name||'').trim()) return toast('Name is required','bad');
-      if(v.phone && !waNumber(v.phone)) return toast('Mobile number looks wrong','bad');
-      const e=(S.employees||[]).find(x=>x.empNo===empNo); if(!e) return false;
-      Object.assign(e,{name:v.name.trim(), department:v.department||'', phone:(v.phone||'').trim(), status:v.status||'active'});
-      logAudit('Employee updated', empNo, ''); save(); toast('Saved','ok');
-      pushEmployeesToPortal([empNo]);
-    }});
-};
 
 /* ============================================================
    EMPLOYEE LEAVE PORTAL — bridges the local leave records above to the separate
@@ -9293,15 +9280,19 @@ function pushLeaveStatusToPortal(l){
 }
 /* bulk push — used by Add employee, batch imports, and the Resync-everything button. Pass
    null for empNos/ids to push everything on file, or an array to push just what changed. */
-function pushEmployeesToPortal(empNos){
-  if(!window.HEM_AUTH) return;
+function pushEmployeesToPortal(empNos, quiet){
+  if(!window.HEM_AUTH) return Promise.resolve(false);
   const list=(S.employees||[]).filter(e=>!empNos||empNos.includes(e.empNo))
-    .map(e=>({emp_no:e.empNo, name:e.name, department:e.department||'', status:e.status||'active'}));
-  if(!list.length) return;
-  window.HEM_AUTH.from('hem_employees').upsert(list, {onConflict:'emp_no'}).then(({error})=>{
-    if(error) toast('Saved here, but the portal sync failed — '+error.message,'warn');
-    else toast(list.length+' employee(s) synced to the portal','ok');
-  });
+    .map(e=>({emp_no:e.empNo, name:e.name, department:e.department||'', status:e.status||'active',
+      leave_scope:e.leaveScope||'full', staff_type:e.staffType||null,
+      annual_entitlement:(e.annualEntitlement===''||e.annualEntitlement==null||isNaN(Number(e.annualEntitlement)))? null : Number(e.annualEntitlement)}));
+  if(!list.length) return Promise.resolve(true);
+  try{
+    return window.HEM_AUTH.from('hem_employees').upsert(list, {onConflict:'emp_no'}).then(({error})=>{
+      if(error){ toast('Saved here, but the portal sync failed — '+error.message,'warn'); return false; }
+      if(!quiet) toast(list.length+' employee(s) synced to the portal','ok'); return true;
+    }, ()=>false);
+  }catch(e){ return Promise.resolve(false); }
 }
 function pushLeaveAppsToPortal(ids){
   if(!window.HEM_AUTH) return;
@@ -9398,6 +9389,438 @@ ACT['emp-import-confirm']=()=>{
   const imported=new Set(rows.map(r=>r.empNo));
   pushLeaveAppsToPortal((S.leaveApplications||[]).filter(a=>imported.has(a.empNo)).map(a=>a.id));
   PENDING_EMP_IMPORT=null;
+};
+
+/* ============================================================
+   EMPLOYEE REGISTER (HR → Employees) — 2026-09-29
+   ------------------------------------------------------------
+   One record per person in S.employees. empNo stays the HR/payroll number already used by the
+   leave history (00093, P-0012, F-0050 …); attendanceId is the iVMS-4200 Person ID (1001…,
+   2001…) kept for linking attendance / OT / payroll later. People who only exist in iVMS get
+   their Person ID as empNo.
+   leaveScope: 'full' | 'mc_only' (part-time: MC, hospitalisation, emergency only) | 'none' —
+   pushed to hem_employees and enforced by portal_apply() on the server.
+   annualEntitlement: per-person annual leave days (blank = leave type default).
+   Leave "taken before the system" is held as one opening-balance record per person/type/year
+   (source:'opening', id OB-<year>-<empNo>-<type>) — updated in place, never deleted, because
+   reconcile() is union-by-id and a deleted record would come back on the next merge.
+   ============================================================ */
+const STAFF_TYPES = ['Permanent','Part-time','Contract','Intern'];
+const LEAVE_SCOPES = [{v:'full',t:'Full leave (all types)'},{v:'mc_only',t:'MC / hospital / emergency only'},{v:'none',t:'No leave / no portal'}];
+function empWa(e){ return (e && (e.whatsapp || e.phone)) || ''; }
+function empActive(e){ return (e.status||'active')==='active'; }
+function annualEntitlementOf(empNo){ const e=(S.employees||[]).find(x=>x.empNo===empNo);
+  return e && e.annualEntitlement!==undefined && e.annualEntitlement!==null && e.annualEntitlement!=='' ? Number(e.annualEntitlement) : null; }
+function portalUrl(){ return location.origin+location.pathname.replace(/index\.html$/,'').replace(/[^/]*$/,'')+'leave-portal.html'; }
+function scopeLabel(s){ return (LEAVE_SCOPES.find(x=>x.v===(s||'full'))||LEAVE_SCOPES[0]).t; }
+function normName(n){ return String(n||'').toUpperCase().replace(/[^A-Z ]/g,' ').split(/\s+/).filter(Boolean)
+  .map(w=>w==='BINTI'?'BT':w==='BIN'?'B':w==='AP'||w==='AL'?'':w).filter(w=>w && w!=='SK').join(' '); }
+function nameSim(a,b){ a=normName(a); b=normName(b); if(!a||!b) return 0; if(a===b) return 1;
+  const bg=s=>{ const o=new Map(); for(let i=0;i<s.length-1;i++){ const k=s.slice(i,i+2); o.set(k,(o.get(k)||0)+1); } return o; };
+  const A=bg(a), B=bg(b); let inter=0; A.forEach((v,k)=>{ inter+=Math.min(v,B.get(k)||0); });
+  return 2*inter/((a.length-1)+(b.length-1)); }
+function xlsxDownload(filename, sheets){
+  const wb=XLSX.utils.book_new();
+  sheets.forEach(sh=>{ const ws=XLSX.utils.aoa_to_sheet(sh.rows); if(sh.cols) ws['!cols']=sh.cols.map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb, ws, sh.name); });
+  XLSX.writeFile(wb, filename);
+}
+function pickXlsx(cb){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.xlsx,.xls,.csv';
+  inp.onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
+    try{ const wb=XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true}); cb(wb, f.name); }
+    catch(err){ toast('Could not read that file: '+err.message,'bad'); } };
+  inp.click();
+}
+function sheetRows(wb){ const ws=wb.Sheets[wb.SheetNames[0]]; return XLSX.utils.sheet_to_json(ws, {defval:'', raw:false}); }
+function col(row, ...names){ const keys=Object.keys(row); for(const n of names){
+  const k=keys.find(k=>k.replace(/^\*/,'').trim().toLowerCase()===n.toLowerCase()); if(k!=null && String(row[k]).trim()!=='') return String(row[k]).trim(); } return ''; }
+
+/* ---------- the tab ---------- */
+function staffTabHtml(){
+  const all=S.employees||[];
+  const q=(F('sq','')||'').toLowerCase().trim(), ty=F('stype',''), dep=F('sdept',''), st=F('sstat','active');
+  const depts=[...new Set(all.map(e=>e.department).filter(Boolean))].sort();
+  const rows=sortBy(all.filter(e=>{
+    if(st && (e.status||'active')!==st) return false;
+    if(ty && (e.staffType||'')!==ty) return false;
+    if(dep && (e.department||'')!==dep) return false;
+    if(q && ![e.empNo,e.attendanceId,e.name,e.department,e.position,e.phone,e.whatsapp,e.icNo].join(' ').toLowerCase().includes(q)) return false;
+    return true; }),'name');
+  const act=all.filter(empActive);
+  const noWa=act.filter(e=>!waNumber(empWa(e))), noLogin=act.filter(e=>(e.leaveScope||'full')!=='none' && !e.portalLoginAt);
+  let h=KPI([
+    {k:'Active employees', v:nf(act.length), d:nf(act.filter(e=>e.staffType==='Permanent').length)+' permanent · '+nf(act.filter(e=>e.staffType==='Part-time').length)+' part-time'},
+    {k:'No WhatsApp number', v:nf(noWa.length), d:noWa.length?'can\'t be messaged yet':'everyone reachable', cls:noWa.length?'warn':'ok'},
+    {k:'No portal login', v:nf(noLogin.length), d:noLogin.length?'can\'t apply leave on phone yet':'all set', cls:noLogin.length?'warn':'ok'},
+    {k:'Linked to attendance', v:nf(act.filter(e=>e.attendanceId).length)+' / '+nf(act.length), d:'iVMS Person ID on file'}
+  ]);
+  h+=filterBar([searchCtl('sq', F('sq',''), 'Search name, number, IC, phone…'),
+    selCtl('stype', STAFF_TYPES, ty, 'All types'), selCtl('sdept', depts, dep, 'All departments'),
+    selCtl('sstat', [{v:'active',t:'Active'},{v:'inactive',t:'Left / inactive'}], st, 'Any status')]);
+  h+='<div class="pillrow" style="margin:0 0 12px">'
+    +btn('Add employee','staff-new',null,'btn primary')+btn('Import from iVMS (.xlsx)','staff-import-ivms',null,'btn')
+    +btn('Download employee list (.xlsx)','staff-export',null,'btn')+btn('Upload edited list (.xlsx)','staff-import-list',null,'btn')
+    +btn('Leave taken so far (.xlsx)','leave-ob-export',null,'btn')+btn('Upload leave taken','leave-ob-import',null,'btn')
+    +btn('WhatsApp a group','wa-group',null,'btn')+btn('Create portal logins','portal-logins',null,'btn')+'</div>';
+  h+=sect('Employees', T([
+    {h:'Emp No.', f:e=>'<b class="mono">'+esc(e.empNo)+'</b>'+(e.attendanceId?'<div class="sub mono" title="iVMS Person ID">att '+esc(e.attendanceId)+'</div>':'')},
+    {h:'Name', f:e=>'<b>'+esc(e.name)+'</b><div class="sub">'+esc([e.gender, e.nationality].filter(Boolean).join(' · '))+'</div>'},
+    {h:'Type', f:e=>esc(e.staffType||'—')+'<div class="sub">'+esc(e.department||'')+(e.position?' · '+esc(e.position):'')+'</div>'},
+    {h:'WhatsApp', f:e=>{ const n=empWa(e); return n? '<span class="mono" style="font-size:12px">'+esc(n)+'</span>'+(waNumber(n)?'':'<div class="sub"><span class="tag t-bad">check number</span></div>') : '<span class="tag t-warn">missing</span>'; }},
+    {h:'Leave', f:e=>{ const sc=e.leaveScope||'full';
+      return '<span class="tag '+(sc==='full'?'t-ok':sc==='mc_only'?'t-info':'t-mute')+'">'+(sc==='full'?'full':sc==='mc_only'?'MC only':'none')+'</span>'
+        +(annualEntitlementOf(e.empNo)!=null?'<div class="sub">'+nf(annualEntitlementOf(e.empNo))+' d annual</div>':''); }},
+    {h:'Portal', f:e=>(e.leaveScope||'full')==='none'? '<span class="sub">—</span>' : e.portalLoginAt? '<span class="tag t-ok">login set</span>' : '<span class="tag t-warn">no login</span>'},
+    {h:'Status', f:e=>tag(empActive(e)?'active':'inactive')},
+    {h:'', f:e=>(waNumber(empWa(e))?btn('WhatsApp','wa-msg',e.empNo,'btn sm primary'):'')+btn('Edit','emp-edit',e.empNo,'btn sm')+btn('Call to HR','leave-meet','emp:'+e.empNo,'btn sm')}
+  ], rows, {empty: all.length?'No employee matches — clear a filter.':'No employees yet — import from iVMS or add one.'}));
+  return h;
+}
+
+/* ---------- add / edit (full profile) ---------- */
+function staffForm(e, isNew){
+  const v=Object.assign({staffType:'Permanent', leaveScope:'full', status:'active', nationality:'', gender:''}, e||{});
+  formModal({title:isNew?'Add employee':'Employee — '+v.name, wide:true, values:v,
+    groups:[
+      {legend:'Identity', fields:[
+        {k:'empNo',label:'Employee no.',req:true, hint:isNew?'HR / payroll number. Cannot be changed later.':'Cannot be changed.'},
+        {k:'attendanceId',label:'Attendance ID (iVMS Person ID)'},
+        {k:'name',label:'Full name (as IC / passport)',req:true,full:true},
+        {k:'gender',label:'Gender',type:'select',opts:['Female','Male']},
+        {k:'nationality',label:'Nationality',ph:'Malaysian'},
+        {k:'icNo',label:'IC / passport no.'},
+        {k:'dob',label:'Date of birth',type:'date'}]},
+      {legend:'Contact', fields:[
+        {k:'phone',label:'Mobile',type:'tel',ph:'012-345 6789'},
+        {k:'whatsapp',label:'WhatsApp (if different)',type:'tel',hint:'Leave blank if the same as mobile.'},
+        {k:'email',label:'Email',type:'email'},
+        {k:'address',label:'Home address',type:'textarea',rows:2,full:true},
+        {k:'emergencyName',label:'Emergency contact name'},
+        {k:'emergencyPhone',label:'Emergency contact phone',type:'tel'}]},
+      {legend:'Employment', fields:[
+        {k:'staffType',label:'Staff type',type:'select',blank:false,opts:STAFF_TYPES},
+        {k:'department',label:'Department',ph:'Production, Filling, QC…'},
+        {k:'position',label:'Position'},
+        {k:'joinDate',label:'Date joined',type:'date'},
+        {k:'leaveScope',label:'Leave & portal access',type:'select',blank:false,opts:LEAVE_SCOPES},
+        {k:'annualEntitlement',label:'Annual leave days / year',type:'number',step:'0.5',hint:'Blank = company default ('+nf(leaveType('annual').defaultDays)+').'},
+        {k:'status',label:'Status',type:'select',blank:false,opts:[{v:'active',t:'Active'},{v:'inactive',t:'Left / inactive (portal login blocked)'}]},
+        {k:'notes',label:'Notes',type:'textarea',rows:2,full:true}]}
+    ],
+    after: isNew? '' : '<div class="sub" style="margin-top:8px">Payroll and overtime fields will be added when those modules are connected — the Attendance ID is what links this person to iVMS.</div>',
+    saveLabel:isNew?'Add employee':'Save',
+    onSave:x=>{
+      x.empNo=String(x.empNo||'').trim(); x.name=String(x.name||'').trim().toUpperCase();
+      if(!x.empNo||!x.name) return toast('Employee no. and name are required','bad');
+      for(const k of ['phone','whatsapp','emergencyPhone']) if(x[k] && !waNumber(x[k])) return toast('Check the '+(k==='whatsapp'?'WhatsApp':k==='phone'?'mobile':'emergency')+' number','bad');
+      if(x.attendanceId && (S.employees||[]).some(o=>o.attendanceId===String(x.attendanceId).trim() && o.empNo!==(isNew?'':e.empNo)))
+        return toast('That attendance ID already belongs to someone else','bad');
+      if(x.annualEntitlement===null) x.annualEntitlement='';
+      if(isNew){
+        if((S.employees||[]).some(o=>o.empNo===x.empNo)) return toast('That employee number already exists','bad');
+        S.employees.push(Object.assign({id:'EMP-'+x.empNo}, x, {attendanceId:String(x.attendanceId||'').trim()}));
+        logAudit('Employee added', x.empNo, x.name);
+      }else{
+        const cur=(S.employees||[]).find(o=>o.empNo===e.empNo);          // fresh lookup — see cand-outcome
+        if(!cur) return toast('Employee no longer exists','bad');
+        delete x.empNo; Object.assign(cur, x, {attendanceId:String(x.attendanceId||'').trim()});
+        logAudit('Employee updated', cur.empNo, '');
+      }
+      save(); toast('Saved','ok');
+      pushEmployeesToPortal([isNew? x.empNo : e.empNo]);
+    }});
+}
+ACT['staff-new']=()=>staffForm(null,true);
+ACT['emp-edit']=empNo=>{ const e=(S.employees||[]).find(x=>x.empNo===empNo); if(e) staffForm(clone(e), false); };
+ACT['emp-new']=ACT['staff-new'];
+
+/* ---------- import from the iVMS-4200 person export ---------- */
+let STAFF_IMPORT=null;
+ACT['staff-import-ivms']=()=>pickXlsx((wb, fname)=>{
+  const rows=sheetRows(wb);
+  if(!rows.length || !rows[0] || !Object.keys(rows[0]).some(k=>/person id/i.test(k)))
+    return toast('That doesn\'t look like the iVMS person export (needs a "Person ID" column)','bad');
+  const emps=S.employees||[], seenNames=new Map(), plan=[];
+  rows.forEach(r=>{
+    const pid=col(r,'Person ID'), name=col(r,'Person Name').toUpperCase(), org=col(r,'Organization'), g=col(r,'Gender'), phone=col(r,'Contact'), email=col(r,'Email');
+    if(!pid||!name) return;
+    const staffType=/part/i.test(org)?'Part-time':/contract/i.test(org)?'Contract':'Permanent';
+    const gender= g==='1'||/^m/i.test(g)?'Male': g==='2'||/^f/i.test(g)?'Female':'';
+    const nk=normName(name);
+    if(seenNames.has(nk)){ plan.push({pid,name,staffType,action:'dup',note:'same name as '+seenNames.get(nk)+' in this file — skipped'}); return; }
+    seenNames.set(nk,pid);
+    let match=emps.find(e=>e.attendanceId===pid), how='attendance ID';
+    if(!match){ let best=null, sc=0; emps.forEach(e=>{ const s=nameSim(e.name,name); if(s>sc){ sc=s; best=e; } });
+      if(best && sc>=0.9 && !best.attendanceId){ match=best; how=sc===1?'same name':'similar name ('+Math.round(sc*100)+'%)'; } }
+    plan.push({pid,name,staffType,gender,phone,email, action:match?'link':'new', empNo:match?match.empNo:pid, erpName:match?match.name:'', how});
+  });
+  const inErpOnly=emps.filter(e=>empActive(e) && !e.attendanceId && !plan.some(p=>p.action==='link' && p.empNo===e.empNo));
+  STAFF_IMPORT=plan;
+  modal('Import from iVMS — '+esc(fname),
+    '<div class="note" style="margin-bottom:10px">'+nf(plan.filter(p=>p.action==='link').length)+' matched to existing employees (their leave history stays with them) · '
+      +nf(plan.filter(p=>p.action==='new').length)+' new · '+nf(plan.filter(p=>p.action==='dup').length)+' duplicate(s) skipped. '
+      +'Part-time staff get <b>MC / hospital / emergency only</b> leave access; permanent staff get full leave. Nothing is saved until you confirm.</div>'
+    +T([{h:'iVMS ID', f:p=>'<span class="mono">'+esc(p.pid)+'</span>'},{h:'Name', f:p=>esc(p.name)},{h:'Type', f:p=>esc(p.staffType)},
+        {h:'Action', f:p=>p.action==='link'? '<span class="tag t-ok">link to '+esc(p.empNo)+'</span><div class="sub">'+esc(p.erpName)+' · '+esc(p.how)+'</div>'
+          : p.action==='new'? '<span class="tag t-info">new — emp no. '+esc(p.empNo)+'</span>' : '<span class="tag t-warn">skip</span><div class="sub">'+esc(p.note)+'</div>'}], plan)
+    +(inErpOnly.length? '<div class="banner warn" style="margin-top:10px">In the ERP but not in this iVMS file (left unchanged, still active): '+inErpOnly.map(e=>esc(e.name)+' ('+esc(e.empNo)+')').join(', ')+'</div>':''),
+    btn('Confirm import','staff-import-ivms-confirm',null,'btn primary'), true);
+});
+ACT['staff-import-ivms-confirm']=()=>{
+  const plan=STAFF_IMPORT; if(!plan) return;
+  let linked=0, added=0; const touched=[];
+  plan.forEach(p=>{
+    if(p.action==='link'){ const e=(S.employees||[]).find(x=>x.empNo===p.empNo); if(!e) return;
+      e.attendanceId=p.pid; if(!e.staffType) e.staffType=p.staffType; if(!e.gender && p.gender) e.gender=p.gender;
+      if(!e.phone && p.phone) e.phone=p.phone; if(!e.email && p.email) e.email=p.email;
+      if(!e.leaveScope) e.leaveScope = p.staffType==='Part-time'?'mc_only':'full';
+      linked++; touched.push(e.empNo); }
+    else if(p.action==='new' && !(S.employees||[]).some(x=>x.empNo===p.empNo)){
+      S.employees.push({id:'EMP-'+p.empNo, empNo:p.empNo, attendanceId:p.pid, name:p.name, gender:p.gender||'', staffType:p.staffType,
+        department:'', phone:p.phone||'', email:p.email||'', leaveScope:p.staffType==='Part-time'?'mc_only':'full', status:'active'});
+      added++; touched.push(p.empNo); }
+  });
+  logAudit('Employees imported from iVMS', '', linked+' linked, '+added+' added');
+  STAFF_IMPORT=null; save(); closeModal(); render();
+  toast(linked+' linked · '+added+' added','ok');
+  pushEmployeesToPortal(touched);
+};
+
+/* ---------- employee list as Excel: download, edit, upload ---------- */
+const STAFF_COLS=[['Emp No','empNo',10],['Attendance ID','attendanceId',11],['Name','name',34],['Gender','gender',8],['Staff type','staffType',11],
+  ['Department','department',14],['Position','position',16],['Mobile','phone',14],['WhatsApp','whatsapp',14],['Email','email',22],
+  ['IC / Passport','icNo',16],['Nationality','nationality',12],['Date of birth','dob',12],['Date joined','joinDate',12],
+  ['Annual leave days','annualEntitlement',10],['Leave access','leaveScope',12],['Emergency contact','emergencyName',18],
+  ['Emergency phone','emergencyPhone',14],['Address','address',30],['Status','status',9],['Notes','notes',20]];
+const SCOPE_TXT={full:'Full', mc_only:'MC only', none:'None'};
+ACT['staff-export']=()=>{
+  const rows=[STAFF_COLS.map(c=>c[0])].concat(sortBy(S.employees||[],'name').map(e=>STAFF_COLS.map(c=>{
+    const v=e[c[1]]; return c[1]==='leaveScope'? SCOPE_TXT[v||'full'] : (v==null?'':v); })));
+  xlsxDownload('HE-Employees-'+today()+'.xlsx', [{name:'Employees', rows, cols:STAFF_COLS.map(c=>c[2])},
+    {name:'How to use', rows:[['Edit the Employees sheet and upload it back with "Upload edited list".'],
+      ['Emp No identifies the person — do not change it. A new Emp No adds a new employee.'],
+      ['Mobile / WhatsApp: Malaysian numbers like 012-345 6789. Leave WhatsApp blank if it is the same as Mobile.'],
+      ['Leave access: Full, MC only (part-time) or None.  Status: active or inactive.'],
+      ['Dates: YYYY-MM-DD.  Blank cells are ignored (they do not erase what is already in the system).']]}]);
+};
+function toIsoDate(v){ if(!v) return ''; if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  const s=String(v).trim(); let m=/^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s); if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  m=/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/.exec(s); if(m){ const y=m[3].length===2?'20'+m[3]:m[3]; return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'); }
+  return s; }
+ACT['staff-import-list']=()=>pickXlsx((wb,fname)=>{
+  const rows=sheetRows(wb); if(!rows.length || !col(rows[0],'Emp No') && !Object.keys(rows[0]).some(k=>/emp no/i.test(k)))
+    return toast('Use the file from "Download employee list" (needs an "Emp No" column)','bad');
+  const plan=[], bad=[];
+  rows.forEach((r,i)=>{
+    const empNo=col(r,'Emp No'); if(!empNo) return;
+    const upd={};
+    STAFF_COLS.forEach(([hdr,key])=>{ if(key==='empNo') return; let v=col(r,hdr); if(v==='') return;
+      if(key==='leaveScope') v=/mc/i.test(v)?'mc_only':/none|no/i.test(v)?'none':'full';
+      if(key==='status') v=/inact|left|resign/i.test(v)?'inactive':'active';
+      if(key==='dob'||key==='joinDate') v=toIsoDate(v);
+      if(key==='name') v=v.toUpperCase();
+      if(key==='annualEntitlement'){ v=Number(v); if(isNaN(v)){ bad.push('Row '+(i+2)+': annual leave days not a number'); return; } }
+      if((key==='phone'||key==='whatsapp'||key==='emergencyPhone') && !waNumber(v)){ bad.push('Row '+(i+2)+' '+empNo+': '+hdr+' "'+v+'" looks wrong — skipped'); return; }
+      upd[key]=v; });
+    const ex=(S.employees||[]).find(e=>e.empNo===empNo);
+    const changes=ex? Object.keys(upd).filter(k=>String(ex[k]==null?'':ex[k])!==String(upd[k])) : Object.keys(upd);
+    if(!ex && !upd.name){ bad.push('Row '+(i+2)+': new employee '+empNo+' has no name — skipped'); return; }
+    if(ex && !changes.length) return;
+    plan.push({empNo, upd, isNew:!ex, changes});
+  });
+  STAFF_IMPORT=plan;
+  modal('Upload employee list — '+esc(fname),
+    (plan.length? T([{h:'Emp No', f:p=>'<span class="mono">'+esc(p.empNo)+'</span>'},{h:'Name', f:p=>esc(p.upd.name||employee(p.empNo).name)},
+      {h:'Change', f:p=>p.isNew?'<span class="tag t-info">new employee</span>':'<span class="sub">'+esc(p.changes.map(k=>(STAFF_COLS.find(c=>c[1]===k)||[k])[0]).join(', '))+'</span>'}], plan)
+      : '<div class="note">No changes found — the file matches what is already in the system.</div>')
+    +(bad.length?'<div class="banner warn" style="margin-top:10px">'+bad.map(esc).join('<br>')+'</div>':''),
+    plan.length? btn('Apply '+plan.length+' change(s)','staff-import-list-confirm',null,'btn primary'):'', true);
+});
+ACT['staff-import-list-confirm']=()=>{
+  const plan=STAFF_IMPORT; if(!plan) return;
+  plan.forEach(p=>{ const ex=(S.employees||[]).find(e=>e.empNo===p.empNo);
+    if(ex) Object.assign(ex, p.upd);
+    else S.employees.push(Object.assign({id:'EMP-'+p.empNo, empNo:p.empNo, status:'active', leaveScope:'full'}, p.upd)); });
+  logAudit('Employee list uploaded', '', plan.length+' change(s)');
+  STAFF_IMPORT=null; save(); closeModal(); render(); toast(plan.length+' change(s) applied','ok');
+  pushEmployeesToPortal(plan.map(p=>p.empNo));
+};
+
+/* ---------- leave taken so far: download figures, correct them, upload ---------- */
+const OB_TYPES=['annual','medical','hospitalization','emergency','unpaid','timeoff'];
+function takenExOpening(empNo, type, year){ return (S.leaveApplications||[]).filter(a=>a.empNo===empNo && a.type===type && a.year===year
+  && a.status==='approved' && a.source!=='opening').reduce((s,a)=>s+(Number(a.days)||0),0); }
+function openingRec(empNo,type,year){ return (S.leaveApplications||[]).find(a=>a.id==='OB-'+year+'-'+empNo+'-'+type); }
+ACT['leave-ob-export']=()=>{
+  const yr=new Date().getFullYear(), types=OB_TYPES.map(c=>leaveType(c));
+  const head=['Emp No','Name','Staff type','Annual entitlement'].concat(types.map(t=>t.name+' taken'));
+  const rows=[head].concat(sortBy((S.employees||[]).filter(empActive),'name').map(e=>[e.empNo, e.name, e.staffType||'',
+    annualEntitlementOf(e.empNo)!=null? annualEntitlementOf(e.empNo) : leaveType('annual').defaultDays]
+    .concat(OB_TYPES.map(c=>{ const b=leaveBalance(e.empNo,yr).find(x=>x.type===c); return b? b.taken : 0; }))));
+  xlsxDownload('HE-Leave-Taken-'+yr+'-as-at-'+today()+'.xlsx', [{name:'Leave taken '+yr, rows, cols:[10,34,11,12].concat(types.map(()=>14))},
+    {name:'How to use', rows:[['These are the leave days the system has recorded as TAKEN in '+yr+', as at '+today()+'.'],
+      ['Correct any figure to the true total taken so far this year and upload the file back with "Upload leave taken".'],
+      ['The system records the difference as a "brought forward" adjustment — existing leave records are not changed.'],
+      ['You can also change Annual entitlement (days per year) per person here.'],
+      ['New leave approved from now on is added automatically — no need to upload again.']]}]);
+};
+let OB_PENDING=null;
+ACT['leave-ob-import']=()=>pickXlsx((wb,fname)=>{
+  const yr=new Date().getFullYear(), rows=sheetRows(wb); const plan=[], bad=[];
+  if(!rows.length || !Object.keys(rows[0]).some(k=>/emp no/i.test(k))) return toast('Use the file from "Leave taken so far" (needs an "Emp No" column)','bad');
+  rows.forEach((r,i)=>{
+    const empNo=col(r,'Emp No'); if(!empNo) return;
+    const e=(S.employees||[]).find(x=>x.empNo===empNo); if(!e){ bad.push('Row '+(i+2)+': employee '+empNo+' not found'); return; }
+    const ent=col(r,'Annual entitlement');
+    if(ent!=='' && !isNaN(Number(ent)) && Number(ent)!==(annualEntitlementOf(empNo)!=null?annualEntitlementOf(empNo):leaveType('annual').defaultDays))
+      plan.push({empNo, kind:'ent', value:Number(ent)});
+    OB_TYPES.forEach(c=>{ const v=col(r, leaveType(c).name+' taken'); if(v==='') return;
+      const want=Number(v); if(isNaN(want)||want<0){ bad.push('Row '+(i+2)+' '+empNo+': "'+v+'" is not a number of days'); return; }
+      const base=takenExOpening(empNo,c,yr), ob=openingRec(empNo,c,yr), cur=base+(ob?Number(ob.days)||0:0);
+      if(Math.abs(want-cur)>1e-9) plan.push({empNo, kind:'ob', type:c, want, base, delta:want-base, cur}); });
+  });
+  OB_PENDING={plan, yr};
+  modal('Upload leave taken — '+esc(fname),
+    (plan.length? T([{h:'Employee', f:p=>'<b>'+esc(employee(p.empNo).name)+'</b><div class="sub mono">'+esc(p.empNo)+'</div>'},
+      {h:'What', f:p=>p.kind==='ent'?'Annual entitlement':esc(leaveType(p.type).name)+' taken'},
+      {h:'Now', c:'num', f:p=>p.kind==='ent'? nf(annualEntitlementOf(p.empNo)!=null?annualEntitlementOf(p.empNo):leaveType('annual').defaultDays,1) : nf(p.cur,1)},
+      {h:'New', c:'num', f:p=>'<b>'+nf(p.kind==='ent'?p.value:p.want,1)+'</b>'},
+      {h:'Recorded as', f:p=>p.kind==='ent'?'<span class="sub">per-person entitlement</span>':'<span class="sub">brought-forward '+(p.delta>=0?'+':'')+nf(p.delta,1)+' d on top of '+nf(p.base,1)+' d of records</span>'}], plan)
+      : '<div class="note">Nothing to change — every figure already matches.</div>')
+    +(bad.length?'<div class="banner warn" style="margin-top:10px">'+bad.map(esc).join('<br>')+'</div>':''),
+    plan.length? btn('Apply '+plan.length+' change(s)','leave-ob-confirm',null,'btn primary'):'', true);
+});
+ACT['leave-ob-confirm']=()=>{
+  if(!OB_PENDING) return; const {plan, yr}=OB_PENDING; const ids=[], emps=new Set();
+  plan.forEach(p=>{
+    if(p.kind==='ent'){ const e=(S.employees||[]).find(x=>x.empNo===p.empNo); if(e){ e.annualEntitlement=p.value; emps.add(e.empNo); } return; }
+    const id='OB-'+yr+'-'+p.empNo+'-'+p.type; let r=openingRec(p.empNo,p.type,yr);
+    if(!r){ r={id, empNo:p.empNo, type:p.type, start:yr+'-01-01', end:yr+'-01-01', year:yr, status:'approved', source:'opening',
+      appliedAt:today(), appliedBy:UI.user||'', approvedBy:UI.user||'', approvedAt:today()}; S.leaveApplications.push(r); }
+    r.days=Math.round(p.delta*100)/100; r.paid=leaveType(p.type).paid!==false;
+    r.reason='Brought forward — taken before the system, as at '+today()+' (total '+nf(p.want,1)+' d)';
+    ids.push(id);
+  });
+  logAudit('Leave taken uploaded', '', plan.length+' change(s) for '+yr);
+  OB_PENDING=null; save(); closeModal(); render(); toast(plan.length+' change(s) applied — balances updated','ok');
+  if(emps.size) pushEmployeesToPortal([...emps]);
+  if(ids.length) pushLeaveAppsToPortal(ids);
+};
+
+/* ---------- WhatsApp: one person, or a group ---------- */
+const WA_TEMPLATES=[
+  {v:'', t:'Write my own'},
+  {v:'Reminder: please clock in on time tomorrow. / Peringatan: sila punch in tepat pada masanya esok.', t:'Punctuality reminder'},
+  {v:'Notice: your shift has changed. Please check with your supervisor. / Notis: syif anda telah berubah. Sila semak dengan penyelia.', t:'Shift change'},
+  {v:'Please come to the HR office today. / Sila datang ke pejabat HR hari ini.', t:'Come to HR'},
+  {v:'Reminder: factory closed on the coming public holiday. / Peringatan: kilang ditutup pada cuti umum akan datang.', t:'Public holiday'}
+];
+function waCompose(title, intro, onSend){
+  formModal({title, intro, values:{tpl:'', msg:''},
+    fields:[{k:'tpl',label:'Template',type:'select',blank:false,opts:WA_TEMPLATES.map(x=>({v:x.v,t:x.t})),full:true},
+      {k:'msg',label:'Message',type:'textarea',rows:5,full:true,hint:'{name} is replaced with each person\'s name.'}],
+    saveLabel:'Next', onSave:v=>{ const m=String(v.msg||'').trim()||String(v.tpl||'').trim(); if(!m) return toast('Write a message or pick a template','bad'); return onSend(m); }});
+  setTimeout(()=>{ const s=document.querySelector('#modal-root select[data-f="tpl"]'), t=document.querySelector('#modal-root textarea[data-f="msg"]');
+    if(s&&t) s.addEventListener('change', ()=>{ if(s.value) t.value=s.value; }); }, 0);
+}
+function waText(e, m){ return 'HE Manufacturing\n'+m.replace(/\{name\}/g, e.name); }
+ACT['wa-msg']=empNo=>{
+  const e=employee(empNo);
+  if(!waNumber(empWa(e))) return toast('No valid WhatsApp number for '+e.name,'bad');
+  waCompose('WhatsApp — '+e.name, 'Opens WhatsApp with the message ready — tap Send there.', m=>{
+    const link=waLink(empWa(e), waText(e,m));
+    window.open(link,'_blank','noopener');                    // still inside the Save click, so it isn't blocked
+    logAudit('WhatsApp message', empNo, m.slice(0,80));
+    save(); toast('WhatsApp opened for '+e.name,'ok');
+  });
+};
+let WA_GROUP=null;
+ACT['wa-group']=()=>{
+  const act=(S.employees||[]).filter(empActive);
+  const depts=[...new Set(act.map(e=>e.department).filter(Boolean))].sort();
+  formModal({title:'WhatsApp a group', values:{grp:'all', tpl:'', msg:''},
+    fields:[{k:'grp',label:'Send to',type:'select',blank:false,full:true,opts:[{v:'all',t:'All active employees ('+act.length+')'},
+        {v:'type:Permanent',t:'Permanent staff'},{v:'type:Part-time',t:'Part-time staff'}].concat(depts.map(d=>({v:'dept:'+d,t:'Department: '+d})))},
+      {k:'tpl',label:'Template',type:'select',blank:false,opts:WA_TEMPLATES.map(x=>({v:x.v,t:x.t})),full:true},
+      {k:'msg',label:'Message',type:'textarea',rows:5,full:true,hint:'{name} is replaced with each person\'s name.'}],
+    saveLabel:'Next',
+    onSave:v=>{
+      const m=String(v.msg||'').trim()||String(v.tpl||'').trim(); if(!m) return toast('Write a message or pick a template','bad');
+      const g=v.grp||'all';
+      const list=sortBy(act.filter(e=> g==='all' || (g.startsWith('type:') && e.staffType===g.slice(5)) || (g.startsWith('dept:') && e.department===g.slice(5))),'name');
+      WA_GROUP={m, list, sent:new Set()};
+      logAudit('WhatsApp group message prepared', g, list.length+' recipient(s): '+m.slice(0,60));
+      save(); waGroupModal();
+    }});
+  setTimeout(()=>{ const s=document.querySelector('#modal-root select[data-f="tpl"]'), t=document.querySelector('#modal-root textarea[data-f="msg"]');
+    if(s&&t) s.addEventListener('change', ()=>{ if(s.value) t.value=s.value; }); }, 0);
+};
+function waGroupModal(){
+  const G=WA_GROUP; if(!G) return;
+  const ok=G.list.filter(e=>waNumber(empWa(e))), miss=G.list.filter(e=>!waNumber(empWa(e)));
+  modal('Send to '+ok.length+' people',
+    '<div class="note" style="margin-bottom:10px">WhatsApp only lets a person send one chat at a time: tap <b>Send</b> for each name — WhatsApp opens with the message ready, tap send there, come back for the next. Sent rows turn green.'
+    +' <span class="sub">(Fully automatic bulk sending needs a paid WhatsApp Business API account — can be added later.)</span></div>'
+    +'<pre style="white-space:pre-wrap;font-family:inherit;background:var(--sunk);border-radius:8px;padding:10px 12px;margin:0 0 10px">'+esc(G.m)+'</pre>'
+    +T([{h:'Name', f:e=>'<b>'+esc(e.name)+'</b><div class="sub mono">'+esc(e.empNo)+'</div>'},{h:'WhatsApp', f:e=>'<span class="mono">'+esc(empWa(e))+'</span>'},
+       {h:'', f:e=> G.sent.has(e.empNo)? '<span class="tag t-ok">opened ✓</span>'
+          : '<a class="btn sm primary" data-wagrp="'+esc(e.empNo)+'" href="'+esc(waLink(empWa(e), waText(e,G.m)))+'" target="_blank" rel="noopener">Send</a>'}], ok)
+    +(miss.length?'<div class="banner warn" style="margin-top:10px">No WhatsApp number: '+miss.map(e=>esc(e.name)).join(', ')+'</div>':''), '', true);
+}
+document.addEventListener('click', e=>{ const a=e.target.closest('[data-wagrp]'); if(!a||!WA_GROUP) return;
+  WA_GROUP.sent.add(a.dataset.wagrp); setTimeout(()=>{ const y=(document.querySelector('#modal-root .mbody')||{}).scrollTop; waGroupModal();
+    const mb=document.querySelector('#modal-root .mbody'); if(mb&&y!=null) mb.scrollTop=y; }, 50); });
+
+/* ---------- portal logins in bulk: PIN per person, printable list, WhatsApp each ---------- */
+let LOGIN_BATCH=null;
+function newPin(){ const a=new Uint32Array(1); (window.crypto||{}).getRandomValues? crypto.getRandomValues(a) : (a[0]=Math.floor(Math.random()*1e9)); return String(100000 + a[0]%900000); }
+ACT['portal-logins']=()=>{
+  const act=(S.employees||[]).filter(e=>empActive(e) && (e.leaveScope||'full')!=='none');
+  const none=act.filter(e=>!e.portalLoginAt);
+  formModal({title:'Create leave-portal logins',
+    intro:'Each person gets a 6-digit PIN for the leave portal (their Employee No. + PIN). PINs are shown once here to print or send by WhatsApp — the system keeps only an encrypted copy, so if someone forgets, just reset theirs.',
+    values:{who:'missing'},
+    fields:[{k:'who',label:'Create for',type:'select',blank:false,full:true,opts:[{v:'missing',t:'Only people without a login ('+none.length+')'},{v:'all',t:'Everyone — resets existing PINs ('+act.length+')'}]}],
+    saveLabel:'Create PINs',
+    onSave:v=>{
+      if(!window.HEM_AUTH) return toast('Portal connection not available — sign in first','bad');
+      const list=v.who==='all'? act : none;
+      if(!list.length) return toast('Everyone already has a login','ok');
+      LOGIN_BATCH=list.map(e=>({empNo:e.empNo, name:e.name, pin:newPin(), ok:null}));
+      closeModal(); modal('Creating logins…', '<div class="note">Setting '+LOGIN_BATCH.length+' PIN(s)…</div>', '', true);
+      pushEmployeesToPortal(list.map(e=>e.empNo), true).then(()=>{
+        let chain=Promise.resolve();
+        LOGIN_BATCH.forEach(b=>{ chain=chain.then(()=>window.HEM_AUTH.rpc('set_employee_password',{p_emp_no:b.empNo, p_password:b.pin})
+          .then(({error})=>{ b.ok=!error; b.err=error&&error.message; }).catch(err=>{ b.ok=false; b.err=String(err); })); });
+        return chain;
+      }).then(()=>{
+        const at=new Date().toISOString();
+        LOGIN_BATCH.forEach(b=>{ if(b.ok){ const e=(S.employees||[]).find(x=>x.empNo===b.empNo); if(e) e.portalLoginAt=at; } });
+        logAudit('Portal logins created', '', LOGIN_BATCH.filter(b=>b.ok).length+' PIN(s) set');
+        save(); render(); loginBatchModal();
+      });
+    }});
+};
+function loginMsg(b){ return 'HE Manufacturing — Leave portal login\n'+b.name+'\nEmployee No: '+b.empNo+'\nPIN: '+b.pin+'\n'+portalUrl()
+  +'\n\nUse this to apply for leave on your phone. Keep your PIN private. / Gunakan ini untuk memohon cuti di telefon anda. Rahsiakan PIN anda.'; }
+function loginBatchModal(){
+  const B=LOGIN_BATCH||[];
+  modal('Portal logins — '+B.filter(b=>b.ok).length+' created',
+    '<div class="banner warn" style="margin-bottom:10px">These PINs are shown <b>only now</b>. Print this list or send each by WhatsApp before closing.</div>'
+    +T([{h:'Emp No', f:b=>'<b class="mono">'+esc(b.empNo)+'</b>'},{h:'Name', f:b=>esc(b.name)},
+      {h:'PIN', f:b=>b.ok?'<b class="mono" style="font-size:15px;letter-spacing:.1em">'+esc(b.pin)+'</b>':'<span class="tag t-bad">failed</span><div class="sub">'+esc(b.err||'')+'</div>'},
+      {h:'', f:b=>{ const e=employee(b.empNo); return b.ok && waNumber(empWa(e))? '<a class="btn sm primary" href="'+esc(waLink(empWa(e), loginMsg(b)))+'" target="_blank" rel="noopener">WhatsApp PIN</a>'
+        : b.ok? '<span class="sub">no WhatsApp — hand over printed</span>':''; }}], B)
+    +'<div class="sub" style="margin-top:10px">Portal: <span class="mono">'+esc(portalUrl())+'</span> (also the QR under HR → Leave)</div>',
+    btn('Print list','portal-logins-print',null,'btn primary'), true);
+}
+ACT['portal-logins-print']=()=>{
+  const B=(LOGIN_BATCH||[]).filter(b=>b.ok);
+  printModal('Leave portal logins', '<h2 style="font-family:var(--disp)">Leave portal logins — '+esc(today())+'</h2>'
+    +'<div class="sub" style="margin-bottom:12px">Cut along the lines and hand each person their slip. Portal: '+esc(portalUrl())+'</div>'
+    +B.map(b=>'<div style="border:1px dashed #999;padding:10px 12px;margin-bottom:8px;page-break-inside:avoid">'
+      +'<b>HE Manufacturing — Leave portal</b><br>'+esc(b.name)+'<br>Employee No: <b class="mono">'+esc(b.empNo)+'</b> &nbsp; PIN: <b class="mono">'+esc(b.pin)+'</b>'
+      +'<div style="font-size:11px;color:#666">Scan the QR at HR to open the portal. Keep your PIN private.</div></div>').join(''));
 };
 
 /* ---- batch import historical leave records, matching the earlier SQL export format ---- */

@@ -208,6 +208,8 @@ const TX = {
   e_doc_missing:{en:'Please attach your {doc}.', ms:'Sila lampirkan {doc} anda.'},
   e_overlap:{en:'You already have an application for some of these days.', ms:'Anda sudah mempunyai permohonan untuk sebahagian hari tersebut.'},
   e_balance:{en:'Not enough balance — only {n} day(s) of {type} left. Apply the extra days as Unpaid Leave.', ms:'Baki tidak mencukupi — hanya {n} hari {type} lagi. Mohon hari tambahan sebagai Cuti Tanpa Gaji.'},
+  e_not_allowed:{en:'This leave type is not available for your employment type. Please see HR.', ms:'Jenis cuti ini tidak tersedia untuk jenis pekerjaan anda. Sila jumpa HR.'},
+  broughtFwd:{en:'Taken before the portal (brought forward)', ms:'Diambil sebelum portal (dibawa ke hadapan)'},
   e_dup_id:{en:'Please press Submit again.', ms:'Sila tekan Hantar sekali lagi.'},
   e_upload:{en:'Could not upload the document — check your internet and try again.', ms:'Tidak dapat memuat naik dokumen — semak internet anda dan cuba lagi.'},
   e_file_big:{en:'{f} is larger than 10 MB.', ms:'{f} melebihi 10 MB.'}, e_file_type:{en:'{f} is not a photo or PDF.', ms:'{f} bukan gambar atau PDF.'},
@@ -417,6 +419,8 @@ function liveCheck(){
 function renderHistory(){
   const apps=DATA.apps||[];
   $('historyList').innerHTML = apps.length? apps.map(a=>{
+    if(String(a.id).startsWith('OB-')) return Number(a.days)? '<div class="hist"><b>'+esc((typeOf(a.type)||{}).name||a.type)+'</b>'
+      +'<div class="muted">'+esc(t('broughtFwd'))+': '+esc(a.days)+' '+esc(t('daysW'))+'</div></div>' : '';
     const ty=typeOf(a.type), needLater = a.status==='pending' && ty && ty.doc_rule==='required_if_started' && !Number(a.docs);
     return '<div class="hist"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>'+esc(ty?ty.name:a.type)+'</b>'
       +'<span>'+(a.paid===false?'<span class="tag unpaid">'+esc(t('unpaid'))+'</span> ':'')+'<span class="tag '+esc(a.status)+'">'+esc((TX.st[LANG]||TX.st.en)[a.status]||a.status)+'</span></span></div>'
