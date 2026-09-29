@@ -4391,7 +4391,8 @@ function leaveTabHtml(){
 
   h += sect('Scan to apply leave', '<div class="card" style="text-align:center;max-width:280px">'
     +'<div id="leaveQr" style="display:flex;justify-content:center;margin-bottom:10px"></div>'
-    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">Employees scan this to apply for leave on their phone (English / BM). They sign in with their employee number + the password you set under Employees. The portal shows the leave rules, takes MC / hospital-letter uploads, and shows your approvals, rejections and meeting requests.</div>'
+    +'<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">Employees scan this to apply for leave on their phone (English / BM). First time they tap Register and set their own password with their Employee ID, IC / passport no. and phone. The portal shows the leave rules, takes MC / hospital-letter uploads, sends the request to their HOD on WhatsApp, and shows your approvals, rejections and meeting requests.</div>'
+    +btn('Print QR poster','leave-qr-poster',null,'btn primary')+'<div style="height:10px"></div>'
     +'<div style="text-align:left;border-top:1px solid var(--line);padding-top:10px;margin:10px 0">'
     +'<div style="font-size:12px;font-weight:600;margin-bottom:4px">HR WhatsApp for HOD approvals</div>'
     +'<div class="sub" style="margin-bottom:6px">When a Head of Department decides, they tap once to tell this number.</div>'
@@ -9055,6 +9056,52 @@ ACT['cand-qr-print'] = ()=>{
   if(el && window.QRCode){ try{ new QRCode(el,{text:applyUrl(), width:260, height:260, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){} }
 };
 
+/* company seal for printed forms — high-res file next to index.html, falls back to the embedded sidebar crest */
+function crestSrc(){ const i=document.querySelector('.brandbox .crest img, .crest img'); return i? i.src : ''; }
+function logoImg(px){ return '<img src="hem-seal.png" alt="HE Manufacturing" onerror="this.onerror=null;this.src=crestSrc()" style="width:'+px+'px;height:'+px+'px;object-fit:contain;flex:none">'; }
+/* printable QR poster (A4) + four A6 cards to stick around the factory */
+ACT['leave-qr-poster']=()=>{
+  if(!window.QRCode) return toast('QR code library not loaded — check the internet connection','bad');
+  const url=window.HEM_PORTAL_URL || (location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-portal.html');
+  const qr=(px)=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;left:-9999px'; document.body.appendChild(d);
+    new QRCode(d,{text:url,width:px,height:px,colorDark:'#3a1f29',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+    const c=d.querySelector('canvas'), src=c? c.toDataURL('image/png') : (d.querySelector('img')||{}).src; d.remove(); return src; };
+  const big=qr(900), small=qr(500), shortUrl=url.replace(/^https?:\/\//,'');
+  const W='#522B39', B='#9C7434';
+  const step=(n,en,ms)=>'<div style="display:flex;gap:10px;align-items:flex-start;margin:0 0 9px"><div style="flex:none;width:26px;height:26px;border-radius:50%;background:'+W+';color:#fff;font:700 14px Archivo,Arial,sans-serif;display:flex;align-items:center;justify-content:center">'+n+'</div>'
+    +'<div style="font-size:13.5px;line-height:1.35"><b>'+en+'</b><div style="color:#5c4b51;font-size:12.5px">'+ms+'</div></div></div>';
+  const rule=(t,en,ms)=>'<div style="border:1px solid #e0d6d2;border-radius:8px;padding:7px 9px"><div style="font:700 11px Archivo,Arial,sans-serif;letter-spacing:.06em;color:'+W+';text-transform:uppercase">'+t+'</div><div style="font-size:11.5px;line-height:1.35;margin-top:2px">'+en+'</div><div style="font-size:10.5px;color:#5c4b51;line-height:1.3">'+ms+'</div></div>';
+  const poster='<div class="qrposter" style="font-family:Archivo,Arial,sans-serif;color:#231a1c;width:180mm;margin:0 auto;text-align:center">'
+    +'<div style="display:flex;flex-direction:column;align-items:center">'+logoImg(120).replace('style="','style="margin-bottom:6px;')
+    +'<div style="font:600 15px Fraunces,Georgia,serif;letter-spacing:.04em">HE MANUFACTURING (M) SDN BHD</div></div>'
+    +'<div style="height:2px;background:'+B+';opacity:.6;margin:10px 0 12px"></div>'
+    +'<div style="font:700 34px Fraunces,Georgia,serif;color:'+W+';line-height:1.05">Apply for Leave</div>'
+    +'<div style="font:600 22px Fraunces,Georgia,serif;color:'+B+';margin-top:2px">Mohon Cuti</div>'
+    +'<div style="font-size:14px;margin:8px 0 10px">Scan with your phone camera · <span style="color:#5c4b51">Imbas dengan kamera telefon anda</span></div>'
+    +'<div style="display:inline-block;padding:10px;border:3px solid '+W+';border-radius:14px;background:#fff"><img src="'+big+'" alt="QR" style="width:92mm;height:92mm;display:block;image-rendering:pixelated"></div>'
+    +'<div style="font:600 13px \'IBM Plex Mono\',monospace;margin:6px 0 14px;color:#5c4b51">'+esc(shortUrl)+'</div>'
+    +'<div style="text-align:left;max-width:150mm;margin:0 auto">'
+    +step(1,'First time: tap “Register”. Enter your Employee ID, IC / passport no. and phone, then set your own password.','Kali pertama: tekan “Daftar”. Masukkan ID Pekerja, No. IC / pasport dan telefon, kemudian tetapkan kata laluan anda sendiri.')
+    +step(2,'Sign in with Employee ID + password and fill in the leave form.','Log masuk dengan ID Pekerja + kata laluan dan isi borang cuti.')
+    +step(3,'Tap “Send on WhatsApp” to your Head of Department. After HOD approves, HR gives the final approval.','Tekan “Hantar melalui WhatsApp” kepada Ketua Jabatan. Selepas Ketua Jabatan lulus, HR memberi kelulusan akhir.')
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:left;margin-top:12px">'
+    +rule('Annual leave','Apply at least 14 days before.','Mohon sekurang-kurangnya 14 hari lebih awal.')
+    +rule('Medical (MC)','Apply on the same day. Upload MC by 12:00 midnight the next day.','Mohon pada hari yang sama. Muat naik MC sebelum 12 tengah malam keesokan hari.')
+    +rule('Emergency (unpaid)','Apply at least 4 hours before work starts, or 1½ days’ salary is deducted.','Mohon sekurang-kurangnya 4 jam sebelum kerja bermula, jika tidak gaji 1½ hari dipotong.')
+    +'</div>'
+    +'<div style="font-size:11px;color:#8a7b76;margin-top:12px">Don’t know your Employee ID or forgot your password? Tap “Forgot password?” or ask HR. · Tidak tahu ID Pekerja? Tanya HR.</div>'
+    +'</div>';
+  const card='<div style="border:1.5px dashed #b9a9a3;border-radius:10px;padding:8mm 6mm;text-align:center;font-family:Archivo,Arial,sans-serif;color:#231a1c;display:flex;flex-direction:column;align-items:center;justify-content:center">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+logoImg(40)+'<div style="text-align:left"><div style="font:700 17px Fraunces,Georgia,serif;color:'+W+';line-height:1.05">Apply for Leave</div><div style="font:600 13px Fraunces,Georgia,serif;color:'+B+'">Mohon Cuti</div></div></div>'
+    +'<img src="'+small+'" alt="QR" style="width:52mm;height:52mm;display:block;image-rendering:pixelated">'
+    +'<div style="font-size:11px;margin-top:5px">Scan · Register · Apply · Send to HOD</div><div style="font-size:10px;color:#5c4b51">Imbas · Daftar · Mohon · Hantar kepada Ketua Jabatan</div></div>';
+  const cards='<div style="page-break-before:always;break-before:page;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:128mm 128mm;gap:6mm;width:186mm;margin:0 auto">'+card+card+card+card+'</div>';
+  logAudit('Leave QR poster printed','',url);
+  printModal('Leave QR poster — A4 + 4 cards', '<style>@page{size:A4 portrait;margin:10mm}@media print{.qr-note{display:none!important}.qr-sheet{padding:0!important}}</style>'
+    +'<div class="note qr-note" style="margin-bottom:10px">Page 1: A4 poster for the notice board. Page 2: four small cards — cut along the dashed lines and stick them at the time clock, canteen and production lines.</div>'+'<div class="qr-sheet" style="background:#fff;padding:12px 0;border-radius:8px">'+poster+cards+'</div>');
+};
+
 /* ============================================================
    LEAVE v2 (2026-09-29) — rules, documents, HR notices, WhatsApp
    ------------------------------------------------------------
@@ -9234,7 +9281,7 @@ ACT['leave-print']=id=>{
   const d8=x=>x? new Date(x+'T00:00:00Z').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}) : '';
   const html='<div style="font-family:Archivo,Arial,sans-serif;color:#111;max-width:720px;margin:0 auto">'
    +'<div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #522B39;padding-bottom:8px;margin-bottom:10px">'
-   +'<div style="width:46px;height:46px;border-radius:50%;border:2px solid #522B39;display:flex;align-items:center;justify-content:center;font:700 15px Fraunces,serif;color:#522B39">HE</div>'
+   +logoImg(58)
    +'<div><div style="font:700 15px Fraunces,serif">HE MANUFACTURING (M) SDN BHD</div><div style="font-size:11px;color:#555">Human Resources · Form HR/LV-01 rev.2</div></div>'
    +'<div style="margin-left:auto;text-align:right"><div style="font:700 17px Fraunces,serif">LEAVE APPLICATION FORM</div><div style="font-size:11px" class="mono">'+(l?esc(l.id):'Ref: ____________')+'</div></div></div>'
    +'<div style="font-size:11px;font-weight:700;color:#522B39;margin:8px 0 4px">A. EMPLOYEE DETAILS</div>'

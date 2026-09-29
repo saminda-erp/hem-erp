@@ -44,8 +44,8 @@
   .mono{font-family:'IBM Plex Mono',monospace}
   .wrap{max-width:560px;margin:0 auto;padding:18px 16px 60px}
   .topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;background:#522B39;color:#f7f0ee;position:sticky;top:0;z-index:5}
-  .crest{width:34px;height:34px;border-radius:8px;background:#9C7434;display:flex;align-items:center;justify-content:center;
-    font-family:'Fraunces',serif;font-weight:600;color:#3c1f29;font-size:13px;flex:none}
+  .crest{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex:none;padding:2px;overflow:hidden}
+  .crest img{width:100%;height:100%;object-fit:contain;display:block}
   .topbar .name{font-family:'Fraunces',serif;font-size:15px;font-weight:600;line-height:1.2}
   .topbar .sub{font-size:11.5px;color:rgba(247,240,238,.7)}
   .lang{display:flex;border:1px solid rgba(255,255,255,.3);border-radius:20px;overflow:hidden;flex:none}
@@ -115,11 +115,13 @@
   .btn-wa{display:block;text-align:center;background:#25D366;color:#fff;border-radius:var(--r);padding:13px 16px;font-weight:700;text-decoration:none}
   [hidden]{display:none!important}
 </style>
+<link rel="icon" type="image/png" href="hem-seal-160.png">
+<link rel="apple-touch-icon" href="hem-seal-160.png">
 </head>
 <body>
 
 <div class="topbar">
-  <div class="crest">HE</div>
+  <div class="crest"><img src="hem-seal-160.png" alt="HE Manufacturing"></div>
   <div style="flex:1;min-width:0">
     <div class="name" id="tbName">HE Manufacturing</div>
     <div class="sub" id="tbSub"></div>
@@ -133,6 +135,7 @@
 
 <div id="loginScreen" class="wrap" style="padding-top:34px">
   <div style="text-align:center;margin-bottom:18px">
+    <img src="hem-seal-160.png" alt="HE Manufacturing" style="width:84px;height:84px;object-fit:contain;background:#fff;border-radius:50%;padding:4px;margin-bottom:8px">
     <h1 style="font-size:21px" data-t="portalTitle"></h1>
     <div class="muted" data-t="portalSub"></div>
   </div>
