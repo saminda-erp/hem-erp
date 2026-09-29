@@ -9208,8 +9208,9 @@ ACT['leave-sup-link']=id=>{
   window.HEM_AUTH.rpc('hr_superior_link',{p_id:id}).then(({data,error})=>{
     if(error||!data||!data.ok) return toast('Could not create a link — '+((error&&error.message)||(data&&data.code)||''),'bad');
     const url=location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-approve.html?t='+data.token;
-    const text='HE Manufacturing — Leave approval needed / Kelulusan cuti diperlukan\n'+e.name+' ('+e.empNo+')\n'+leaveType(l.type).name+': '+fmtLeaveDates(l)
-      +(l.half?' ('+l.half+')':'')+'\nReason: '+(l.reason||'')+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
+    const text='HE Manufacturing — Leave approval needed / Kelulusan cuti diperlukan\n\n'
+      +'👤 Employee: *'+e.name+'*\nEmp No: '+e.empNo+(e.department?' · '+e.department:'')+(e.position?' · '+e.position:'')
+      +'\n📅 '+leaveType(l.type).name+': '+fmtLeaveDates(l)+(l.half?' ('+l.half+')':'')+'\n📝 Reason: '+(l.reason||'')+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
     const link=waLink(empWa(sup), text);
     modal('Send to Head of Department — '+esc(sup.name||'?'), '<div class="note" style="margin-bottom:10px">The link lets '+esc(sup.name||'the superior')+' approve or not approve with a comment, without logging in. It works for 21 days.</div>'
       +'<pre style="white-space:pre-wrap;font-family:inherit;background:var(--sunk);border-radius:8px;padding:10px 12px">'+esc(text)+'</pre>'

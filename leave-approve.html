@@ -158,7 +158,8 @@ function renderInform(){
   if(!A || !A.decision) return;
   const e=A.employee||{}, ok=A.decision==='approved';
   const d=fd(A.start_date)+(A.end_date!==A.start_date?' – '+fd(A.end_date):'')+(A.half?' ('+A.half+')':'');
-  const line=e.name+' ('+e.emp_no+(e.department?', '+e.department:'')+')\n'+A.type+': '+d+' · '+A.days+' day(s)\nReason: '+A.reason;
+  const line='👤 Employee: *'+e.name+'*\nEmp No: '+e.emp_no+(e.department?' · '+e.department:'')+(e.position?' · '+e.position:'')
+    +'\n📅 '+A.type+': '+d+' · '+A.days+' day(s)\n📝 Reason: '+A.reason;
   const toHr='HE Manufacturing — Leave '+(ok?'APPROVED ✅':'NOT APPROVED ❌')+' by HOD '+(A.superior_name||'')+'\n'+line
     +(A.comment?'\nHOD comment: '+A.comment:'')+'\nRef: '+A.id+'\n\n'+(ok?'Please give final approval in the ERP (HR → Leave).':'For your records.');
   const toEmp='HE Manufacturing — your leave was '+(ok?'APPROVED by your HOD ✅ — HR will give final approval.':'NOT APPROVED by your HOD ❌')+'\n'+A.type+': '+d

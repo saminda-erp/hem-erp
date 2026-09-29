@@ -621,8 +621,10 @@ function supWaLink(phone, token, app){
   const url=location.origin+location.pathname.replace(/[^/]*$/,'')+'leave-approve.html?t='+token;
   const emp=DATA.employee||{}, ty=typeOf(app.type);
   const d=fmtDate(app.start_date)+(app.end_date&&app.end_date!==app.start_date?' – '+fmtDate(app.end_date):'')+(app.half?' ('+app.half+')':'');
-  const text='HE Manufacturing — Leave approval needed / Kelulusan cuti diperlukan\n'+emp.name+' ('+emp.emp_no+')'+(emp.position?', '+emp.position:'')
-    +'\n'+(ty?ty.name:app.type)+': '+d+' · '+app.days+' day(s)\nReason: '+app.reason+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
+  const nm=(emp.name && emp.name!==emp.emp_no)? emp.name : '';
+  const text='HE Manufacturing — Leave approval needed / Kelulusan cuti diperlukan\n\n'
+    +'👤 Employee: *'+(nm||('Emp No '+emp.emp_no))+'*\nEmp No: '+emp.emp_no+(emp.department?' · '+emp.department:'')+(emp.position?' · '+emp.position:'')
+    +'\n📅 '+(ty?ty.name:app.type)+': '+d+' · '+app.days+' day(s)\n📝 Reason: '+app.reason+'\n\nPlease approve or not approve here / Sila luluskan di sini:\n'+url;
   const n=String(phone||'').replace(/\D/g,'');
   return n? 'https://wa.me/'+n+'?text='+encodeURIComponent(text) : '';
 }
