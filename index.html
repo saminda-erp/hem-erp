@@ -90,6 +90,43 @@ button,input,select,textarea{font:inherit;color:inherit}
 #topbar .sub{font-size:12.5px;color:var(--muted);margin-top:3px;max-width:62ch}
 .topacts{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 #view{padding:22px 26px 80px;min-width:0}
+/* ---------- HR overview ---------- */
+.hrnav{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:0 0 18px;padding-bottom:0}
+.hrtab{background:none;border:0;border-bottom:2px solid transparent;padding:9px 12px 10px;margin-bottom:-1px;font:500 13.5px var(--ui);color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:7px;border-radius:0}
+.hrtab:hover{color:var(--ink);background:var(--surface2)}
+.hrtab.on{color:var(--wine);border-bottom-color:var(--wine);font-weight:600}
+.hrbadge{min-width:19px;height:19px;padding:0 6px;border-radius:10px;background:var(--wine);color:var(--on-wine);font:600 11px var(--mono);display:inline-flex;align-items:center;justify-content:center}
+.hrtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px}
+.hrtile{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 13px;cursor:pointer;display:flex;flex-direction:column;gap:3px;position:relative;overflow:hidden;font-family:var(--ui);color:var(--ink)}
+.hrtile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line)}
+.hrtile.warn::before{background:var(--warn)}.hrtile.info::before{background:var(--info)}.hrtile.ok::before{background:var(--ok)}.hrtile.mute::before{background:var(--muted)}
+.hrtile:hover{border-color:var(--wine)}
+.hrtile .k{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.hrtile .v{font-family:var(--mono);font-size:26px;font-weight:500;line-height:1.1}
+.hrtile .d{font-size:12px;color:var(--ink2)}
+.hrtile:not(.warn):not(.info):not(.ok):not(.mute) .v{color:var(--muted)}
+.hrgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:18px;align-items:start}
+.hrgrid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:1000px){.hrgrid,.hrgrid3{grid-template-columns:1fr}}
+.hrlist{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.hritem{display:grid;grid-template-columns:112px minmax(0,1fr) auto;gap:12px;padding:11px 13px;border-bottom:1px solid var(--line2);align-items:start}
+.hritem:last-child{border-bottom:0}
+.hrmeta{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.hrnote{font-size:12px;color:var(--wine);margin-top:2px}
+.hracts{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:640px){.hritem{grid-template-columns:1fr}.hracts{justify-content:flex-start}}
+.hrsub{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:12px 0 5px}
+.hrrow{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line2);font-size:13px}
+.hrrow:last-child{border-bottom:0}
+.hrbig{font-family:var(--mono);font-size:30px;margin:4px 0 8px}
+.hrbar{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 28px;gap:8px;align-items:center;font-size:12.5px;padding:3px 0}
+.hrbar .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrbar .b{height:8px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.hrbar .b i{display:block;height:100%;background:var(--brass);border-radius:4px}
+.hrbar b{text-align:right}
+.hrlog{display:grid;grid-template-columns:92px minmax(0,1fr) auto;gap:10px;padding:8px 13px;border-bottom:1px solid var(--line2);font-size:12.5px}
+.hrlog:last-child{border-bottom:0}
+.hrqa{display:flex;flex-wrap:wrap;gap:6px}
 .section{margin-bottom:26px}
 .section>h2{font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:10px}
 .section>h2::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -2760,7 +2797,7 @@ const VIEWMETA = {
   qc:{eyebrow:'Department 06', title:'Quality Control Department', sub:'IPQC, release & COA, deviations, change control and complaints in one place.'},
   shipping:{eyebrow:'Department 07', title:'Shipping & Handling', sub:'Container load plans, seal numbers, export documents and the loading report.'},
   sales:{eyebrow:'Department 08', title:'Sales Department', sub:'Customer and commercial follow-up — under development.'},
-  people:{eyebrow:'Department 09', title:'HR Department', sub:'Competence records and the calibration and qualification status of every measuring device. ISO 22716 cl. 3 & 5.'},
+  people:{eyebrow:'Department 09', title:'HR Department', sub:'Employees, leave, overtime, new joiners and recruitment. Overview lists everything waiting for HR; a number on a tab means something there needs you.'},
   accounting:{eyebrow:'Department 10', title:'Accounting Department', sub:'Customer and supplier financial control — under development.'},
   receiving:{eyebrow:'Store', title:'Raw Material Receiving', sub:'Goods-in, sampling and QC disposition. Nothing leaves quarantine without a named release. ISO 22716 cl. 6.'},
   issue:{eyebrow:'Store', title:'Material Issue', sub:'Released lots issued to a batch, weighed and double-checked. This is the link that makes traceability work.'},
@@ -4275,24 +4312,194 @@ function leaveDayMap(year, empNo){
   return map;
 }
 
+/* ============================================================
+   HR OVERVIEW (2026-09-30) — the first thing HR sees on the HR Department page
+   ------------------------------------------------------------
+   One screen that answers "what needs me right now?": every waiting request / approval from
+   leave, overtime, new joiners and recruitment in one to-do list, today's absences and
+   overtime, an employee summary, data gaps, and recent activity. Nothing new is stored — it
+   only reads what the other HR tabs already hold, and every row links to the real action.
+   The tab bar (hrNavHtml) shows a count badge wherever something is waiting.
+   ============================================================ */
+function leaveWaitingHod(a){ const s=a.superior||{}; return a.status==='pending' && (s.emp_no||s.name) && !s.decision; }
+function hrCounts(){
+  const apps=S.leaveApplications||[], ot=S.otRequests||[], td=today();
+  const pend=apps.filter(a=>a.status==='pending');
+  const tr=S.training||[], eq=S.equipment||[];
+  return {
+    leaveHr: pend.filter(a=>!leaveWaitingHod(a)).length,
+    leaveHod: pend.filter(leaveWaitingHod).length,
+    otPending: ot.filter(o=>o.status==='pending').length,
+    otVerify: otDueVerify().length,
+    otToday: ot.filter(o=>o.status==='approved' && o.date===td).length,
+    joiners: liveJoiners().filter(j=>j.status!=='added').length,
+    cands: liveCandidates().filter(c=>c.status==='new').length,
+    trainingOverdue: tr.filter(t=>t.status==='overdue' || (t.next && daysFromToday(t.next)<0)).length,
+    calDue: eq.filter(e=>e.calDue && daysFromToday(e.calDue)<30).length
+  };
+}
+const HR_TABS = [
+  {k:'overview', t:'Overview', n:c=>0},
+  {k:'staff',    t:'Employees', n:c=>0},
+  {k:'joiners',  t:'New joiners', n:c=>c.joiners},
+  {k:'leave',    t:'Leave', n:c=>c.leaveHr+c.leaveHod},
+  {k:'overtime', t:'Overtime', n:c=>c.otPending+c.otVerify},
+  {k:'recruit',  t:'Recruitment', n:c=>c.cands},
+  {k:'training', t:'Training', n:c=>c.trainingOverdue},
+  {k:'equipment',t:'Equipment', n:c=>c.calDue}
+];
+function hrNavHtml(tab){
+  const c=hrCounts();
+  return '<nav class="hrnav" aria-label="HR sections">'+HR_TABS.map(x=>{ const n=x.n(c);
+    return '<button type="button" class="hrtab'+(tab===x.k?' on':'')+'" data-chip="ptab" data-val="'+x.k+'"'+(tab===x.k?' aria-current="page"':'')+'>'
+      +esc(x.t)+(n?'<span class="hrbadge">'+nf(n)+'</span>':'')+'</button>'; }).join('')+'</nav>';
+}
+function goTabBtn(label, tab, cls){ return '<button type="button" class="btn '+(cls||'sm')+'" data-chip="ptab" data-val="'+tab+'">'+esc(label)+'</button>'; }
+function ageLabel(iso){ const d=String(iso||'').slice(0,10); if(!d) return ''; const n=-daysFromToday(d);
+  return n<=0? 'today' : n===1? 'yesterday' : n+' days ago'; }
+
+/* every waiting item across HR, oldest first within each urgency level */
+function hrQueue(){
+  const q=[], td=today();
+  (S.leaveApplications||[]).filter(a=>a.status==='pending').forEach(a=>{
+    const e=employee(a.empNo), lt=leaveType(a.type), hod=leaveWaitingHod(a);
+    const docMissing=!hod && !(a.docPaths||[]).length && !a.docSeen && leaveDocNeeded(a);
+    q.push({rank:hod?3:1, when:a.appliedAt, kind:'Leave', cls:hod?'t-mute':'t-warn',
+      who:e.name+' · '+a.empNo, what:lt.name+' · '+nf(a.days, Number(a.days)%1?1:0)+' day'+(Number(a.days)<=1?'':'s')+' · '+a.start+(a.end!==a.start?' → '+a.end:'')+(a.half?' ('+a.half+')':''),
+      note: hod? 'Waiting for Head of Dept. ('+((a.superior||{}).name||'')+')' : docMissing? 'Ready for HR — document missing' : 'Ready for HR to decide',
+      acts: hod? btn('Resend to HOD','leave-sup-link',a.id,'btn sm')+goTabBtn('Open','leave')
+                : btn('Approve','leave-approve',a.id,'btn sm primary')+btn('Reject','leave-reject',a.id,'btn sm')+goTabBtn('Open','leave')});
+  });
+  (S.otRequests||[]).filter(o=>o.status==='pending').forEach(o=>q.push({rank:1, when:o.createdAt||o.date, kind:'Overtime', cls:'t-warn',
+    who:(o.requesterName||employee(o.requestedBy).name)+' (HOD)', what:otFmtDate(o.date)+' · '+o.area+' · '+(o.lines||[]).length+' people · '+nf(o.totalHours,1)+' h',
+    note:'Waiting for HR approval', acts:btn('Review','ot-approve',o.id,'btn sm primary')+goTabBtn('Open','overtime')}));
+  otDueVerify().forEach(o=>q.push({rank:2, when:o.date, kind:'Overtime', cls:'t-info',
+    who:(o.requesterName||employee(o.requestedBy).name)+' (HOD)', what:otFmtDate(o.date)+' · '+o.area+' · '+(o.lines||[]).length+' people',
+    note:'Worked — verify attendance for payroll', acts:btn('Verify','ot-verify',o.id,'btn sm primary')+goTabBtn('Open','overtime')}));
+  liveJoiners().filter(j=>j.status!=='added').forEach(j=>{ const miss=joinMissing(j); q.push({rank:1, when:j.submittedAt, kind:'New joiner', cls:'t-ok',
+    who:j.name+' · '+j.staffType, what:((j.data||{}).position||'')+((j.data||{}).startDate?' · starts '+(j.data||{}).startDate:''),
+    note: miss.length? 'Needs '+miss.join(' + ').toLowerCase()+', then Employee ID' : 'Letters filed — issue Employee ID',
+    acts:btn('Open','join-view',j.id,'btn sm primary')}); });
+  liveCandidates().filter(c=>c.status==='new').forEach(c=>{ const s=candScore(c); q.push({rank:2, when:c.submittedAt, kind:'Applicant', cls:'t-info',
+    who:c.name, what:(c.position||'')+(s?' · test '+s.right+'/'+s.total+' '+s.band:''), note:'New application — review / interview',
+    acts:btn('Open','cand-view',c.id,'btn sm primary')}); });
+  (S.employees||[]).filter(empActive).forEach(e=>{
+    [['passportExpiry','Passport'],['permitExpiry','Work permit']].forEach(([k,t])=>{ if(!e[k]) return; const d=daysFromToday(e[k]);
+      if(d<=60) q.push({rank:d<0?0:2, when:e[k], age:'', kind:'Expiry', cls:d<0?'t-bad':'t-warn', who:e.name+' · '+e.empNo,
+        what:t+' '+(d<0?'expired '+(-d)+' days ago':'expires in '+d+' days')+' ('+e[k]+')', note:'Renew and update the record', acts:btn('Edit','emp-edit',e.empNo,'btn sm')}); });
+  });
+  return q.sort((a,b)=>a.rank-b.rank || String(a.when||'').localeCompare(String(b.when||'')));
+}
+
+function hrOverviewHtml(){
+  const c=hrCounts(), td=today(), emps=S.employees||[], act=emps.filter(empActive);
+  const tile=(label, n, sub, tab, tone)=>'<button type="button" class="hrtile'+(n?' '+tone:'')+'" data-chip="ptab" data-val="'+tab+'">'
+    +'<span class="k">'+esc(label)+'</span><span class="v">'+nf(n)+'</span><span class="d">'+esc(n?sub:'nothing waiting')+'</span></button>';
+  let h='<div class="hrtiles">'
+    + tile('Leave to decide', c.leaveHr, 'HOD has approved or none set', 'leave', 'warn')
+    + tile('Leave with HOD', c.leaveHod, 'waiting for Head of Dept.', 'leave', 'mute')
+    + tile('Overtime to approve', c.otPending, 'requests from HODs', 'overtime', 'warn')
+    + tile('Overtime to verify', c.otVerify, 'worked — confirm hours', 'overtime', 'info')
+    + tile('New joiners', c.joiners, 'need letters / Employee ID', 'joiners', 'ok')
+    + tile('Job applications', c.cands, 'new, not yet reviewed', 'recruit', 'info')
+    + '</div>';
+
+  /* ---- to-do list ---- */
+  const q=hrQueue();
+  const todo = q.length? '<div class="hrlist">'+q.slice(0,14).map(x=>'<div class="hritem">'
+      +'<div class="hrmeta"><span class="tag '+x.cls+'">'+esc(x.kind)+'</span><span class="sub">'+esc(x.age!=null? x.age : ageLabel(x.when))+'</span></div>'
+      +'<div class="hrbody"><b>'+esc(x.who)+'</b><div class="sub">'+esc(x.what)+'</div><div class="hrnote">'+esc(x.note)+'</div></div>'
+      +'<div class="hracts">'+x.acts+'</div></div>').join('')+'</div>'
+      +(q.length>14?'<div class="sub" style="margin-top:8px">'+nf(q.length-14)+' more — open the Leave, Overtime, New joiners or Recruitment tab.</div>':'')
+    : '<div class="empty" style="padding:22px"><b>All clear</b>Nothing is waiting for HR. New requests from the QR portals appear here automatically.</div>';
+
+  /* ---- today ---- */
+  const yr=new Date().getFullYear(), dm=leaveDayMap(yr);
+  const onToday=dm.get(td)||[];
+  const week=[]; for(let i=1;i<=7;i++){ const d=new Date(Date.now()+i*864e5).toISOString().slice(0,10); (dm.get(d)||[]).forEach(p=>{ if(!week.some(w=>w.empNo===p.empNo)) week.push(Object.assign({from:d},p)); }); }
+  const otT=(S.otRequests||[]).filter(o=>o.status==='approved' && o.date===td);
+  const starting=liveJoiners().filter(j=>{ const s=(j.data||{}).startDate; return s && daysFromToday(s)>=0 && daysFromToday(s)<=7; });
+  const joinedNow=act.filter(e=>e.joinDate && daysFromToday(e.joinDate)<=0 && daysFromToday(e.joinDate)>=-7);
+  const who=list=>list.length? list.map(p=>'<div class="hrrow"><span>'+esc(p.name)+'</span><span class="sub">'+esc(p.extra||'')+'</span></div>').join('') : '<div class="sub">—</div>';
+  const todayCard='<div class="card"><h3>Today <span class="sub mono" style="font-weight:400">'+esc(otFmtDate(td))+'</span></h3>'
+    +'<div class="hrsub">On leave today ('+onToday.length+')</div>'+who(onToday.map(p=>({name:p.name, extra:leaveType(p.type).name})))
+    +'<div class="hrsub">On leave in the next 7 days ('+week.length+')</div>'+who(week.slice(0,6).map(p=>({name:p.name, extra:'from '+p.from.slice(5)})))
+    +'<div class="hrsub">Overtime today ('+otT.length+')</div>'+who(otT.map(o=>({name:o.area+' — '+(o.lines||[]).filter(l=>l.approved!==false).length+' people', extra:o.requesterName||''})))
+    +'<div class="hrsub">Starting / just joined</div>'+who(starting.map(j=>({name:j.name, extra:'starts '+(j.data||{}).startDate})).concat(joinedNow.map(e=>({name:e.name, extra:e.empNo+' · joined '+e.joinDate}))))
+    +'</div>';
+
+  h+='<div class="hrgrid"><div>'+sect('Needs your action ('+q.length+')', todo)+'</div><div>'+todayCard+'</div></div>';
+
+  /* ---- employee summary ---- */
+  const grpCount=g=>act.filter(g.f).length;
+  const depts={}; act.forEach(e=>{ const d=e.department||'Not set'; depts[d]=(depts[d]||0)+1; });
+  const dlist=Object.entries(depts).sort((a,b)=>b[1]-a[1]);
+  const maxD=Math.max(1,...dlist.map(d=>d[1]));
+  const month=td.slice(0,7);
+  const gaps=[
+    {t:'No WhatsApp number', n:act.filter(e=>!waNumber(empWa(e))).length},
+    {t:'No IC / passport no.', n:act.filter(e=>!String(e.icNo||'').trim()).length},
+    {t:'Not registered on the leave portal', n:act.filter(e=>(e.leaveScope||'full')!=='none' && !e.portalRegistered && !e.portalLoginAt).length},
+    {t:'No attendance (iVMS) ID', n:act.filter(e=>!e.attendanceId).length},
+    {t:'No appointment letter on file', n:act.filter(e=>!(e.docs||[]).some(d=>d.kind==='appointment')).length},
+    {t:'Permanent staff not classified', n:act.filter(e=>(e.staffType||'')!=='Part-time' && !GRADES.includes(e.grade)).length}
+  ];
+  h+=sect('Employee summary',
+    '<div class="hrgrid3">'
+    +'<div class="card"><h3>Headcount</h3><div class="hrbig">'+nf(act.length)+'<span class="sub"> active</span></div>'
+      +STAFF_GROUPS.map(g=>{ const n=grpCount(g); return (g.k==='unclass'&&!n)?'' : '<div class="hrrow"><span>'+esc(g.t)+'</span><b class="mono">'+nf(n)+'</b></div>'; }).join('')
+      +'<div class="hrrow"><span>Joined this month</span><b class="mono">'+nf(act.filter(e=>String(e.joinDate||'').slice(0,7)===month).length)+'</b></div>'
+      +'<div class="hrrow"><span>Left / inactive</span><b class="mono">'+nf(emps.length-act.length)+'</b></div>'
+      +'<div style="margin-top:10px">'+goTabBtn('Open employee list','staff')+'</div></div>'
+    +'<div class="card"><h3>By department</h3>'+(dlist.length? dlist.map(([d,n])=>'<div class="hrbar"><span class="l">'+esc(d)+'</span><span class="b"><i style="width:'+Math.round(n/maxD*100)+'%"></i></span><b class="mono">'+nf(n)+'</b></div>').join('') : '<div class="sub">No employees yet.</div>')+'</div>'
+    +'<div class="card"><h3>Records to complete</h3>'+gaps.map(g=>'<div class="hrrow"><span>'+esc(g.t)+'</span>'+(g.n?'<span class="tag t-warn">'+nf(g.n)+'</span>':'<span class="tag t-ok">✓</span>')+'</div>').join('')
+      +'<div class="sub" style="margin-top:8px">Filter the employee list to find who — use search or the Portal / WhatsApp columns.</div></div>'
+    +'</div>');
+
+  /* ---- recent activity ---- */
+  const rx=/leave|overtime|employee|candidate|joiner|registration|whatsapp|letter|document|portal|interview|training|hod/i;
+  const recent=(S.audit||[]).filter(a=>rx.test(a.action||'')).slice(0,12);
+  const acts='<div class="card" style="padding:0">'+(recent.length? recent.map(a=>'<div class="hrlog"><span class="mono sub">'+esc(String(a.at||'').slice(5,16))+'</span><span><b>'+esc(a.action)+'</b>'
+      +(a.ref?' <span class="mono sub">'+esc(a.ref)+'</span>':'')+(a.detail?'<div class="sub">'+esc(a.detail)+'</div>':'')+'</span><span class="sub">'+esc(a.who||'')+'</span></div>').join('')
+    : '<div class="sub" style="padding:14px">No HR activity recorded yet.</div>')+'</div>';
+
+  /* ---- quick actions ---- */
+  const qa='<div class="card"><h3>Quick actions</h3><div class="hrqa">'
+    +btn('Add employee','staff-new',null,'btn primary')+btn('Apply leave for someone','leave-apply',null,'btn')
+    +btn('Check portals for new requests','hr-sync-all',null,'btn')+btn('Employee list (.xlsx)','staff-export',null,'btn')
+    +btn('Annual leave report','leave-report',String(yr),'btn')+btn('Overtime Excel for payroll','ot-export',month,'btn')+'</div>'
+    +'<div class="hrsub" style="margin-top:14px">Print QR posters</div><div class="hrqa">'
+    +btn('Leave portal','leave-qr-poster',null,'btn sm')+btn('Overtime (HODs)','leave-qr-poster','ot','btn sm')
+    +btn('New joiner — permanent','join-qr-print','Permanent','btn sm')+btn('New joiner — part-time','join-qr-print','Part-time','btn sm')
+    +btn('Job applications','cand-qr-print',null,'btn sm')+'</div></div>';
+  h+='<div class="hrgrid">'+'<div>'+sect('Recent activity', acts)+'</div><div>'+sect('Shortcuts', qa)+'</div></div>';
+  return h;
+}
+var LAST_HR_SYNC=0;
+function hrSyncAll(silent){
+  if(!window.HEM_AUTH){ if(!silent) toast('Sign in first — requests come from the shared database','bad'); return; }
+  LAST_HR_SYNC=Date.now(); LAST_LEAVE_SYNC=LAST_OT_SYNC=LAST_CAND_SYNC=LAST_JOIN_SYNC=Date.now();
+  try{ syncPortalLeave(true); }catch(e){}
+  try{ syncOT(true); }catch(e){}
+  try{ syncCandidates(true); }catch(e){}
+  try{ syncJoiners(true); }catch(e){}
+  if(!silent) toast('Checking leave, overtime, new joiners and job applications…','ok');
+}
+/* ACT['hr-sync-all'] is assigned next to ACT['join-sync'] — ACT is declared further down (TDZ) */
+
 function V_people(){
-  const tab=F('ptab','staff');
-  const tabs=[{k:'staff',t:'Employees'},{k:'joiners',t:'New joiners'},{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'},{k:'overtime',t:'Overtime'},{k:'recruit',t:'Recruitment'}].map(x=>
-    '<button class="chip'+(tab===x.k?' on':'')+'" data-chip="ptab" data-val="'+x.k+'" type="button">'+x.t
-    +(x.k==='leave' && (S.leaveApplications||[]).filter(a=>a.status==='pending').length? ' ('+(S.leaveApplications||[]).filter(a=>a.status==='pending').length+')':'')
-    +(x.k==='overtime' && otPendingCount()? ' ('+otPendingCount()+')':'')
-    +(x.k==='recruit' && (S.candidates||[]).filter(c=>c.status==='new').length? ' ('+(S.candidates||[]).filter(c=>c.status==='new').length+')':'')
-    +(x.k==='joiners' && liveJoiners().filter(j=>j.status!=='added').length? ' ('+liveJoiners().filter(j=>j.status!=='added').length+')':'')
-    +'</button>').join('');
-  if(tab==='leave') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+leaveTabHtml();
-  if(tab==='staff') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+staffTabHtml();
-  if(tab==='recruit') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+recruitTabHtml();
-  if(tab==='joiners') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+joinersTabHtml();
-  if(tab==='overtime') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+overtimeTabHtml();
+  const tab=F('ptab','overview');
+  const tabs=hrNavHtml(tab);
+  if(tab==='overview') return tabs+hrOverviewHtml();
+  if(tab==='leave') return tabs+leaveTabHtml();
+  if(tab==='staff') return tabs+staffTabHtml();
+  if(tab==='recruit') return tabs+recruitTabHtml();
+  if(tab==='joiners') return tabs+joinersTabHtml();
+  if(tab==='overtime') return tabs+overtimeTabHtml();
   if(tab==='equipment'){
     const eq=S.equipment||[];
     const due=eq.filter(e=>e.calDue && daysFromToday(e.calDue)<30);
-    return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'
+    return tabs
     + KPI([
       {k:'Equipment items', v:nf(eq.length), d:'calibrated or qualified'},
       {k:'Calibration due ≤30d', v:nf(due.length), d:due.length?'a lapsed device invalidates results':'all in date', cls:due.length?'warn':'ok'}
@@ -4309,7 +4516,7 @@ function V_people(){
       ], sortBy(eq,'calDue')), btn('Add equipment','eq-new',null,'btn primary'));
   }
   const tr=S.training||[];
-  return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'
+  return tabs
   + KPI([
     {k:'Training records', v:nf(tr.length), d:'current cycle'},
     {k:'Overdue refreshers', v:nf(tr.filter(t=>t.status==='overdue').length), d:'competence lapsed', cls:tr.filter(t=>t.status==='overdue').length?'bad':'ok'}
@@ -7098,6 +7305,7 @@ function render(){
   if(UI.view==='people' && (UI.filters.people||{}).ptab==='recruit' && Date.now()-LAST_CAND_SYNC>8000){
     LAST_CAND_SYNC=Date.now(); syncCandidates(true);
   }
+  if(UI.view==='people' && ['overview',undefined,''].includes((UI.filters.people||{}).ptab) && Date.now()-LAST_HR_SYNC>20000) hrSyncAll(true);
   [['joinQrP','Permanent'],['joinQrT','Part-time']].forEach(([id,ty])=>{ const el=document.getElementById(id);
     if(el && window.QRCode){ el.innerHTML=''; try{ new QRCode(el, {text:joinUrl(ty), width:150, height:150, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){} } });
   if(UI.view==='people' && (UI.filters.people||{}).ptab==='joiners' && Date.now()-LAST_JOIN_SYNC>8000){
@@ -9152,6 +9360,7 @@ function syncJoiners(silent){
   }catch(e){ if(!silent) toast('Could not reach the registrations table','bad'); }
 }
 ACT['join-sync'] = ()=> syncJoiners(false);
+ACT['hr-sync-all'] = ()=> hrSyncAll(false);   // HR Overview (defined above V_people)
 
 /* ---- HR → New joiners tab ---- */
 function joinersTabHtml(){
