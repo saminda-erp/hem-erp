@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>HE Manufacturing — New Staff Registration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!--
+  HE Manufacturing — New staff registration (first day / before first day)
+  ---------------------------------------------------------------------
+  Opened from one of the two QR codes on HR → New joiners in the ERP:
+      join.html?type=permanent      join.html?type=parttime
+  The QR decides the staff type; HR can still correct it before issuing the Employee ID.
+  No login. Each registration is INSERTED into Supabase table hem_new_joiners and the joiner's
+  IC / photo files go to the private bucket hem-staff-docs (see joiner-setup.sql). The public
+  key can only insert and upload — it can never read anything back.
+  The ERP pulls registrations in, HR files the offer letter and appointment letter, issues the
+  next Employee ID in the right series and adds the person to the employee list.
+-->
+<style>
+  :root{
+    --wine:#522B39; --wine-dk:#3c1f29; --wine-soft:#f4eeee; --brass:#9C7434; --brass-soft:#f6efe3;
+    --ink:#231a1c; --ink2:#5c4b51; --paper:#faf8f6; --card:#ffffff; --field:#ffffff;
+    --line:#e7dfdb; --muted:#8a7b76; --on-wine:#f7f0ee;
+    --ok:#2f6b46; --ok-bg:#e4f0e7; --bad:#a3312c; --bad-bg:#fbe4e2; --warn:#a86a10; --warn-bg:#fbeed9;
+    --r:10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --wine:#b9788d; --wine-dk:#2a161d; --wine-soft:#2d2226; --brass:#c9a063; --brass-soft:#2e2619;
+      --ink:#f1e9e6; --ink2:#c9bab5; --paper:#171214; --card:#211a1d; --field:#1b1517;
+      --line:#3a2f33; --muted:#9a8b86; --on-wine:#fff;
+      --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15;
+    }
+  }
+  :root[data-theme="dark"]{
+    --wine:#b9788d; --wine-dk:#2a161d; --wine-soft:#2d2226; --brass:#c9a063; --brass-soft:#2e2619;
+    --ink:#f1e9e6; --ink2:#c9bab5; --paper:#171214; --card:#211a1d; --field:#1b1517;
+    --line:#3a2f33; --muted:#9a8b86; --on-wine:#fff;
+    --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;font-size:15.5px;line-height:1.5}
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;background:#522B39;color:#f7f0ee;position:sticky;top:0;z-index:5}
+  .crest{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex:none;padding:2px;overflow:hidden}
+  .crest img{width:100%;height:100%;object-fit:contain;display:block}
+  .topbar .name{font-family:'Fraunces',serif;font-size:15px;font-weight:600;line-height:1.2}
+  .topbar .sub{font-size:11.5px;color:rgba(247,240,238,.7)}
+  .lang{display:flex;border:1px solid rgba(255,255,255,.3);border-radius:20px;overflow:hidden;flex:none}
+  .lang button{background:transparent;color:#f7f0ee;border:0;padding:6px 11px;font:600 12px 'Archivo',sans-serif;cursor:pointer;width:auto}
+  .lang button.on{background:#f7f0ee;color:#522B39}
+  .wrap{max-width:620px;margin:0 auto;padding:18px 16px 90px}
+  .steps{display:flex;gap:4px;margin:4px 0 6px}
+  .steps span{flex:1;height:5px;border-radius:3px;background:var(--line)}
+  .steps span.past{background:var(--brass)} .steps span.on{background:var(--wine)}
+  .stepname{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
+  .card h2{font-size:19px;margin-bottom:4px}
+  .lead{color:var(--ink2);font-size:13.5px;margin:0 0 16px}
+  label.l{display:block;font-size:13px;color:var(--ink2);margin-bottom:5px;font-weight:600}
+  .req{color:var(--bad)}
+  .hint{font-size:12px;color:var(--muted);margin:-8px 0 14px}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);
+    font-family:'Archivo',sans-serif;font-size:16px;background:var(--field);color:var(--ink);margin-bottom:14px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--wine);outline-offset:1px}
+  .bad-field{border-color:var(--bad)!important;background:var(--bad-bg)!important}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:420px){ .row2{grid-template-columns:1fr} }
+  .choices{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .choices label{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:22px;padding:8px 13px;
+    font-size:14px;cursor:pointer;background:var(--field);user-select:none}
+  .choices input{width:auto;margin:0;accent-color:var(--wine)}
+  .choices label:has(input:checked){border-color:var(--wine);background:var(--wine-soft);font-weight:600}
+  .choices.bad-group label{border-color:var(--bad)}
+  .money{position:relative} .money input{padding-left:44px}
+  .money::before{content:'RM';position:absolute;left:12px;top:11px;font-size:14px;color:var(--muted);font-weight:600}
+  fieldset{border:1px dashed var(--line);border-radius:var(--r);padding:12px 12px 0;margin:0 0 14px}
+  legend{font-size:12.5px;font-weight:700;color:var(--brass);padding:0 6px;text-transform:uppercase;letter-spacing:.04em}
+  button{font-family:'Archivo',sans-serif;font-weight:600;font-size:15px;border:none;border-radius:var(--r);
+    padding:13px 16px;cursor:pointer}
+  .btn-primary{background:#522B39;color:#f7f0ee}
+  .btn-primary:disabled{opacity:.5}
+  .btn-ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
+  .nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;z-index:5}
+  .nav .in{max-width:620px;margin:0 auto;display:flex;gap:10px}
+  .nav .btn-primary{flex:1}
+  .err{background:var(--bad-bg);color:var(--bad);border-radius:var(--r);padding:10px 12px;font-size:13.5px;margin-bottom:14px}
+  .note{background:var(--brass-soft);border-radius:var(--r);padding:11px 13px;font-size:13.5px;color:var(--ink2);margin-bottom:14px}
+  .q{border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:12px;background:var(--card)}
+  .q .qn{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--brass);font-weight:500}
+  .q .qt{font-weight:600;margin:3px 0 10px}
+  .q .opt{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:7px;cursor:pointer;background:var(--field)}
+  .q .opt input{width:auto;margin:0;accent-color:var(--wine)}
+  .q .opt:has(input:checked){border-color:var(--wine);background:var(--wine-soft);font-weight:600}
+  .q.bad-group{border-color:var(--bad)}
+  .timer{position:sticky;top:62px;z-index:4;display:flex;justify-content:space-between;align-items:center;background:var(--wine-soft);
+    border:1px solid var(--line);border-radius:var(--r);padding:9px 13px;margin-bottom:12px;font-size:13.5px}
+  .timer b{font-family:'IBM Plex Mono',monospace;font-size:16px}
+  .timer.late{background:var(--warn-bg);color:var(--warn)}
+  .review dt{font-size:12px;color:var(--muted);margin-top:8px}
+  .review dd{margin:0;font-weight:500}
+  .done{text-align:center;padding:40px 18px}
+  .done .cid{font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:500;color:var(--wine);letter-spacing:.04em;margin:10px 0 4px}
+  .tick{width:64px;height:64px;border-radius:50%;background:var(--ok-bg);color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 12px}
+  .cvbox{border:1px dashed var(--line);border-radius:var(--r);padding:12px;margin-bottom:14px}
+  .cvbtns{display:flex;gap:8px;margin:8px 0}
+  .cvbtns label{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--wine);color:var(--wine);
+    border-radius:var(--r);padding:11px 8px;font-weight:600;font-size:14px;cursor:pointer;background:var(--field)}
+  .cvbtns input{display:none}
+  .cvlist{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+  .cvitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--field)}
+  .cvitem .th{width:44px;height:56px;border-radius:4px;background:var(--wine-soft);flex:none;object-fit:cover;display:flex;align-items:center;justify-content:center;
+    font:600 11px 'IBM Plex Mono',monospace;color:var(--wine)}
+  .cvitem .nm{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cvitem .sz{font-size:11.5px;color:var(--muted)}
+  .cvitem button{background:transparent;border:1px solid var(--line);color:var(--ink2);padding:6px 10px;font-size:12.5px}
+  [hidden]{display:none!important}
+</style>
+<link rel="icon" type="image/png" href="hem-seal-160.png">
+<link rel="apple-touch-icon" href="hem-seal-160.png">
+<style>
+  .typebadge{display:inline-block;font:600 11.5px 'Archivo',sans-serif;letter-spacing:.04em;text-transform:uppercase;
+    padding:4px 10px;border-radius:14px;background:var(--brass-soft);color:var(--brass);margin-bottom:10px}
+  .pick{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+  .pick button{text-align:left;background:var(--field);border:1px solid var(--line);color:var(--ink);padding:16px}
+  .pick button b{display:block;font-family:'Fraunces',serif;font-size:17px;margin-bottom:2px}
+  .pick button span{font-weight:400;font-size:13.5px;color:var(--ink2)}
+  .upl-sec{font-size:12.5px;font-weight:700;color:var(--brass);text-transform:uppercase;letter-spacing:.04em;margin:4px 0 6px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="crest"><img src="hem-seal-160.png" alt="HE Manufacturing"></div>
+  <div style="flex:1;min-width:0">
+    <div class="name">HE Manufacturing (M) Sdn Bhd</div>
+    <div class="sub" data-t="appTitle"></div>
+  </div>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" data-lang="en" class="on">EN</button>
+    <button type="button" data-lang="ms">BM</button>
+  </div>
+</div>
+
+<div class="wrap" id="formWrap">
+  <div class="steps" id="stepBar"></div>
+  <div class="stepname" id="stepName"></div>
+  <div id="errBox" class="err" hidden></div>
+  <div id="stepHost"></div>
+</div>
+
+<div class="nav" id="navBar">
+  <div class="in">
+    <button type="button" class="btn-ghost" id="backBtn" data-t="back"></button>
+    <button type="button" class="btn-primary" id="nextBtn"></button>
+  </div>
+</div>
+
+<div class="wrap" id="doneWrap" hidden>
+  <div class="card done">
+    <div class="tick">✓</div>
+    <h2 data-t="doneTitle"></h2>
+    <p class="lead" style="margin:8px 0 0" data-t="doneRef"></p>
+    <div class="cid" id="doneId"></div>
+    <p class="lead" data-t="doneBody"></p>
+    <button type="button" class="btn-ghost" id="restartBtn" data-t="restart" style="width:100%"></button>
+    <p class="lead" style="margin-top:12px;font-size:12px" id="resetNote"></p>
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------ config */
+const SUPABASE_URL = 'https://znxtvkpnwzrzevljdsgx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_3Q-qF58hDO6Q5Tr8Wr8X4A_WTBVR8z5';
+const sb = (window.supabase && window.supabase.createClient)
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:false}}) : null;
+const RESET_AFTER_SEC = 90;     // shared HR tablet: wipe the finished screen for the next person
+const STEPS = 4;
+
+/* Which QR was scanned decides the staff type. HR can still correct it in the ERP before the
+   employee number is issued, so a mistyped / swapped link is caught there. */
+const QS = new URLSearchParams(location.search);
+const TYPE_FROM_LINK = (()=>{ const t=String(QS.get('type')||'').toLowerCase();
+  return /^(p|perm|permanent)$/.test(t)? 'Permanent' : /^(pt|part|parttime|part-time)$/.test(t)? 'Part-time' : ''; })();
+
+const DEPTS = ['Production','Filling / Packing','Warehouse / Store','QC / Lab','R&D','Maintenance','Admin / HR','Accounts / Finance','Sales / Customer Service','Other'];
+const BANKS = ['Maybank','CIMB Bank','Public Bank','RHB Bank','Hong Leong Bank','AmBank','Bank Islam','Bank Rakyat','BSN','Affin Bank','Alliance Bank','OCBC Bank','UOB Bank','HSBC Bank','Standard Chartered','Agrobank','Other'];
+
+/* ------------------------------------------------------------------ text (EN / BM) */
+const TX = {
+  appTitle:{en:'New staff registration', ms:'Pendaftaran pekerja baharu'},
+  permanent:{en:'Permanent staff', ms:'Pekerja tetap'}, parttime:{en:'Part-time staff', ms:'Pekerja sambilan'},
+  pickTitle:{en:'Welcome to HE Manufacturing', ms:'Selamat datang ke HE Manufacturing'},
+  pickLead:{en:'Choose the type of job you are joining as. If you are not sure, ask HR.', ms:'Pilih jenis pekerjaan anda. Jika tidak pasti, tanya HR.'},
+  pickPerm:{en:'Full-time, on the monthly payroll', ms:'Sepenuh masa, gaji bulanan'},
+  pickPt:{en:'Part-time / hourly or daily', ms:'Sambilan / mengikut jam atau hari'},
+  s1:{en:'About you', ms:'Maklumat diri'}, s2:{en:'Contact & emergency', ms:'Hubungan & kecemasan'},
+  s3:{en:'Job & payroll', ms:'Kerja & gaji'}, s4:{en:'Documents & declaration', ms:'Dokumen & akuan'},
+  stepOf:{en:'Step {n} of 4 — {name}', ms:'Langkah {n} daripada 4 — {name}'},
+  back:{en:'Back', ms:'Kembali'}, next:{en:'Next', ms:'Seterusnya'}, submit:{en:'Submit registration', ms:'Hantar pendaftaran'},
+  choose:{en:'— choose —', ms:'— pilih —'},
+  youTitle:{en:'About you', ms:'Maklumat diri'},
+  youLead:{en:'Fill in exactly as printed on your IC or passport. HR uses this for your payroll, EPF and SOCSO.', ms:'Isi tepat seperti dalam IC atau pasport anda. HR guna maklumat ini untuk gaji, KWSP dan PERKESO.'},
+  fullName:{en:'Full name (as in IC / passport)', ms:'Nama penuh (seperti dalam IC / pasport)'},
+  prefName:{en:'Name you like to be called', ms:'Nama panggilan'},
+  nationality:{en:'Nationality', ms:'Warganegara'}, malaysian:{en:'Malaysian', ms:'Malaysia'}, otherNat:{en:'Other', ms:'Lain-lain'},
+  nationalityOther:{en:'Which country?', ms:'Negara mana?'},
+  icNo:{en:'MyKad (IC) number', ms:'Nombor MyKad (IC)'}, passportNo:{en:'Passport number', ms:'Nombor pasport'},
+  passportExpiry:{en:'Passport expiry date', ms:'Tarikh tamat pasport'},
+  permitNo:{en:'Work permit / visa number (if you have it)', ms:'Nombor permit kerja / visa (jika ada)'},
+  permitExpiry:{en:'Work permit expiry date', ms:'Tarikh tamat permit kerja'},
+  dob:{en:'Date of birth', ms:'Tarikh lahir'}, gender:{en:'Gender', ms:'Jantina'}, male:{en:'Male', ms:'Lelaki'}, female:{en:'Female', ms:'Perempuan'},
+  marital:{en:'Marital status', ms:'Status perkahwinan'},
+  ms_:{en:['Single','Married','Divorced','Widowed'], ms:['Bujang','Berkahwin','Bercerai','Balu / Duda']},
+  children:{en:'Number of children', ms:'Bilangan anak'},
+  contactTitle:{en:'Contact & emergency', ms:'Hubungan & kecemasan'},
+  phone:{en:'Mobile number', ms:'Nombor telefon bimbit'},
+  whatsapp:{en:'WhatsApp number (if different)', ms:'Nombor WhatsApp (jika berbeza)'},
+  waHint:{en:'HR sends leave, overtime and payslip messages on WhatsApp.', ms:'HR menghantar mesej cuti, kerja lebih masa dan slip gaji melalui WhatsApp.'},
+  email:{en:'Email (optional)', ms:'E-mel (pilihan)'},
+  address:{en:'Current home address', ms:'Alamat rumah semasa'},
+  postcode:{en:'Postcode', ms:'Poskod'},
+  emTitle:{en:'Emergency contact', ms:'Hubungan kecemasan'},
+  emName:{en:'Name', ms:'Nama'}, emRel:{en:'Relationship to you', ms:'Hubungan dengan anda'},
+  emRelPh:{en:'e.g. spouse, mother, brother', ms:'cth. suami/isteri, ibu, abang'},
+  emPhone:{en:'Their phone number', ms:'Nombor telefon mereka'},
+  jobTitle:{en:'Your job', ms:'Pekerjaan anda'},
+  jobLead:{en:'As written in your offer letter. If you do not know something, leave it blank — HR will fill it in.', ms:'Seperti dalam surat tawaran anda. Jika tidak tahu, biarkan kosong — HR akan isi.'},
+  position:{en:'Position / job title', ms:'Jawatan'}, department:{en:'Department', ms:'Jabatan'},
+  startDate:{en:'First working day', ms:'Hari pertama bekerja'},
+  refBy:{en:'Who referred you? (optional)', ms:'Siapa yang mencadangkan anda? (pilihan)'},
+  statTitle:{en:'EPF, SOCSO & tax', ms:'KWSP, PERKESO & cukai'},
+  statLead:{en:'Leave blank if you do not have one yet.', ms:'Biarkan kosong jika belum ada.'},
+  epfNo:{en:'EPF (KWSP) number', ms:'Nombor KWSP'}, socsoNo:{en:'SOCSO (PERKESO) number', ms:'Nombor PERKESO'},
+  taxNo:{en:'Income tax (LHDN) number', ms:'Nombor cukai pendapatan (LHDN)'},
+  bankTitle:{en:'Salary bank account', ms:'Akaun bank gaji'},
+  bankName:{en:'Bank', ms:'Bank'}, bankOther:{en:'Bank name', ms:'Nama bank'},
+  bankAcct:{en:'Account number', ms:'Nombor akaun'},
+  bankHolder:{en:'Account holder name', ms:'Nama pemegang akaun'},
+  bankHint:{en:'The account must be in your own name.', ms:'Akaun mestilah atas nama anda sendiri.'},
+  docTitle:{en:'Your documents', ms:'Dokumen anda'},
+  docLead:{en:'Take a clear photo with your phone, or choose a file. Photos are made smaller automatically.', ms:'Ambil gambar yang jelas dengan telefon, atau pilih fail. Gambar akan dikecilkan secara automatik.'},
+  kind_ic:{en:'IC (front & back) or passport', ms:'IC (depan & belakang) atau pasport'},
+  kind_photo:{en:'Passport-size photo (optional)', ms:'Gambar saiz pasport (pilihan)'},
+  kind_other:{en:'Other — bank statement top, certificates, permit (optional)', ms:'Lain-lain — penyata bank, sijil, permit (pilihan)'},
+  takePhoto:{en:'Take photo', ms:'Ambil gambar'}, chooseFile:{en:'Choose file', ms:'Pilih fail'}, remove:{en:'Remove', ms:'Buang'},
+  fileHint:{en:'PDF or photo, up to 10 MB each.', ms:'PDF atau gambar, maksimum 10 MB setiap satu.'},
+  needIc:{en:'Please add a photo of your IC or passport.', ms:'Sila tambah gambar IC atau pasport anda.'},
+  tooMany:{en:'Maximum 8 files.', ms:'Maksimum 8 fail.'},
+  badType:{en:'{f} is not a PDF or photo.', ms:'{f} bukan PDF atau gambar.'},
+  tooBig:{en:'{f} is larger than 10 MB.', ms:'{f} melebihi 10 MB.'},
+  uploading:{en:'Uploading file {n} of {t}…', ms:'Memuat naik fail {n} daripada {t}…'},
+  declTitle:{en:'Declaration', ms:'Akuan'},
+  declText:{en:'I confirm the information above is true and complete. I agree that HE Manufacturing (M) Sdn Bhd may keep and use it for my employment, payroll, EPF, SOCSO, tax and legal records, in line with the Personal Data Protection Act 2010.', ms:'Saya mengesahkan maklumat di atas adalah benar dan lengkap. Saya bersetuju HE Manufacturing (M) Sdn Bhd menyimpan dan menggunakannya untuk rekod pekerjaan, gaji, KWSP, PERKESO, cukai dan undang-undang, selaras dengan Akta Perlindungan Data Peribadi 2010.'},
+  declare:{en:'I agree', ms:'Saya bersetuju'},
+  signature:{en:'Type your full name as your signature', ms:'Taip nama penuh anda sebagai tandatangan'},
+  required:{en:'Please fill in the boxes marked in red.', ms:'Sila isi ruangan yang bertanda merah.'},
+  mustDeclare:{en:'Please tick the declaration.', ms:'Sila tandakan akuan.'},
+  sigMismatch:{en:'Your signature must match your full name.', ms:'Tandatangan mesti sama dengan nama penuh anda.'},
+  badIc:{en:'MyKad number must have 12 digits.', ms:'Nombor MyKad mesti 12 digit.'},
+  sending:{en:'Sending…', ms:'Menghantar…'},
+  sendFail:{en:'Could not send — check the internet connection and try again.', ms:'Tidak dapat dihantar — semak sambungan internet dan cuba lagi.'},
+  sendReject:{en:'The form was not accepted. Please show this screen to HR.', ms:'Borang tidak diterima. Sila tunjukkan skrin ini kepada HR.'},
+  doneTitle:{en:'Thank you — registration received', ms:'Terima kasih — pendaftaran diterima'},
+  doneRef:{en:'Your reference number', ms:'Nombor rujukan anda'},
+  doneBody:{en:'Show this number to HR. HR will check your details and give you your Employee ID, which you use for attendance, leave and overtime.', ms:'Tunjukkan nombor ini kepada HR. HR akan menyemak maklumat anda dan memberi ID Pekerja anda, yang digunakan untuk kehadiran, cuti dan kerja lebih masa.'},
+  restart:{en:'Start a new registration', ms:'Mula pendaftaran baharu'},
+  resetIn:{en:'This screen clears in {s} s.', ms:'Skrin ini akan dikosongkan dalam {s} saat.'}
+};
+
+/* ------------------------------------------------------------------ state */
+let LANG='en', step=TYPE_FROM_LINK? 1 : 0;
+let D={staffType:TYPE_FROM_LINK};
+let FILES=[];                    // [{kind, blob, name, type, size, thumb}]
+let resetHandle=null;
+const MAX_FILES=8, MAX_BYTES=10*1024*1024;
+
+const $=id=>document.getElementById(id);
+const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function t(k, vars){ let s=(TX[k]||{})[LANG]; if(s==null) s=(TX[k]||{}).en; if(s==null) s=k;
+  if(vars && typeof s==='string') Object.keys(vars).forEach(x=>{ s=s.replace('{'+x+'}', vars[x]); }); return s; }
+const isMy=()=>D.nationality==='Malaysian';
+const typeLabel=()=>D.staffType==='Part-time'? t('parttime') : t('permanent');
+
+/* ------------------------------------------------------------------ field helpers */
+function fld(name, label, o){ o=o||{};
+  const v=D[name]!=null?D[name]:'';
+  const lab='<label class="l" for="f_'+name+'">'+esc(label)+(o.req?' <span class="req">*</span>':'')+'</label>';
+  let ctl;
+  if(o.type==='textarea') ctl='<textarea id="f_'+name+'" data-n="'+name+'" rows="'+(o.rows||2)+'">'+esc(v)+'</textarea>';
+  else if(o.type==='select'){
+    const labels=o.labels||o.values;
+    ctl='<select id="f_'+name+'" data-n="'+name+'"><option value="">'+esc(t('choose'))+'</option>'
+      +o.values.map((val,i)=>'<option value="'+esc(val)+'"'+(String(v)===String(val)?' selected':'')+'>'+esc(labels[i])+'</option>').join('')+'</select>';
+  } else {
+    ctl='<input id="f_'+name+'" data-n="'+name+'" type="'+(o.type||'text')+'" value="'+esc(v)+'"'
+      +(o.inputmode?' inputmode="'+o.inputmode+'"':'')+(o.min!=null?' min="'+o.min+'"':'')+(o.max!=null?' max="'+o.max+'"':'')
+      +(o.ph?' placeholder="'+esc(o.ph)+'"':'')+(o.auto?' autocomplete="'+o.auto+'"':'')+'>';
+  }
+  return lab+ctl+(o.hint?'<div class="hint">'+esc(o.hint)+'</div>':'');
+}
+function radios(name, label, values, labels, o){ o=o||{};
+  return '<label class="l">'+esc(label)+(o.req?' <span class="req">*</span>':'')+'</label><div class="choices" data-group="'+name+'">'
+    +values.map((val,i)=>'<label><input type="radio" name="r_'+name+'" data-n="'+name+'" value="'+esc(val)+'"'+(D[name]===val?' checked':'')+'> '+esc(labels[i])+'</label>').join('')+'</div>';
+}
+const row2=(a,b)=>'<div class="row2"><div>'+a+'</div><div>'+b+'</div></div>';
+const todayIso=()=>new Date().toISOString().slice(0,10);
+
+/* ------------------------------------------------------------------ steps */
+function stepHtml(){
+  if(step===0){
+    return '<div class="card"><h2>'+esc(t('pickTitle'))+'</h2><p class="lead">'+esc(t('pickLead'))+'</p><div class="pick">'
+      +'<button type="button" data-pick="Permanent"><b>'+esc(t('permanent'))+'</b><span>'+esc(t('pickPerm'))+'</span></button>'
+      +'<button type="button" data-pick="Part-time"><b>'+esc(t('parttime'))+'</b><span>'+esc(t('pickPt'))+'</span></button>'
+      +'</div></div>';
+  }
+  const badge='<div class="typebadge">'+esc(typeLabel())+'</div>';
+  if(step===1){
+    return '<div class="card">'+badge+'<h2>'+esc(t('youTitle'))+'</h2><p class="lead">'+esc(t('youLead'))+'</p>'
+      + fld('fullName', t('fullName'), {req:true, auto:'name'})
+      + fld('prefName', t('prefName'))
+      + radios('nationality', t('nationality'), ['Malaysian','Other'], [t('malaysian'), t('otherNat')], {req:true})
+      + (D.nationality==='Malaysian'? fld('icNo', t('icNo'), {req:true, inputmode:'numeric', ph:'900101-10-1234'}) : '')
+      + (D.nationality==='Other'
+          ? fld('nationalityOther', t('nationalityOther'), {req:true})
+            + row2(fld('passportNo', t('passportNo'), {req:true}), fld('passportExpiry', t('passportExpiry'), {req:true, type:'date'}))
+            + row2(fld('permitNo', t('permitNo')), fld('permitExpiry', t('permitExpiry'), {type:'date'}))
+          : '')
+      + row2(fld('dob', t('dob'), {req:true, type:'date', max:todayIso()}),
+             radios('gender', t('gender'), ['Male','Female'], [t('male'), t('female')], {req:true}))
+      + row2(fld('marital', t('marital'), {type:'select', values:TX.ms_.en, labels:t('ms_')}),
+             fld('children', t('children'), {type:'number', inputmode:'numeric', min:0}))
+      +'</div>';
+  }
+  if(step===2){
+    return '<div class="card">'+badge+'<h2>'+esc(t('contactTitle'))+'</h2>'
+      + row2(fld('phone', t('phone'), {req:true, type:'tel', inputmode:'tel', auto:'tel', ph:'01X-XXX XXXX'}),
+             fld('whatsapp', t('whatsapp'), {type:'tel', inputmode:'tel'}))
+      + '<div class="hint" style="margin-top:-6px">'+esc(t('waHint'))+'</div>'
+      + fld('email', t('email'), {type:'email', auto:'email'})
+      + fld('address', t('address'), {req:true, type:'textarea', rows:3})
+      + fld('postcode', t('postcode'), {req:true, inputmode:'numeric'})
+      + '<fieldset><legend>'+esc(t('emTitle'))+'</legend>'
+      + fld('emName', t('emName'), {req:true})
+      + row2(fld('emRel', t('emRel'), {req:true, ph:t('emRelPh')}), fld('emPhone', t('emPhone'), {req:true, type:'tel', inputmode:'tel'}))
+      + '</fieldset></div>';
+  }
+  if(step===3){
+    return '<div class="card">'+badge+'<h2>'+esc(t('jobTitle'))+'</h2><p class="lead">'+esc(t('jobLead'))+'</p>'
+      + fld('position', t('position'), {req:true})
+      + row2(fld('department', t('department'), {type:'select', values:DEPTS}), fld('startDate', t('startDate'), {req:true, type:'date'}))
+      + fld('refBy', t('refBy'))
+      + '<fieldset><legend>'+esc(t('statTitle'))+'</legend><div class="hint" style="margin:0 0 10px">'+esc(t('statLead'))+'</div>'
+      + row2(fld('epfNo', t('epfNo'), {inputmode:'numeric'}), fld('socsoNo', t('socsoNo')))
+      + fld('taxNo', t('taxNo'))
+      + '</fieldset>'
+      + '<fieldset><legend>'+esc(t('bankTitle'))+'</legend>'
+      + fld('bankName', t('bankName'), {req:true, type:'select', values:BANKS})
+      + (D.bankName==='Other'? fld('bankOther', t('bankOther'), {req:true}) : '')
+      + fld('bankAcct', t('bankAcct'), {req:true, inputmode:'numeric'})
+      + fld('bankHolder', t('bankHolder'), {req:true, hint:t('bankHint')})
+      + '</fieldset></div>';
+  }
+  if(step===4){
+    return '<div class="card">'+badge+'<h2>'+esc(t('docTitle'))+'</h2><p class="lead">'+esc(t('docLead'))+'</p>'
+      + ['ic','photo','other'].map(uplHtml).join('')
+      + '<div class="hint" style="margin:0">'+esc(t('fileHint'))+'</div></div>'
+      + '<div class="card" id="declWrap"><h2>'+esc(t('declTitle'))+'</h2><p class="lead">'+esc(t('declText'))+'</p>'
+      + '<div class="choices"><label><input type="checkbox" data-n="declare"'+(D.declare?' checked':'')+'> '+esc(t('declare'))+'</label></div>'
+      + fld('signature', t('signature'), {req:true})
+      + '</div>';
+  }
+  return '';
+}
+function uplHtml(kind){
+  const mine=FILES.map((f,i)=>({f,i})).filter(x=>x.f.kind===kind);
+  return '<div class="cvbox" data-kind="'+kind+'"><div class="upl-sec">'+esc(t('kind_'+kind))+(kind==='ic'?' <span class="req">*</span>':'')+'</div>'
+    +'<div class="cvbtns">'
+    +'<label><input type="file" data-upl="'+kind+'" accept="image/*" capture="environment">📷 '+esc(t('takePhoto'))+'</label>'
+    +'<label><input type="file" data-upl="'+kind+'" accept="application/pdf,image/*" multiple>📄 '+esc(t('chooseFile'))+'</label>'
+    +'</div><div class="cvlist">'+mine.map(({f,i})=>'<div class="cvitem">'
+      +(f.thumb?'<img class="th" src="'+f.thumb+'" alt="">':'<div class="th">'+(f.type==='application/pdf'?'PDF':'IMG')+'</div>')
+      +'<div class="nm">'+esc(f.name)+'<div class="sz">'+fmtSize(f.size)+'</div></div>'
+      +'<button type="button" data-del="'+i+'">'+esc(t('remove'))+'</button></div>').join('')+'</div></div>';
+}
+
+function render(){
+  document.documentElement.lang = LANG==='ms'?'ms':'en';
+  document.querySelectorAll('[data-t]').forEach(el=>{ el.textContent=t(el.dataset.t); });
+  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on', b.dataset.lang===LANG));
+  const names=[t('s1'),t('s2'),t('s3'),t('s4')];
+  $('stepBar').innerHTML= step===0? '' : names.map((n,i)=>'<span class="'+(i+1<step?'past':i+1===step?'on':'')+'"></span>').join('');
+  $('stepName').textContent= step===0? '' : t('stepOf',{n:step, name:names[step-1]});
+  $('stepHost').innerHTML=stepHtml();
+  $('navBar').hidden = step===0;
+  $('backBtn').hidden = step===1 && !!TYPE_FROM_LINK;
+  $('nextBtn').textContent = step===STEPS? t('submit') : t('next');
+}
+
+/* ------------------------------------------------------------------ input capture */
+document.addEventListener('input', e=>{
+  const el=e.target; if(!el.dataset.n) return;
+  D[el.dataset.n] = el.type==='checkbox'? el.checked : el.value;
+  el.classList.remove('bad-field');
+  const g=el.closest('.choices'); if(g) g.classList.remove('bad-group');
+});
+document.addEventListener('change', e=>{
+  const n=e.target.dataset.n;
+  if(['nationality','bankName'].includes(n)){ D[n]=e.target.value; keepScroll(render); }
+  if(e.target.dataset.upl){ const kind=e.target.dataset.upl, list=e.target.files;
+    addFiles(kind, list).then(()=>{ try{ e.target.value=''; }catch(x){} }); }
+});
+document.addEventListener('click', e=>{
+  const p=e.target.closest('[data-pick]');
+  if(p){ D.staffType=p.dataset.pick; step=1; render(); window.scrollTo(0,0); return; }
+  const d=e.target.closest('[data-del]');
+  if(d){ FILES.splice(Number(d.dataset.del),1); keepScroll(render); }
+});
+function keepScroll(fn){ const y=window.scrollY; fn(); window.scrollTo(0,y); }
+
+/* ------------------------------------------------------------------ validation */
+function need(names){ return names.filter(n=>{ const v=D[n]; return v==null || String(v).trim()===''; }); }
+const digits=s=>String(s||'').replace(/\D/g,'');
+function validate(){
+  let bad=[];
+  if(step===1){
+    bad=need(['fullName','nationality','dob','gender']);
+    if(D.nationality==='Malaysian'){ bad=bad.concat(need(['icNo']));
+      if(D.icNo && digits(D.icNo).length!==12){ mark(['icNo']); return fail(t('badIc')); } }
+    if(D.nationality==='Other') bad=bad.concat(need(['nationalityOther','passportNo','passportExpiry']));
+  }
+  if(step===2){
+    bad=need(['phone','address','postcode','emName','emRel','emPhone']);
+    ['phone','emPhone'].forEach(k=>{ if(D[k] && digits(D[k]).length<9) bad.push(k); });
+    if(D.whatsapp && digits(D.whatsapp).length<9) bad.push('whatsapp');
+    if(D.email && !/^\S+@\S+\.\S+$/.test(D.email)) bad.push('email');
+  }
+  if(step===3){
+    bad=need(['position','startDate','bankName','bankAcct','bankHolder']);
+    if(D.bankName==='Other') bad=bad.concat(need(['bankOther']));
+    if(D.bankAcct && digits(D.bankAcct).length<6) bad.push('bankAcct');
+  }
+  if(step===4){
+    if(!FILES.some(f=>f.kind==='ic')){ const b=document.querySelector('.cvbox[data-kind="ic"]'); if(b){ b.style.borderColor='var(--bad)'; b.scrollIntoView({behavior:'smooth',block:'center'}); } return fail(t('needIc')); }
+    if(!D.declare){ const w=$('declWrap'); if(w) w.style.borderColor='var(--bad)'; return fail(t('mustDeclare')); }
+    if(!D.signature || !D.signature.trim()) bad.push('signature');
+    else if(norm(D.signature)!==norm(D.fullName)){ mark(['signature']); return fail(t('sigMismatch')); }
+  }
+  if(bad.length){ mark(bad); return fail(t('required')); }
+  $('errBox').hidden=true; return true;
+}
+function norm(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function mark(names){
+  names.forEach(n=>{
+    const el=document.querySelector('[data-n="'+n+'"]:not([type="radio"])'); if(el) el.classList.add('bad-field');
+    const g=document.querySelector('.choices[data-group="'+n+'"]'); if(g) g.classList.add('bad-group');
+  });
+  const first=document.querySelector('.bad-field, .bad-group'); if(first) first.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function fail(msg){ $('errBox').textContent=msg; $('errBox').hidden=false; if(!document.querySelector('.bad-field,.bad-group')) window.scrollTo({top:0,behavior:'smooth'}); return false; }
+
+/* ------------------------------------------------------------------ navigation */
+$('nextBtn').addEventListener('click', async ()=>{
+  if(!validate()) return;
+  if(step<STEPS){ step++; render(); window.scrollTo(0,0); return; }
+  await submit();
+});
+$('backBtn').addEventListener('click', ()=>{
+  $('errBox').hidden=true;
+  if(step>1){ step--; render(); window.scrollTo(0,0); }
+  else if(!TYPE_FROM_LINK){ step=0; render(); }
+});
+document.querySelectorAll('.lang button').forEach(b=>b.addEventListener('click', ()=>{ LANG=b.dataset.lang; keepScroll(render); }));
+
+/* ------------------------------------------------------------------ file upload
+   Held in memory until Submit, then uploaded to the PRIVATE bucket hem-staff-docs under
+   <reference>/<kind>-N.ext. The public key can only upload there — never list or open — so one
+   joiner can never see another's IC. Photos are shrunk on the phone (long edge 2000px, JPEG). */
+function fmtSize(b){ return b>=1048576? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' KB'; }
+function shrinkImage(file){
+  return new Promise(res=>{
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{
+      try{
+        const max=2000, k=Math.min(1, max/Math.max(img.naturalWidth,img.naturalHeight));
+        const w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,w,h); g.drawImage(img,0,0,w,h);
+        const tc=document.createElement('canvas'), tk=120/Math.max(w,h); tc.width=Math.round(w*tk); tc.height=Math.round(h*tk);
+        tc.getContext('2d').drawImage(c,0,0,tc.width,tc.height);
+        const thumb=tc.toDataURL('image/jpeg',0.7);
+        c.toBlob(b=>{ URL.revokeObjectURL(url); res(b? {blob:b, thumb} : null); }, 'image/jpeg', 0.82);
+      }catch(e){ URL.revokeObjectURL(url); res(null); }
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); res(null); };
+    img.src=url;
+  });
+}
+async function addFiles(kind, list){
+  $('errBox').hidden=true;
+  for(const f of Array.from(list||[])){
+    if(FILES.length>=MAX_FILES){ fail(t('tooMany')); break; }
+    const isPdf = f.type==='application/pdf' || /\.pdf$/i.test(f.name);
+    const isImg = /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name);
+    if(!isPdf && !isImg){ fail(t('badType',{f:f.name})); continue; }
+    if(isImg){
+      const r=await shrinkImage(f);
+      if(r){ FILES.push({kind, blob:r.blob, name:f.name.replace(/\.[^.]+$/,'')+'.jpg', type:'image/jpeg', size:r.blob.size, thumb:r.thumb}); continue; }
+    }
+    if(f.size>MAX_BYTES){ fail(t('tooBig',{f:f.name})); continue; }
+    const type = isPdf? 'application/pdf' : (f.type || (/\.heif$/i.test(f.name)?'image/heif':'image/heic'));
+    FILES.push({kind, blob:f, name:f.name, type, size:f.size, thumb:null});
+  }
+  keepScroll(render);
+}
+function ext(f){ return f.type==='application/pdf'?'pdf': f.type==='image/png'?'png': f.type==='image/webp'?'webp': /heif/.test(f.type)?'heif': /heic/.test(f.type)?'heic':'jpg'; }
+async function uploadFiles(id){
+  const out=[], n={};
+  for(let i=0;i<FILES.length;i++){
+    const f=FILES[i]; n[f.kind]=(n[f.kind]||0)+1;
+    const path=id+'/'+f.kind+'-'+n[f.kind]+'.'+ext(f);
+    $('nextBtn').textContent=t('uploading',{n:i+1, t:FILES.length});
+    const { error } = await sb.storage.from('hem-staff-docs').upload(path, f.blob, {contentType:f.type, upsert:false, cacheControl:'3600'});
+    if(error) throw error;
+    out.push({kind:f.kind, path, name:f.name, type:f.type, size:f.size});
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ submit */
+function newId(){
+  const d=new Date(), y=String(d.getFullYear()).slice(2), m=String(d.getMonth()+1).padStart(2,'0');
+  const r=(crypto.getRandomValues? crypto.getRandomValues(new Uint32Array(1))[0] : Math.floor(Math.random()*1e9))%9000+1000;
+  return 'J'+y+m+'-'+r;
+}
+function buildPayload(){
+  const data=Object.assign({}, D);
+  delete data.declare; delete data.staffType;
+  if(D.nationality==='Other') data.nationality = D.nationalityOther||'Other';
+  if(D.bankName==='Other') data.bankName = D.bankOther||'Other';
+  data.icNo = D.nationality==='Malaysian'? String(D.icNo||'').trim() : String(D.passportNo||'').trim();
+  data.idType = D.nationality==='Malaysian'? 'MyKad' : 'Passport';
+  if(data.children!=null && data.children!=='') data.children=Number(data.children);
+  data.linkType = TYPE_FROM_LINK || 'chosen on form';
+  data.formLang = LANG; data.declared = true; data.declaredAt = new Date().toISOString();
+  return { id:newId(), staff_type:D.staffType, status:'new',
+           full_name:String(D.fullName||'').trim().toUpperCase(), phone:String(D.phone||'').trim(), data };
+}
+async function submit(){
+  const btn=$('nextBtn'); btn.disabled=true; btn.textContent=t('sending');
+  const row=buildPayload();
+  try{
+    if(!sb) throw new Error('no client');
+    let error=null;
+    for(let attempt=0; attempt<3; attempt++){
+      try{ row.data.files = FILES.length? await uploadFiles(row.id) : []; error=null; }
+      catch(upErr){
+        if(/exist|duplicate|409/i.test(String(upErr.message||upErr.statusCode||''))){ row.id=newId(); error=upErr; continue; }
+        throw upErr;
+      }
+      btn.textContent=t('sending');
+      ({ error } = await sb.from('hem_new_joiners').insert(row));
+      if(error && /duplicate|unique/i.test(error.message||'')){ row.id=newId(); continue; }
+      break;
+    }
+    if(error) throw error;
+    done(row.id);
+  }catch(err){
+    console.error(err);
+    btn.disabled=false; btn.textContent=t('submit');
+    const offline = !sb || navigator.onLine===false || /fetch|network|load failed/i.test(String((err&&err.message)||err)) && !(err&&err.code);
+    fail(offline? t('sendFail') : t('sendReject')+'  ['+String((err&&(err.code||err.message))||'error').slice(0,60)+']');
+  }
+}
+function done(id){
+  $('formWrap').hidden=true; $('navBar').hidden=true; $('doneWrap').hidden=false;
+  $('doneId').textContent=id; window.scrollTo(0,0);
+  document.querySelectorAll('#doneWrap [data-t]').forEach(el=>{ el.textContent=t(el.dataset.t); });
+  let s=RESET_AFTER_SEC;
+  const upd=()=>{ $('resetNote').textContent=t('resetIn',{s}); };
+  upd(); clearInterval(resetHandle);
+  resetHandle=setInterval(()=>{ s--; if(s<=0) restart(); else upd(); }, 1000);
+}
+function restart(){
+  clearInterval(resetHandle);
+  D={staffType:TYPE_FROM_LINK}; FILES=[]; step=TYPE_FROM_LINK? 1 : 0;
+  $('formWrap').hidden=false; $('navBar').hidden=false; $('doneWrap').hidden=true;
+  $('nextBtn').disabled=false; $('errBox').hidden=true;
+  render(); window.scrollTo(0,0);
+}
+$('restartBtn').addEventListener('click', restart);
+
+/* Nothing is kept in browser storage — a shared HR tablet must not show the previous person's
+   IC or bank details to the next one. Reloading simply starts over. */
+render();
+</script>
+</body>
+</html>

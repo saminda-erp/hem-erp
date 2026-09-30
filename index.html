@@ -1500,7 +1500,7 @@ function pruneImages(){
 function writeImagesLocal(){ try{ localStorage.setItem(IMG_LS_KEY, JSON.stringify(IMAGES)); return true; }catch(e){ lastSaveErr = e; return false; } }
 function readImagesLocal(){ try{ const v=localStorage.getItem(IMG_LS_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
 /* merge: keep records unique to either side; the later-edited copy wins on collisions */
-const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs','bmrForms','stockAdj','stockTakes','candidates'];
+const COLLECTIONS = ['customers','suppliers','materials','products','formulas','prices','pos','grns','issues','batches','ipqc','qc','coas','fg','shipments','deviations','capas','changes','complaints','training','equipment','compliance','audit','boms','poTombstones','prs','spos','productAliases','packingLists','coaPresets','users','employees','leaveTypes','leaveApplications','customerFeedback','machines','productMachineOutput','sopDocs','bmrForms','stockAdj','stockTakes','candidates','joiners'];
 /* clone(SEED) with every operational collection emptied — settings/company config untouched.
    Used only when WIPE_FLAG is set, so a post-factory-reset boot never re-merges the shipped
    example data back in (see WIPE_FLAG comment above).
@@ -4277,15 +4277,17 @@ function leaveDayMap(year, empNo){
 
 function V_people(){
   const tab=F('ptab','staff');
-  const tabs=[{k:'staff',t:'Employees'},{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'},{k:'overtime',t:'Overtime'},{k:'recruit',t:'Recruitment'}].map(x=>
+  const tabs=[{k:'staff',t:'Employees'},{k:'joiners',t:'New joiners'},{k:'training',t:'Training & competence'},{k:'equipment',t:'Equipment'},{k:'leave',t:'Leave'},{k:'overtime',t:'Overtime'},{k:'recruit',t:'Recruitment'}].map(x=>
     '<button class="chip'+(tab===x.k?' on':'')+'" data-chip="ptab" data-val="'+x.k+'" type="button">'+x.t
     +(x.k==='leave' && (S.leaveApplications||[]).filter(a=>a.status==='pending').length? ' ('+(S.leaveApplications||[]).filter(a=>a.status==='pending').length+')':'')
     +(x.k==='overtime' && otPendingCount()? ' ('+otPendingCount()+')':'')
     +(x.k==='recruit' && (S.candidates||[]).filter(c=>c.status==='new').length? ' ('+(S.candidates||[]).filter(c=>c.status==='new').length+')':'')
+    +(x.k==='joiners' && liveJoiners().filter(j=>j.status!=='added').length? ' ('+liveJoiners().filter(j=>j.status!=='added').length+')':'')
     +'</button>').join('');
   if(tab==='leave') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+leaveTabHtml();
   if(tab==='staff') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+staffTabHtml();
   if(tab==='recruit') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+recruitTabHtml();
+  if(tab==='joiners') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+joinersTabHtml();
   if(tab==='overtime') return '<div class="pillrow" style="margin-bottom:14px">'+tabs+'</div>'+overtimeTabHtml();
   if(tab==='equipment'){
     const eq=S.equipment||[];
@@ -7096,6 +7098,13 @@ function render(){
   if(UI.view==='people' && (UI.filters.people||{}).ptab==='recruit' && Date.now()-LAST_CAND_SYNC>8000){
     LAST_CAND_SYNC=Date.now(); syncCandidates(true);
   }
+  [['joinQrP','Permanent'],['joinQrT','Part-time']].forEach(([id,ty])=>{ const el=document.getElementById(id);
+    if(el && window.QRCode){ el.innerHTML=''; try{ new QRCode(el, {text:joinUrl(ty), width:150, height:150, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){} } });
+  if(UI.view==='people' && (UI.filters.people||{}).ptab==='joiners' && Date.now()-LAST_JOIN_SYNC>8000){
+    LAST_JOIN_SYNC=Date.now(); syncJoiners(true);
+    const before=JSON.stringify(SERVER_EMP_NOS);        // redraw once the shared numbers are known, so "next ID" is right
+    fetchServerEmpNos().then(n=>{ if(n && JSON.stringify(n)!==before && UI.view==='people' && (UI.filters.people||{}).ptab==='joiners') render(); });
+  }
 }
 
 /* ---------------- events ---------------- */
@@ -9066,6 +9075,416 @@ ACT['cand-qr-print'] = ()=>{
 };
 
 /* ============================================================
+   NEW JOINERS (2026-09-30) — QR registration → letters → Employee ID → employee list
+   ------------------------------------------------------------
+   Two QR codes: join.html?type=permanent and join.html?type=parttime. The new joiner fills in
+   their own details on their phone (IC, contact, emergency, EPF/SOCSO/tax, salary bank) and
+   photographs their IC. join.html can only INSERT into Supabase hem_new_joiners and upload into
+   the private bucket hem-staff-docs (joiner-setup.sql) — it can never read anything back.
+   This screen pulls registrations into S.joiners, HR files the offer letter and appointment
+   letter (same private bucket), then "Issue Employee ID" takes the next number in the staff
+   type's series and creates the employee record (pushed to the leave portal as usual).
+
+   Employee ID series (same numbers as the iVMS-4200 Person ID, so attendanceId = empNo):
+       Permanent (and Contract / Intern)  1001, 1002 …      Part-time  2001, 2002 …
+   The next number is the highest one already used in that series — in this system AND in the
+   shared hem_employees table, read fresh when HR clicks Issue — plus one.
+
+   Deleting a registration is a soft delete (personal data wiped, id kept, deleted:true) for the
+   same union-by-id reason as candidates — see the RECRUITMENT block.
+   ============================================================ */
+const EMP_SERIES = {'Permanent':1001, 'Part-time':2001};
+const JOIN_TYPES = ['Permanent','Part-time'];
+const LETTER_KINDS = [{k:'offer',t:'Offer letter'},{k:'appointment',t:'Appointment letter'}];
+const DOC_KIND_LABEL = {offer:'Offer letter', appointment:'Appointment letter', ic:'IC / passport', photo:'Photo', other:'Other document', contract:'Contract', payroll:'Payroll / statutory'};
+Object.assign(TAGS, {added:'t-ok'});
+var LAST_JOIN_SYNC = 0;
+var SERVER_EMP_NOS = null;          // last emp_no list read from hem_employees (for numbering)
+
+function joinUrl(type){ return location.origin+location.pathname.replace(/index\.html$/,'').replace(/[^/]*$/,'')+'join.html?type='+(type==='Part-time'?'parttime':'permanent'); }
+function liveJoiners(){ return (S.joiners||[]).filter(j=>!j.deleted); }
+function joiner(id){ return (S.joiners||[]).find(j=>j.id===id); }
+function seriesStart(type){ return type==='Part-time'? EMP_SERIES['Part-time'] : EMP_SERIES['Permanent']; }
+/* highest number used in the series (1001–1999 or 2001–2999) across every list given, plus one */
+function nextEmpNo(type, extraNos){
+  const lo=seriesStart(type), hi=lo+998;
+  const nums=(S.employees||[]).map(e=>e.empNo).concat(extraNos||SERVER_EMP_NOS||[])
+    .concat(liveJoiners().map(j=>j.empNo))        // numbers already issued from this screen
+    .filter(n=>/^\d{4}$/.test(String(n||''))).map(Number).filter(n=>n>=lo && n<=hi);
+  const next = nums.length? Math.max(...nums)+1 : lo;
+  return next>hi? '' : String(next);
+}
+/* reads every emp_no in the shared table so two HR devices never hand out the same number */
+function fetchServerEmpNos(){
+  if(!window.HEM_AUTH) return Promise.resolve(null);
+  try{
+    return window.HEM_AUTH.from('hem_employees').select('emp_no').then(({data,error})=>{
+      if(error) return null; SERVER_EMP_NOS=(data||[]).map(r=>r.emp_no); return SERVER_EMP_NOS; }, ()=>null);
+  }catch(e){ return Promise.resolve(null); }
+}
+function joinLetter(j, kind){ return (j.letters||[]).filter(l=>l.kind===kind).slice(-1)[0]; }
+function joinMissing(j){ return LETTER_KINDS.filter(k=>!joinLetter(j,k.k)).map(k=>k.t); }
+function letterTags(list, kinds){
+  return (kinds||LETTER_KINDS).map(k=>{ const has=(list||[]).some(l=>l.kind===k.k);
+    return '<span class="tag '+(has?'t-ok':'t-warn')+'" title="'+esc(k.t)+(has?' filed':' not filed yet')+'">'+(has?'✓ ':'')+esc(k.k==='offer'?'offer':'appointment')+(has?'':' — missing')+'</span>'; }).join(' ');
+}
+
+/* ---- pull new registrations from join.html ---- */
+function syncJoiners(silent){
+  if(!window.HEM_AUTH){ if(!silent) toast('Portal connection not available on this page','bad'); return; }
+  if(!silent) toast('Checking for new registrations…','ok');
+  try{
+    window.HEM_AUTH.from('hem_new_joiners').select('*').order('submitted_at',{ascending:false}).limit(500).then(({data,error})=>{
+      if(error){ if(!silent) toast('Could not reach the registrations table — has joiner-setup.sql been run in Supabase?','bad'); return; }
+      S.joiners=S.joiners||[];
+      const have=new Set(S.joiners.map(j=>j.id));
+      let added=0;
+      (data||[]).forEach(r=>{
+        if(have.has(r.id)) return;
+        S.joiners.push({id:r.id, submittedAt:r.submitted_at||new Date().toISOString(), staffType:r.staff_type||'Permanent',
+          name:r.full_name||'', phone:r.phone||'', data:r.data||{}, status:'new', letters:[], source:'portal'});
+        added++;
+      });
+      if(added){ logAudit('New-joiner registrations synced', '', added+' new'); save(); render(); }
+      if(!silent) toast(added? added+' new registration(s) pulled in':'No new registrations waiting','ok');
+      else if(added) toast(added+' new staff registration(s) just came in','ok');
+    }).catch(()=>{ if(!silent) toast('Could not reach the registrations table','bad'); });
+  }catch(e){ if(!silent) toast('Could not reach the registrations table','bad'); }
+}
+ACT['join-sync'] = ()=> syncJoiners(false);
+
+/* ---- HR → New joiners tab ---- */
+function joinersTabHtml(){
+  const all=liveJoiners();
+  const waiting=sortBy(all.filter(j=>j.status!=='added'),'submittedAt').reverse();
+  const done=sortBy(all.filter(j=>j.status==='added'),'addedAt').reverse().slice(0,25);
+  const noLetters=waiting.filter(j=>joinMissing(j).length);
+  const month=today().slice(0,7);
+  let h=KPI([
+    {k:'Waiting for Employee ID', v:nf(waiting.length), d:waiting.length?'registered, not yet on the employee list':'nobody waiting', cls:waiting.length?'warn':'ok'},
+    {k:'Letters not filed', v:nf(noLetters.length), d:noLetters.length?'offer or appointment letter missing':'all filed', cls:noLetters.length?'warn':'ok'},
+    {k:'Added this month', v:nf(all.filter(j=>j.status==='added' && String(j.addedAt||'').slice(0,7)===month).length), d:'new employees'},
+    {k:'Next Employee ID', raw:'<span class="mono">'+esc(nextEmpNo('Permanent')||'—')+'</span> · <span class="mono">'+esc(nextEmpNo('Part-time')||'—')+'</span>', d:'permanent · part-time'}
+  ]);
+  h+=sect('Registration QR codes', '<div class="cols2">'
+    + JOIN_TYPES.map(ty=>'<div class="card" style="text-align:center">'
+      +'<h3 style="margin-bottom:4px">'+esc(ty)+' staff</h3>'
+      +'<div class="sub" style="margin-bottom:10px">Employee IDs '+(ty==='Part-time'?'2001, 2002 …':'1001, 1002 …')+' · next <b class="mono">'+esc(nextEmpNo(ty)||'series full')+'</b></div>'
+      +'<div id="joinQr'+(ty==='Part-time'?'T':'P')+'" style="display:flex;justify-content:center;margin-bottom:10px"></div>'
+      +'<div class="pillrow" style="justify-content:center">'
+      +'<a class="btn sm" href="'+esc(joinUrl(ty))+'" target="_blank" rel="noopener">Open form</a>'
+      +btn('Print QR poster','join-qr-print',ty,'btn sm')+'</div></div>').join('')
+    +'</div><div class="note" style="margin-top:10px">On the first day (or before), the new joiner scans the QR for their staff type and fills in their own details and IC photo on their phone — English or Bahasa Malaysia. '
+    +'Their registration appears below. File the offer letter and appointment letter, then <b>Issue Employee ID</b> to add them to the employee list and the leave portal.</div>');
+  h+='<div class="pillrow" style="margin:0 0 12px">'+btn('Check for new registrations','join-sync',null,'btn primary')+'</div>';
+  const COLS=[
+    {h:'Ref', f:j=>'<b class="mono">'+esc(j.id)+'</b><div class="sub mono">'+esc(String(j.submittedAt||'').slice(0,10))+'</div>'},
+    {h:'Name', f:j=>'<b>'+esc(j.name)+'</b><div class="sub">'+esc([(j.data||{}).gender,(j.data||{}).nationality].filter(Boolean).join(' · '))+'</div>'},
+    {h:'Type', f:j=>'<span class="tag '+(j.staffType==='Part-time'?'t-info':'t-mute')+'">'+esc(j.staffType)+'</span>'},
+    {h:'Job', f:j=>{ const d=j.data||{}; return esc(d.position||'—')+'<div class="sub">'+esc(d.department||'')+(d.startDate?' · starts <span class="mono">'+esc(d.startDate)+'</span>':'')+'</div>'; }},
+    {h:'Letters', f:j=>letterTags(j.letters)},
+    {h:'Their files', f:j=>{ const n=((j.data||{}).files||[]).length; return n? '<span class="tag t-info">'+nf(n)+' file'+(n>1?'s':'')+'</span>' : '<span class="tag t-warn">none</span>'; }},
+    {h:'', f:j=>btn('Open','join-view',j.id,'btn sm primary')}
+  ];
+  h+=sect('Waiting for Employee ID ('+waiting.length+')', T(COLS, waiting, {emptyTitle:'Nobody waiting', empty:'New registrations from the QR codes appear here. Tap "Check for new registrations" if someone has just submitted.'}));
+  if(done.length) h+=sect('Recently added', T([
+    {h:'Employee ID', f:j=>'<b class="mono">'+esc(j.empNo)+'</b>'},
+    {h:'Name', f:j=>esc(j.name)},
+    {h:'Type', f:j=>esc(j.staffType)},
+    {h:'Added', f:j=>'<span class="mono">'+esc(String(j.addedAt||'').slice(0,10))+'</span><div class="sub">'+esc(j.addedBy||'')+'</div>'},
+    {h:'Letters', f:j=>{ const e=(S.employees||[]).find(x=>x.empNo===j.empNo); return letterTags(e&&e.docs? e.docs : j.letters); }},
+    {h:'', f:j=>btn('Documents','emp-docs',j.empNo,'btn sm')+btn('Open','join-view',j.id,'btn sm')}
+  ], done));
+  return h;
+}
+
+/* ---- one registration ---- */
+function joinDetailHtml(j, forPrint){
+  const d=j.data||{}, e=v=>esc(v==null?'':v);
+  const dl=pairs=>'<dl class="dl">'+pairs.filter(p=>p[1]!==null).map(p=>'<dt>'+esc(p[0])+'</dt><dd>'+(p[1]===''||p[1]==null?'<span class="sub">—</span>':p[1])+'</dd>').join('')+'</dl>';
+  const files=d.files||[];
+  let h='<div class="cols2" style="margin-bottom:14px">'
+    +'<div class="card"><h3>Person</h3>'+dl([
+      ['Name','<b>'+e(j.name)+'</b>'+(d.prefName?' <span class="sub">("'+e(d.prefName)+'")</span>':'')],
+      [d.idType==='Passport'?'Passport no.':'MyKad no.', '<span class="mono">'+e(d.icNo)+'</span>'+(d.passportExpiry?'<div class="sub">expires <span class="mono">'+e(d.passportExpiry)+'</span></div>':'')],
+      ['Work permit', d.permitNo||d.permitExpiry? '<span class="mono">'+e(d.permitNo||'')+'</span>'+(d.permitExpiry?' <span class="sub">exp '+e(d.permitExpiry)+'</span>':'') : null],
+      ['Nationality', e(d.nationality)], ['Date of birth', d.dob?'<span class="mono">'+e(d.dob)+'</span>'+(candAge(d.dob)!=null?' · '+candAge(d.dob)+' yrs':''):''],
+      ['Gender', e(d.gender)], ['Marital', e(d.marital)+(d.children!=null&&d.children!==''?' · '+e(d.children)+' child(ren)':'')]
+    ])+'</div>'
+    +'<div class="card"><h3>Contact</h3>'+dl([
+      ['Mobile', forPrint? e(j.phone) : '<a href="tel:'+e(String(j.phone||'').replace(/[^\d+]/g,''))+'">'+e(j.phone)+'</a>'],
+      ['WhatsApp', e(d.whatsapp||'same as mobile')], ['Email', e(d.email)],
+      ['Address', e(d.address).replace(/\n/g,'<br>')+(d.postcode?' <span class="mono">'+e(d.postcode)+'</span>':'')],
+      ['Emergency', d.emName? '<b>'+e(d.emName)+'</b> ('+e(d.emRel)+')<div class="sub mono">'+e(d.emPhone)+'</div>' : '']
+    ])+'</div></div>'
+    +'<div class="cols2" style="margin-bottom:14px">'
+    +'<div class="card"><h3>Job</h3>'+dl([
+      ['Registered as', '<span class="tag '+(j.staffType==='Part-time'?'t-info':'t-mute')+'">'+e(j.staffType)+'</span>'+(d.linkType==='chosen on form'?' <span class="sub">chosen on the form</span>':'')],
+      ['Position', e(d.position)], ['Department', e(d.department)],
+      ['First working day', d.startDate?'<span class="mono">'+e(d.startDate)+'</span>':''], ['Referred by', e(d.refBy)],
+      ['Employee ID', j.empNo? '<b class="mono">'+e(j.empNo)+'</b>' : '<span class="tag t-warn">not issued yet</span>']
+    ])+'</div>'
+    +'<div class="card"><h3>Payroll & statutory</h3>'+dl([
+      ['EPF (KWSP)', '<span class="mono">'+e(d.epfNo)+'</span>'], ['SOCSO (PERKESO)', '<span class="mono">'+e(d.socsoNo)+'</span>'],
+      ['Income tax', '<span class="mono">'+e(d.taxNo)+'</span>'],
+      ['Bank', e(d.bankName)], ['Account no.', '<span class="mono">'+e(d.bankAcct)+'</span>'],
+      ['Account holder', e(d.bankHolder)+(d.bankHolder && normName(d.bankHolder)!==normName(j.name)?' <span class="tag t-warn">not the same name</span>':'')]
+    ])+'</div></div>';
+  if(!forPrint){
+    h+=sect('Letters (filed by HR)', T([
+      {h:'Letter', f:k=>'<b>'+esc(k.t)+'</b>'},
+      {h:'File', f:k=>{ const l=joinLetter(j,k.k); return l? esc(l.name)+'<div class="sub">'+esc(String(l.uploadedAt||'').slice(0,16).replace('T',' '))+' · '+esc(l.by||'')+'</div>' : '<span class="tag t-warn">not filed</span>'; }},
+      {h:'', f:k=>{ const l=joinLetter(j,k.k); return (l?btn('View','join-files',j.id+'|'+k.k,'btn sm'):'')
+          + (j.status==='added'? '' : btn(l?'Replace':'Upload','join-letter',j.id+'|'+k.k,'btn sm'+(l?'':' primary'))); }}
+    ], LETTER_KINDS)+(j.status==='added'?'<div class="sub" style="margin-top:6px">This person is on the employee list — manage letters from their Documents button.</div>':''));
+    h+=sect('Files from the new joiner', files.length? T([
+      {h:'Type', f:x=>esc(DOC_KIND_LABEL[x.kind]||x.kind)}, {h:'File', f:x=>esc(x.name)+'<div class="sub mono">'+nf(Math.round((x.size||0)/1024))+' KB</div>'}
+    ], files)+'<div class="pillrow" style="margin-top:8px">'+btn('View their files','join-files',j.id+'|mine','btn sm primary')+'</div>'
+      : '<div class="note">No files uploaded — ask for a photocopy of the IC / passport.</div>');
+  }
+  h+=sect('Declaration', '<div style="font-size:12.5px;color:var(--ink2)">'
+    +(d.declared? 'Ticked the truth and PDPA consent declaration and typed <b>'+esc(d.signature||j.name)+'</b> as signature on <span class="mono">'+esc(String(d.declaredAt||j.submittedAt||'').slice(0,16).replace('T',' '))+'</span>.' : 'Not declared.')
+    +'</div>'+(forPrint?'<div class="cols2" style="margin-top:28px;font-size:12px;color:var(--ink2)"><div>Checked by HR: ______________________<br><br>Date: __________</div><div>Employee signature: ______________________<br><br>Date: __________</div></div>':''));
+  return h;
+}
+ACT['join-view'] = id=>{
+  const j=joiner(id); if(!j||j.deleted) return toast('Registration not found','bad');
+  modal(esc(j.id+' — '+(j.name||'New joiner')), joinDetailHtml(j,false),
+    (j.status==='added'? btn('Open employee','emp-edit',j.empNo,'btn') : btn('Delete','join-delete',j.id,'btn'))
+    +btn('Print','join-print',j.id,'btn')
+    +(j.status==='added'? '' : btn('Issue Employee ID & add to list','join-add',j.id,'btn primary')), true);
+};
+ACT['join-print'] = id=>{
+  const j=joiner(id); if(!j) return;
+  printModal('Registration '+j.id, '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px">'
+    +'<div><h2 style="font-family:var(--disp);margin:0">New staff registration</h2><div class="sub">HE Manufacturing (M) Sdn Bhd — completed by the employee on '+esc(String(j.submittedAt||'').slice(0,10))+'</div></div>'
+    +'<b class="mono" style="font-size:16px">'+esc(j.empNo||j.id)+'</b></div>'+joinDetailHtml(j,true));
+};
+
+/* ---- documents in the private bucket: shared by registrations and the employee record ---- */
+function pickDocFile(cb){
+  const inp=document.createElement('input'); inp.type='file';
+  inp.accept='application/pdf,image/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(f) cb(f); }; inp.click();
+}
+function docExt(f){ const m=String(f.name||'').match(/\.([A-Za-z0-9]{1,5})$/); return m? m[1].toLowerCase() : (f.type==='application/pdf'?'pdf':'bin'); }
+/* uploads one file to hem-staff-docs/<folder>/<kind>-<timestamp>.<ext>; resolves a doc record */
+function uploadStaffDoc(folder, kind, f){
+  if(!window.HEM_AUTH || !window.HEM_AUTH.storage) return Promise.reject(new Error('Sign in to upload documents'));
+  if(f.size>10*1024*1024) return Promise.reject(new Error(f.name+' is larger than 10 MB'));
+  const okType=/^(application\/pdf|image\/|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)/.test(f.type||'')
+    || /\.(pdf|jpe?g|png|webp|heic|heif|docx?)$/i.test(f.name||'');
+  if(!okType) return Promise.reject(new Error('Use a PDF, Word file or photo'));
+  const ext=docExt(f), type=f.type || (ext==='pdf'?'application/pdf':ext==='docx'?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':ext==='doc'?'application/msword':'image/jpeg');
+  const path=folder+'/'+kind+'-'+Date.now()+'.'+ext;
+  return window.HEM_AUTH.storage.from('hem-staff-docs').upload(path, f, {contentType:type, upsert:false, cacheControl:'3600'})
+    .then(({error})=>{ if(error) throw error;
+      return {kind, path, name:f.name, type, size:f.size, uploadedAt:new Date().toISOString(), by:UI.user||''}; });
+}
+function removeStaffDocs(paths){
+  if(!paths.length || !window.HEM_AUTH || !window.HEM_AUTH.storage) return;
+  try{ window.HEM_AUTH.storage.from('hem-staff-docs').remove(paths).then(({error})=>{
+    if(error) toast('Record updated; the stored file(s) could not be deleted — '+error.message,'warn'); }); }catch(e){}
+}
+/* viewer — private bucket, 10-minute signed links, shown in a modal (see cand-cv) */
+function showStaffDocs(title, files, backAct, backArg){
+  if(!files.length) return toast('No files to show','bad');
+  if(!window.HEM_AUTH || !window.HEM_AUTH.storage) return toast('Sign in to view documents','bad');
+  modal(esc(title), '<div class="note">Loading '+files.length+' file(s)…</div>', backAct? btn('Back','' + backAct, backArg,'btn') : '', true);
+  const seq=MODAL_SEQ;
+  Promise.all(files.map(f=>window.HEM_AUTH.storage.from('hem-staff-docs').createSignedUrl(f.path, 600)
+      .then(({data,error})=>({f, url:error?null:(data&&data.signedUrl), err:error&&error.message}))
+      .catch(e=>({f, url:null, err:String(e&&e.message||e)}))))
+  .then(list=>{
+    if(seq!==MODAL_SEQ) return;
+    const body=list.map((x,i)=>{
+      const head='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0 6px;flex-wrap:wrap">'
+        +'<b>'+esc(DOC_KIND_LABEL[x.f.kind]||x.f.kind)+' — '+esc(x.f.name)+'</b><span class="sub mono">'+nf(Math.round((x.f.size||0)/1024))+' KB</span>'
+        +(x.url?'<a class="btn sm" href="'+esc(x.url)+'" target="_blank" rel="noopener">Open / download ↗</a>':'')+'</div>';
+      if(!x.url) return head+'<div class="banner bad">Could not open this file — '+esc(x.err||'unknown error')+'</div>';
+      if(x.f.type==='application/pdf') return head+'<iframe src="'+esc(x.url)+'" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:8px;background:#fff" title="'+esc(x.f.name)+'"></iframe>';
+      if(/^image\//.test(x.f.type||'')) return head+'<img src="'+esc(x.url)+'" style="max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fff" alt="'+esc(x.f.name)+'">';
+      return head+'<div class="note">Word document — use Open / download.</div>';
+    }).join('');
+    const mb=document.querySelector('#modal-root .mbody'); if(mb) mb.innerHTML=body+'<div class="sub" style="margin-top:12px">Links expire after 10 minutes — reopen this window for fresh ones.</div>';
+  });
+}
+ACT['join-files'] = arg=>{
+  const [id,which]=String(arg).split('|'); const j=joiner(id); if(!j) return;
+  const files = which==='mine'? ((j.data||{}).files||[]) : (j.letters||[]).filter(l=>l.kind===which).slice(-1);
+  showStaffDocs((which==='mine'?'Files from ':'')+(DOC_KIND_LABEL[which]||'')+' — '+(j.name||j.id), files, 'join-view', j.id);
+};
+ACT['join-letter'] = arg=>{
+  const [id,kind]=String(arg).split('|');
+  pickDocFile(f=>{
+    toast('Uploading '+f.name+'…','ok');
+    uploadStaffDoc(id, kind, f).then(doc=>{
+      const j=joiner(id);                               // fresh lookup — see cand-outcome
+      if(!j || j.deleted){ removeStaffDocs([doc.path]); return toast('This registration was removed on another device','bad'); }
+      const old=(j.letters||[]).filter(l=>l.kind===kind);
+      j.letters=(j.letters||[]).filter(l=>l.kind!==kind).concat([doc]);
+      removeStaffDocs(old.map(l=>l.path));
+      logAudit((DOC_KIND_LABEL[kind]||kind)+' filed', j.id, j.name+' — '+f.name);
+      save(); toast((DOC_KIND_LABEL[kind]||kind)+' filed','ok'); ACT['join-view'](j.id); render();
+    }).catch(err=>toast('Upload failed — '+(err&&err.message||err),'bad'));
+  });
+};
+
+/* ---- Issue Employee ID & add to the employee list ---- */
+ACT['join-add'] = id=>{
+  const j0=joiner(id); if(!j0 || j0.status==='added') return;
+  toast('Checking the latest Employee IDs…','ok');
+  fetchServerEmpNos().then(serverNos=>{
+    const j=joiner(id); if(!j || j.status==='added') return;
+    const d=j.data||{}, miss=joinMissing(j);
+    formModal({title:'Issue Employee ID — '+j.name, wide:true,
+      intro:(miss.length? '<b style="color:var(--bad)">'+esc(miss.join(' and '))+' not filed yet.</b> You can still add the employee and file '+(miss.length>1?'them':'it')+' later from their Documents button.<br><br>' : '')
+        +'The Employee ID is the next free number in the series for the staff type chosen below — permanent 1xxx, part-time 2xxx — checked against this system'
+        +(serverNos? ' and the shared employee table just now.' : '. <b>The shared employee table could not be reached</b>, so check the number is not already used on another device.')
+        +' It is also used as the iVMS attendance Person ID: enrol the person in iVMS-4200 with the same number.',
+      values:{staffType:j.staffType, empNo:nextEmpNo(j.staffType, serverNos||undefined), grade:'', department:d.department&&d.department!=='Other'?d.department:'',
+        position:d.position||'', joinDate:d.startDate||today(), leaveScope:j.staffType==='Part-time'?'mc_only':'full', superiorEmpNo:'', annualEntitlement:''},
+      groups:[{legend:'Employment', fields:[
+        {k:'staffType',label:'Staff type',type:'select',blank:false,opts:STAFF_TYPES,hint:'Registered as '+j.staffType+'. Switching to/from part-time moves the suggested ID to the other series when you save.'},
+        {k:'empNo',label:'Employee ID',req:true,hint:'Suggested: next '+(j.staffType==='Part-time'?'part-time (2xxx)':'permanent (1xxx)')+' number. Cannot be changed later.'},
+        {k:'grade',label:'Category (permanent staff)',type:'select',opts:GRADES},
+        {k:'department',label:'Department'},
+        {k:'position',label:'Position / designation'},
+        {k:'joinDate',label:'Date joined',type:'date'},
+        {k:'superiorEmpNo',label:'Superior (approves leave first)',type:'select',opts:sortBy((S.employees||[]).filter(empActive),'name').map(o=>({v:o.empNo,t:o.name+' ('+o.empNo+')'}))},
+        {k:'leaveScope',label:'Leave & portal access',type:'select',blank:false,opts:LEAVE_SCOPES},
+        {k:'annualEntitlement',label:'Annual leave days / year',type:'number',step:'0.5',hint:'Blank = company default.'}
+      ]}],
+      saveLabel:'Issue ID & add employee',
+      onSave:v=>{
+        const j=joiner(id);                                  // fresh lookup — see cand-outcome
+        if(!j || j.deleted){ toast('This registration was removed on another device','bad'); return false; }
+        if(j.status==='added'){ toast('Already added as '+j.empNo,'bad'); return false; }
+        const suggested=nextEmpNo(j.staffType, SERVER_EMP_NOS||undefined);
+        let empNo=String(v.empNo||'').trim();
+        /* type changed but the suggested number was left in place → take the new series' number */
+        if(v.staffType!==j.staffType && empNo===suggested) empNo=nextEmpNo(v.staffType, SERVER_EMP_NOS||undefined);
+        if(!empNo) return toast('Employee ID is required (the series may be full — type one in)','bad');
+        if((S.employees||[]).some(o=>o.empNo===empNo) || (SERVER_EMP_NOS||[]).includes(empNo) || liveJoiners().some(o=>o.empNo===empNo && o.id!==j.id))
+          return toast('Employee ID '+empNo+' is already used — choose another','bad');
+        if((S.employees||[]).some(o=>o.attendanceId===empNo)) return toast('Attendance ID '+empNo+' already belongs to someone else — choose another Employee ID','bad');
+        const d=j.data||{};
+        const emp={id:'EMP-'+empNo, empNo, attendanceId:empNo, name:String(j.name||'').trim().toUpperCase(),
+          prefName:d.prefName||'', gender:d.gender||'', nationality:d.nationality||'', icNo:d.icNo||'', idType:d.idType||'',
+          dob:d.dob||'', marital:d.marital||'', children:d.children==null?'':d.children,
+          passportExpiry:d.passportExpiry||'', permitNo:d.permitNo||'', permitExpiry:d.permitExpiry||'',
+          phone:j.phone||'', whatsapp:d.whatsapp||'', email:d.email||'',
+          address:[d.address, d.postcode].filter(Boolean).join(' '), emergencyName:d.emName? d.emName+(d.emRel?' ('+d.emRel+')':'') : '', emergencyPhone:d.emPhone||'',
+          staffType:v.staffType||j.staffType, grade:(v.staffType||j.staffType)==='Part-time'? '' : (v.grade||''),
+          department:v.department||'', position:v.position||'', joinDate:v.joinDate||'', superiorEmpNo:v.superiorEmpNo||'',
+          leaveScope:v.leaveScope||'full', annualEntitlement:v.annualEntitlement==null?'':v.annualEntitlement, status:'active',
+          epfNo:d.epfNo||'', socsoNo:d.socsoNo||'', taxNo:d.taxNo||'', bankName:d.bankName||'', bankAcct:d.bankAcct||'', bankHolder:d.bankHolder||'',
+          joinerRef:j.id, docs:((d.files||[]).concat(j.letters||[])).map(x=>Object.assign({}, x)), notes:''};
+        S.employees.push(emp);
+        j.status='added'; j.empNo=empNo; j.addedAt=new Date().toISOString(); j.addedBy=UI.user||'';
+        logAudit('Employee ID issued', empNo, emp.name+' — '+emp.staffType+' (registration '+j.id+')');
+        save();
+        pushEmployeesToPortal([empNo]);
+        if(window.HEM_AUTH){ try{ window.HEM_AUTH.from('hem_new_joiners').update({status:'added', data:Object.assign({}, j.data, {empNo})}).eq('id', j.id)
+          .then(({error})=>{ if(error) toast('Added here; the online registration could not be marked as done — '+error.message,'warn'); }); }catch(e){} }
+        (SERVER_EMP_NOS=SERVER_EMP_NOS||[]).push(empNo);
+        joinIssuedModal(emp);
+      }});
+  });
+};
+function joinIssuedModal(e){
+  modal('Employee ID issued', '<div style="text-align:center;padding:10px 0 4px">'
+    +'<div class="sub">'+esc(e.name)+' — '+esc(e.staffType)+'</div>'
+    +'<div class="mono" style="font-size:40px;font-weight:600;color:var(--wine);letter-spacing:.04em;margin:8px 0">'+esc(e.empNo)+'</div>'
+    +'<div style="font-size:13px;color:var(--ink2);max-width:460px;margin:0 auto">Added to the employee list and sent to the leave portal. Next steps: enrol <b>Person ID '+esc(e.empNo)+'</b> in iVMS-4200 for attendance'
+    +((e.leaveScope||'full')!=='none'?', and tell them to register on the leave portal with this Employee ID and their IC / passport number':'')+'.</div></div>'
+    +'<div style="margin-top:12px">'+letterTags(e.docs)+'</div>',
+    (waNumber(empWa(e))? btn('WhatsApp their Employee ID','wa-msg',e.empNo,'btn primary') : '')+btn('Documents','emp-docs',e.empNo,'btn')+btn('Open employee','emp-edit',e.empNo,'btn'));
+}
+
+ACT['join-delete'] = id=>{
+  const j=joiner(id); if(!j) return;
+  formModal({title:'Delete registration '+j.id,
+    intro:'Permanently removes '+esc(j.name||'this person')+'\'s details, IC photo and any letters filed against this registration, here and online. Only the reference number stays so it is not imported again. Use this for a duplicate, a test, or someone who did not join.',
+    fields:[{k:'confirm',label:'Type DELETE to confirm',full:true}], saveLabel:'Delete',
+    onSave:v=>{
+      if(v.confirm!=='DELETE') return toast('Type DELETE to confirm','bad');
+      const j=joiner(id); if(!j){ closeModal(); return; }
+      if(j.status==='added') return toast('Already on the employee list — edit the employee instead','bad');
+      const i=S.joiners.indexOf(j);
+      removeStaffDocs(((j.data||{}).files||[]).concat(j.letters||[]).map(f=>f.path));
+      S.joiners[i]={id:j.id, deleted:true, deletedAt:new Date().toISOString(), deletedBy:UI.user||'', status:'deleted', submittedAt:j.submittedAt};
+      if(window.HEM_AUTH){ try{ window.HEM_AUTH.from('hem_new_joiners').delete().eq('id',j.id).then(({error})=>{
+        if(error) toast('Removed here; the online copy could not be deleted — '+error.message,'warn'); }); }catch(e){} }
+      logAudit('New-joiner registration deleted', j.id, 'personal data removed');
+      save(); closeModal(); toast('Registration deleted','ok'); render();
+    }});
+};
+ACT['join-qr-print'] = type=>{
+  type = type==='Part-time'? 'Part-time' : 'Permanent';
+  printModal(type+' staff registration QR', '<div style="text-align:center;padding:30px 10px">'
+    +'<div style="font-family:var(--disp);font-size:26px;font-weight:600;margin-bottom:4px">Welcome to HE Manufacturing</div>'
+    +'<div style="display:inline-block;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:2px solid #522B39;color:#522B39;border-radius:20px;padding:5px 16px;margin:6px 0 14px">'+esc(type)+' staff · '+(type==='Part-time'?'Pekerja sambilan':'Pekerja tetap')+'</div>'
+    +'<div style="font-size:15px;color:var(--ink2);margin-bottom:22px">New staff: scan to register your details and IC — about 5 minutes.<br>Pekerja baharu: imbas untuk mendaftar maklumat dan IC anda — kira-kira 5 minit.</div>'
+    +'<div id="joinQrPrint" style="display:flex;justify-content:center;margin-bottom:18px"></div>'
+    +'<div class="mono" style="font-size:12px;color:var(--muted)">'+esc(joinUrl(type))+'</div>'
+    +'<div style="margin-top:22px;font-size:13px">HE Manufacturing (M) Sdn Bhd — HR</div></div>');
+  const el=document.getElementById('joinQrPrint');
+  if(el && window.QRCode){ try{ new QRCode(el,{text:joinUrl(type), width:260, height:260, colorDark:'#522B39', colorLight:'#ffffff'}); }catch(e){} }
+};
+
+/* ---- Documents on the employee record (letters for everyone, not only new joiners) ---- */
+const EMP_DOC_KINDS = [{k:'offer',t:'Offer letter'},{k:'appointment',t:'Appointment letter'},{k:'contract',t:'Contract / renewal'},{k:'ic',t:'IC / passport'},{k:'payroll',t:'Payroll / statutory'},{k:'other',t:'Other document'}];
+ACT['emp-docs'] = empNo=>{
+  const e=(S.employees||[]).find(x=>x.empNo===empNo); if(!e) return toast('Employee not found','bad');
+  const docs=e.docs||[];
+  modal(esc('Documents — '+e.name+' ('+e.empNo+')'),
+    '<div style="margin-bottom:10px">'+letterTags(docs)+'</div>'
+    + T([
+      {h:'Document', f:x=>'<b>'+esc(DOC_KIND_LABEL[x.d.kind]||x.d.kind)+'</b>'},
+      {h:'File', f:x=>esc(x.d.name)+'<div class="sub">'+esc(String(x.d.uploadedAt||'').slice(0,10))+(x.d.by?' · '+esc(x.d.by):'')+'</div>'},
+      {h:'', f:x=>btn('View','emp-doc-view',e.empNo+'|'+x.i,'btn sm')+btn('Remove','emp-doc-del',e.empNo+'|'+x.i,'btn sm')}
+    ], docs.map((d,i)=>({d,i})), {emptyTitle:'No documents yet', empty:'Upload the offer letter and appointment letter below.'})
+    + '<div class="pillrow" style="margin-top:12px">'+EMP_DOC_KINDS.map(k=>btn('Upload '+k.t.toLowerCase(),'emp-doc-up',e.empNo+'|'+k.k,'btn sm'+((k.k==='offer'||k.k==='appointment') && !docs.some(d=>d.kind===k.k)?' primary':''))).join('')+'</div>'
+    + '<div class="sub" style="margin-top:8px">PDF, Word or photo, up to 10 MB. Files are kept in private storage and opened with links that expire after 10 minutes.</div>',
+    btn('Open employee','emp-edit',e.empNo,'btn'), true);
+};
+ACT['emp-doc-up'] = arg=>{
+  const [no,kind]=String(arg).split('|');
+  pickDocFile(f=>{
+    toast('Uploading '+f.name+'…','ok');
+    uploadStaffDoc('emp/'+no, kind, f).then(doc=>{
+      const e=(S.employees||[]).find(x=>x.empNo===no);         // fresh lookup — see cand-outcome
+      if(!e){ removeStaffDocs([doc.path]); return toast('Employee no longer exists','bad'); }
+      e.docs=(e.docs||[]).concat([doc]);
+      logAudit((DOC_KIND_LABEL[kind]||kind)+' filed', no, e.name+' — '+f.name);
+      save(); toast((DOC_KIND_LABEL[kind]||kind)+' filed','ok'); ACT['emp-docs'](no); render();
+    }).catch(err=>toast('Upload failed — '+(err&&err.message||err),'bad'));
+  });
+};
+ACT['emp-doc-view'] = arg=>{
+  const [no,i]=String(arg).split('|'); const e=(S.employees||[]).find(x=>x.empNo===no); const d=(e&&e.docs||[])[Number(i)]; if(!d) return;
+  showStaffDocs(e.name+' — '+(DOC_KIND_LABEL[d.kind]||d.kind), [d], 'emp-docs', no);
+};
+ACT['emp-doc-del'] = arg=>{
+  const [no,i]=String(arg).split('|'); const e0=(S.employees||[]).find(x=>x.empNo===no); const d0=(e0&&e0.docs||[])[Number(i)]; if(!d0) return;
+  formModal({title:'Remove '+(DOC_KIND_LABEL[d0.kind]||'document')+' — '+e0.name,
+    intro:'Deletes <b>'+esc(d0.name)+'</b> from private storage. This cannot be undone.',
+    fields:[{k:'confirm',label:'Type REMOVE to confirm',full:true}], saveLabel:'Remove',
+    onSave:v=>{
+      if(v.confirm!=='REMOVE') return toast('Type REMOVE to confirm','bad');
+      const e=(S.employees||[]).find(x=>x.empNo===no); if(!e) return toast('Employee no longer exists','bad');
+      const d=(e.docs||[]).find(x=>x.path===d0.path); if(!d){ ACT['emp-docs'](no); return; }
+      e.docs=e.docs.filter(x=>x.path!==d.path);
+      /* a letter filed while this person was still a registration lives on the registration too */
+      liveJoiners().filter(j=>j.empNo===no).forEach(j=>{ j.letters=(j.letters||[]).filter(x=>x.path!==d.path); });
+      removeStaffDocs([d.path]);
+      logAudit('Document removed', no, (DOC_KIND_LABEL[d.kind]||d.kind)+' — '+d.name);
+      save(); toast('Removed','ok'); ACT['emp-docs'](no);
+    }});
+};
+
+/* ============================================================
    OVERTIME (2026-09-29) — HOD requests → HR approves → HR verifies next day
    ------------------------------------------------------------
    Heads of Department request overtime from overtime.html (QR on this tab), signing in with their
@@ -9953,7 +10372,7 @@ function staffTabHtml(){
       : !String(e.icNo||'').trim()? '<span class="tag t-bad">add IC / passport</span>'
       : e.portalLoginAt? '<span class="tag t-info">PIN given</span>' : '<span class="tag t-warn">not yet</span>'},
     {h:'Status', f:e=>tag(empActive(e)?'active':'inactive')},
-    {h:'', f:e=>(waNumber(empWa(e))?btn('WhatsApp','wa-msg',e.empNo,'btn sm primary'):'')+btn('Edit','emp-edit',e.empNo,'btn sm')+btn('Call to HR','leave-meet','emp:'+e.empNo,'btn sm')}
+    {h:'', f:e=>(waNumber(empWa(e))?btn('WhatsApp','wa-msg',e.empNo,'btn sm primary'):'')+btn('Edit','emp-edit',e.empNo,'btn sm')+btn('Documents'+((e.docs||[]).length?' ('+e.docs.length+')':''),'emp-docs',e.empNo,'btn sm')+btn('Call to HR','leave-meet','emp:'+e.empNo,'btn sm')}
   ];
   const empty=all.length?'No employee matches — clear a filter.':'No employees yet — import from iVMS or add one.';
   const groups = grp? STAFF_GROUPS.filter(g=>g.k===grp) : STAFF_GROUPS;
@@ -9979,7 +10398,9 @@ function staffForm(e, isNew){
         {k:'gender',label:'Gender',type:'select',opts:['Female','Male']},
         {k:'nationality',label:'Nationality',ph:'Malaysian'},
         {k:'icNo',label:'IC / passport no.',hint:'Needed for the employee to register on the leave portal.'},
-        {k:'dob',label:'Date of birth',type:'date'}]},
+        {k:'dob',label:'Date of birth',type:'date'},
+        {k:'passportExpiry',label:'Passport expiry (non-Malaysian)',type:'date'},
+        {k:'permitExpiry',label:'Work permit expiry',type:'date'}]},
       {legend:'Contact', fields:[
         {k:'phone',label:'Mobile',type:'tel',ph:'012-345 6789'},
         {k:'whatsapp',label:'WhatsApp (if different)',type:'tel',hint:'Leave blank if the same as mobile.'},
@@ -9999,9 +10420,12 @@ function staffForm(e, isNew){
         {k:'leaveScope',label:'Leave & portal access',type:'select',blank:false,opts:LEAVE_SCOPES},
         {k:'annualEntitlement',label:'Annual leave days / year',type:'number',step:'0.5',hint:'Blank = company default ('+nf(leaveType('annual').defaultDays)+').'},
         {k:'status',label:'Status',type:'select',blank:false,opts:[{v:'active',t:'Active'},{v:'inactive',t:'Left / inactive (portal login blocked)'}]},
-        {k:'notes',label:'Notes',type:'textarea',rows:2,full:true}]}
+        {k:'notes',label:'Notes',type:'textarea',rows:2,full:true}]},
+      {legend:'Payroll & statutory', fields:[
+        {k:'epfNo',label:'EPF (KWSP) no.'},{k:'socsoNo',label:'SOCSO (PERKESO) no.'},{k:'taxNo',label:'Income tax (LHDN) no.'},
+        {k:'bankName',label:'Salary bank'},{k:'bankAcct',label:'Bank account no.'},{k:'bankHolder',label:'Account holder name'}]}
     ],
-    after: isNew? '' : '<div class="sub" style="margin-top:8px">Payroll and overtime fields will be added when those modules are connected — the Attendance ID is what links this person to iVMS.</div>',
+    after: isNew? '' : '<div class="sub" style="margin-top:8px">Offer letter, appointment letter and other files: '+btn('Documents'+((v.docs||[]).length?' ('+v.docs.length+')':''),'emp-docs',v.empNo,'btn sm')+' — the Attendance ID is what links this person to iVMS.</div>',
     saveLabel:isNew?'Add employee':'Save',
     onSave:x=>{
       x.empNo=String(x.empNo||'').trim(); x.name=String(x.name||'').trim().toUpperCase();
