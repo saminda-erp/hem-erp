@@ -1,4 +1,5 @@
 -- HE Manufacturing — Overtime requests (applied as migration overtime_requests, 2026-09-29)
+-- UPDATED 2026-10-02 by overtime-setup-2.sql: day + night shift in one request, HOD confirms actual hours (ot_hod_confirm).
 -- Flow: HOD (overtime.html, leave-portal login) → ot_request → HOD taps WhatsApp to HR head
 --       → HR approves / removes people / rejects in the ERP (HR → Overtime) → next day HR verifies
 --       attendance, actual times and work done → verified hours exported to Excel for payroll.

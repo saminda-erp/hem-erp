@@ -20,7 +20,10 @@
     ot_data     → my requests, the staff list, work areas, HR WhatsApp number
     ot_request  → submit (all checks server side: date, area, work, times, same person double-booked)
     ot_cancel   → withdraw a request HR has not decided yet
-  HR approves in the ERP and, the next day, verifies who actually worked and for how long.
+    ot_hod_confirm → after the overtime, the HOD confirms who came, actual times, work done
+  One request holds BOTH shifts: day shift on the overtime date, night shift (start before 12:00)
+  on the next morning — see overtime-setup-2.sql. HR approves in the ERP, then does the final
+  check of the HOD's actual hours (pre-filled) for payroll.
 -->
 <style>
   :root{
@@ -28,13 +31,14 @@
     --ink:#231a1c; --ink2:#5c4b51; --paper:#faf8f6; --card:#ffffff; --field:#ffffff;
     --line:#e7dfdb; --muted:#8a7b76;
     --ok:#2f6b46; --ok-bg:#e4f0e7; --bad:#a3312c; --bad-bg:#fbe4e2; --warn:#a86a10; --warn-bg:#fbeed9; --info:#35557f; --info-bg:#e5edf7;
+    --day:#b07a1a; --day-bg:#fbf1dd; --day-ink:#7a520c; --night:#3d4f8f; --night-bg:#e8ebf7; --night-ink:#2c3a6e;
     --r:10px;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
       --wine:#c7899c; --wine-soft:#2d2226; --brass:#c9a063; --brass-soft:#2e2619;
       --ink:#f1e9e6; --ink2:#c9bab5; --paper:#171214; --card:#211a1d; --field:#1b1517; --line:#3a2f33; --muted:#9a8b86;
-      --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15; --info:#9bbbe6; --info-bg:#1c2636;
+      --ok:#8fcfa4; --ok-bg:#1d3325; --bad:#f1a19b; --bad-bg:#3a1e1c; --warn:#e8b765; --warn-bg:#3a2c15; --info:#9bbbe6; --info-bg:#1c2636; --day:#e0b25e; --day-bg:#33281a; --day-ink:#f0cf8f; --night:#8fa3e6; --night-bg:#1f2540; --night-ink:#c3cff5;
     }
   }
   *{box-sizing:border-box}
@@ -91,9 +95,41 @@
   .hist ul{margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--ink2)}
   .btn-wa{display:block;text-align:center;background:#25D366;color:#fff;border-radius:var(--r);padding:13px 16px;font-weight:700;text-decoration:none}
   .wacard{border-color:#25D366}
+  .shifts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  @media (max-width:520px){ .shifts{grid-template-columns:1fr} }
+  .shiftbox{border:1px solid var(--line);border-radius:var(--r);padding:10px 10px 0;border-left:4px solid var(--day)}
+  .shiftbox.night{border-left-color:var(--night)}
+  .shhead{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:6px;font-size:14px}
+  .seg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
+  .seg button{background:var(--field);border:1px solid var(--line);color:var(--ink2);border-radius:20px;padding:7px 12px;font-size:13.5px}
+  .seg button.on.day{background:var(--day-bg);border-color:var(--day);color:var(--day-ink)}
+  .seg button.on.night{background:var(--night-bg);border-color:var(--night);color:var(--night-ink)}
+  .seg button.on.absentbtn{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+  .seg button.on.warnbtn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+  .seg.small{margin:6px 0 0} .seg.small button{padding:5px 10px;font-size:12.5px}
+  .pill{font-size:11px;font-weight:700;border-radius:12px;padding:2px 7px;white-space:nowrap}
+  .pill.day{background:var(--day-bg);color:var(--day-ink)} .pill.night{background:var(--night-bg);color:var(--night-ink)}
+  .selgrp{border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;overflow:hidden}
+  .selhead{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:8px 10px;font-size:13.5px;background:var(--day-bg);color:var(--day-ink)}
+  .selhead span:last-child{margin-left:auto}
+  .selgrp.night .selhead,.selhead.night{background:var(--night-bg);color:var(--night-ink)}
+  .selrow{display:grid;grid-template-columns:1fr auto;gap:6px 8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-size:14px}
+  .selrow:last-child{border-bottom:0}
+  .selrow .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .selbtns{display:flex;gap:6px}
+  .selbtns .x{background:transparent;border:1px solid var(--line);color:var(--ink2);padding:5px 9px;font-size:13px;border-radius:8px}
+  .seltimes{grid-column:1/-1;display:flex;align-items:center;gap:6px}
+  .seltimes input{margin:0;padding:8px 6px;font-size:15px;max-width:120px}
+  .confcard{border-color:var(--warn);border-width:2px}
+  .confreq{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  .confrow{border:1px solid var(--line);border-radius:var(--r);padding:10px;margin-bottom:8px}
+  .confrow.absent{background:var(--bad-bg)}
+  .confrow .seltimes{margin-top:8px}
+  .cfname{font-size:14px}
+  .histshift{font-size:12.5px;font-weight:700;color:var(--ink2);margin-top:6px}
+  .tag.confirmed{background:var(--info-bg);color:var(--info)}
   [hidden]{display:none!important}
-  @media (max-width:420px){ .selrow{grid-template-columns:1fr 78px 78px 30px} }
-</style>
+  </style>
 </head>
 <body>
 <div class="topbar">
@@ -124,6 +160,7 @@
 <div id="appScreen" class="wrap" hidden>
   <div id="topMsg"></div>
   <div id="waBox"></div>
+  <div id="confirmBox"></div>
   <div class="card" id="formCard"></div>
   <div class="card"><h3 data-t="myRequests"></h3><div id="history"></div></div>
 </div>
@@ -149,10 +186,36 @@ const TX={
   workPh:{en:'e.g. Fill and pack 3,000 bottles for Monday shipment', ms:'cth. Isi dan bungkus 3,000 botol untuk penghantaran Isnin'},
   workPhQC:{en:'e.g. Test and release batch B2610, stability samples', ms:'cth. Uji dan lepaskan kelompok B2610, sampel kestabilan'},
   workPhMix:{en:'e.g. Mix 500 kg shampoo base for tomorrow’s filling', ms:'cth. Campur 500 kg bahan asas syampu untuk pengisian esok'},
-  time:{en:'Planned time (for everyone — you can change each person below)', ms:'Masa dirancang (untuk semua — boleh ubah setiap orang di bawah)'},
+  time:{en:'Planned overtime time', ms:'Masa OT dirancang'},
+  timeHint:{en:'Set the time for each shift. You can still change one person below.', ms:'Tetapkan masa bagi setiap syif. Masa seorang pekerja masih boleh diubah di bawah.'},
+  day:{en:'Day shift', ms:'Syif siang'}, night:{en:'Night shift', ms:'Syif malam'},
+  nextMorning:{en:'next morning', ms:'pagi esok'}, pickDate:{en:'choose the date first', ms:'pilih tarikh dahulu'},
+  perPerson:{en:'{h} h each', ms:'{h} jam seorang'},
+  addTo:{en:'Add ticked employees to:', ms:'Tambah pekerja ke:'}, moveTo:{en:'Move to {s}', ms:'Pindah ke {s}'},
+  confTitle:{en:'Confirm actual overtime ({n})', ms:'Sahkan OT sebenar ({n})'},
+  confLead:{en:'This overtime has finished. Confirm who came, the real times and if the work was done — HR checks it for payroll.', ms:'OT ini telah tamat. Sahkan siapa yang hadir, masa sebenar dan sama ada kerja siap — HR menyemaknya untuk gaji.'},
+  confBtn:{en:'Confirm actual hours', ms:'Sahkan jam sebenar'}, confEdit:{en:'Change my confirmation', ms:'Ubah pengesahan saya'},
+  confHead:{en:'Actual overtime worked', ms:'OT sebenar yang dikerjakan'},
+  confAllPlanned:{en:'Everyone came as planned', ms:'Semua hadir seperti dirancang'},
+  planned:{en:'planned', ms:'dirancang'}, came:{en:'Came', ms:'Hadir'}, didNotCome:{en:'Did not come', ms:'Tidak hadir'},
+  cYes:{en:'Work done', ms:'Kerja siap'}, cPartly:{en:'Partly', ms:'Sebahagian'}, cNo:{en:'Not done', ms:'Tidak siap'},
+  remarkPh:{en:'Remark (optional) — e.g. left early, machine breakdown', ms:'Catatan (pilihan) — cth. balik awal, mesin rosak'},
+  confNote:{en:'Note to HR (optional)', ms:'Nota kepada HR (pilihan)'}, actual:{en:'Actual', ms:'Sebenar'},
+  confSave:{en:'Confirm & send to HR', ms:'Sahkan & hantar kepada HR'}, confUpdate:{en:'Update confirmation', ms:'Kemas kini pengesahan'},
+  close:{en:'Close', ms:'Tutup'},
+  confDone:{en:'Actual hours confirmed — {p} people, {h} hours. Now tell HR on WhatsApp ↓', ms:'Jam sebenar disahkan — {p} orang, {h} jam. Sekarang maklumkan HR melalui WhatsApp ↓'},
+  waTitleActual:{en:'Tell HR the actual hours', ms:'Maklumkan HR jam sebenar'},
+  stToConfirm:{en:'Confirm actual hours', ms:'Sahkan jam sebenar'}, stConfirmed:{en:'Confirmed — HR checking', ms:'Disahkan — HR menyemak'},
+  confirmedOn:{en:'You confirmed actual hours {d}', ms:'Anda sahkan jam sebenar {d}'},
+  youSaid:{en:'you confirmed {s}–{e} ({h} h)', ms:'anda sahkan {s}–{e} ({h} j)'},
+  e_too_early:{en:'This overtime has not started yet.', ms:'OT ini belum bermula.'},
+  e_not_open:{en:'HR has already verified this overtime — it can no longer be changed.', ms:'HR telah mengesahkan OT ini — tidak boleh diubah lagi.'},
+  e_missing:{en:'{n} is missing.', ms:'{n} tiada.'},
+  e_too_long16:{en:'{n}: check the times — more than 16 hours.', ms:'{n}: semak masa — lebih 16 jam.'},
+  e_bad_shift:{en:'Choose day or night shift.', ms:'Pilih syif siang atau malam.'},
   from:{en:'From', ms:'Dari'}, to:{en:'To', ms:'Hingga'},
   staff:{en:'Employees', ms:'Pekerja'}, search:{en:'Search name or ID…', ms:'Cari nama atau ID…'},
-  addAll:{en:'add all', ms:'tambah semua'}, selected:{en:'Selected ({n})', ms:'Dipilih ({n})'},
+  addAll:{en:'add all → {s}', ms:'tambah semua → {s}'}, selected:{en:'Selected ({n})', ms:'Dipilih ({n})'},
   noneSel:{en:'Tick the employees who will work overtime.', ms:'Tandakan pekerja yang akan bekerja lebih masa.'},
   total:{en:'{p} people · {h} hours', ms:'{p} orang · {h} jam'},
   submit:{en:'Submit & send to HR', ms:'Hantar kepada HR'}, sending:{en:'Sending…', ms:'Menghantar…'},
@@ -186,7 +249,6 @@ const fmtDate=s=>s? new Date(s+'T00:00:00Z').toLocaleDateString(LANG==='ms'?'ms-
 const isSunday=s=>s && new Date(s+'T00:00:00Z').getUTCDay()===0;
 const mins=v=>{ const m=/^(\d{2}):(\d{2})$/.exec(v||''); return m? (+m[1])*60+(+m[2]) : null; };
 function hours(a,b){ const s=mins(a), e=mins(b); if(s==null||e==null||s===e) return 0; return Math.round(((e>s? e-s : e+1440-s)/60)*100)/100; }
-function blankForm(){ return {date:'', area:'', areaOther:'', product:'', work:'', from:'17:00', to:'20:00', lines:[]}; }
 
 /* ------------------------------------------------ sign in */
 let WHO_T=null;
@@ -213,21 +275,53 @@ $('loginForm').addEventListener('submit', async e=>{
   }catch(x){ console.error(x); CRED=null; showMsg('loginMsg','err',t('offline')); }
   finally{ btn.disabled=false; btn.textContent=t('signIn'); }
 });
-$('logoutBtn').addEventListener('click',()=>{ CRED=null; DATA=null; WA=null; $('appScreen').hidden=true; $('loginScreen').hidden=false; $('logoutBtn').hidden=true; applyLang(); });
+$('logoutBtn').addEventListener('click',()=>{ CRED=null; DATA=null; WA=null; CONF=null; $('appScreen').hidden=true; $('loginScreen').hidden=false; $('logoutBtn').hidden=true; applyLang(); });
 async function refresh(){ try{ const d=await load(); if(d&&d.ok){ DATA=d; renderAll(); } }catch(e){} }
 
+/* ------------------------------------------------ shifts
+   One request can hold both shifts. Day shift overtime happens on the overtime date. Night shift
+   overtime that starts before 12:00 is the NEXT morning (night shift finishing at 05:00 → OT
+   05:00–08:00 the following day); starting 12:00 or later it is the same date. The server applies
+   the same rule and stores the real date on every line. */
+const SHIFTS=['day','night'];
+const addDays=(s,n)=>{ const d=new Date(s+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); };
+function shiftDate(date, shift, start){ if(!date) return ''; return shift==='night' && mins(start)!=null && mins(start)<720 ? addDays(date,1) : date; }
+function lineDate(r,l){ return l.date || shiftDate(r.ot_date, l.shift||'day', l.start); }
+function lineStartTs(r,l){ return lineDate(r,l)+'T'+l.start; }
+function lineEndTs(r,l){ const d=lineDate(r,l); return (mins(l.end)<=mins(l.start)? addDays(d,1) : d)+'T'+l.end; }
+const shiftIcon=s=>s==='night'?'🌙':'☀';
+const shiftName=s=>t(s==='night'?'night':'day');
+function shiftLabel(date, shift, start){ const d=shiftDate(date, shift, start); if(!d) return '';
+  return fmtDate(d)+(shift==='night' && d!==date? ' · '+t('nextMorning') : ''); }
+
 /* ------------------------------------------------ form */
+function blankForm(){ return {date:'', area:'', areaOther:'', product:'', work:'', addTo:'day',
+  plan:{day:{from:'17:00', to:'20:00'}, night:{from:'05:00', to:'08:00'}}, lines:[]}; }
 function areaValue(){ return FORM.area==='Other'? (FORM.areaOther.trim()? 'Other — '+FORM.areaOther.trim() : '') : FORM.area; }
 function workPh(){ const a=FORM.area||''; return /QC/i.test(a)? t('workPhQC') : /mix/i.test(a)? t('workPhMix') : t('workPh'); }
+const sumH=list=>Math.round(list.reduce((x,l)=>x+hours(l.start,l.end),0)*100)/100;
 function renderForm(){
   const me=DATA.me||{}, staff=DATA.staff||[], today=DATA.today;
-  const picked=new Set(FORM.lines.map(l=>l.emp_no));
+  const pickedShift=new Map(FORM.lines.map(l=>[l.emp_no,l.shift]));
   const q=SEARCH.trim().toLowerCase();
   const list=staff.filter(s=>s.emp_no!==undefined && (!q || (s.name||'').toLowerCase().includes(q) || String(s.emp_no).toLowerCase().includes(q)));
   const groups={}; list.forEach(s=>{ const g=s.department||'—'; (groups[g]=groups[g]||[]).push(s); });
   const myDept=me.department||'';
   const order=Object.keys(groups).sort((a,b)=>(a===myDept?-1:b===myDept?1:a.localeCompare(b)));
-  const tot=FORM.lines.reduce((x,l)=>x+hours(l.start,l.end),0);
+  const planBox=sh=>{ const p=FORM.plan[sh];
+    return '<div class="shiftbox '+sh+'"><div class="shhead"><b>'+shiftIcon(sh)+' '+esc(shiftName(sh))+'</b><span class="muted">'+esc(shiftLabel(FORM.date, sh, p.from)||t('pickDate'))+'</span></div>'
+      +'<div class="row2"><div><span class="muted">'+esc(t('from'))+'</span><input type="time" data-plan="'+sh+'" data-k="from" value="'+esc(p.from)+'"></div>'
+      +'<div><span class="muted">'+esc(t('to'))+'</span><input type="time" data-plan="'+sh+'" data-k="to" value="'+esc(p.to)+'"></div></div>'
+      +'<div class="muted" style="margin-top:-6px">'+esc(t('perPerson',{h:hours(p.from,p.to)}))+'</div></div>'; };
+  const selGroup=sh=>{ const ls=FORM.lines.map((l,i)=>({l,i})).filter(x=>x.l.shift===sh); if(!ls.length) return '';
+    const sample=ls[0].l;
+    return '<div class="selgrp '+sh+'"><div class="selhead"><b>'+shiftIcon(sh)+' '+esc(shiftName(sh))+'</b><span>'+esc(shiftLabel(FORM.date, sh, sample.start)||'')+'</span>'
+      +'<span class="mono">'+esc(t('total',{p:ls.length,h:sumH(ls.map(x=>x.l))}))+'</span></div>'
+      +ls.map(({l,i})=>'<div class="selrow"><div class="nm"><b>'+esc(l.name)+'</b><span class="muted mono"> '+esc(l.emp_no)+' · '+hours(l.start,l.end)+' h</span></div>'
+        +'<div class="selbtns"><button type="button" class="x" data-move="'+i+'" title="'+esc(t('moveTo',{s:shiftName(sh==='day'?'night':'day')}))+'">'+(sh==='day'?'→ 🌙':'→ ☀')+'</button>'
+        +'<button type="button" class="x" data-unpick="'+esc(l.emp_no)+'" aria-label="remove">✕</button></div>'
+        +'<div class="seltimes"><input type="time" data-lt="start" data-i="'+i+'" value="'+esc(l.start)+'"><span class="muted">–</span><input type="time" data-lt="end" data-i="'+i+'" value="'+esc(l.end)+'"></div></div>').join('')
+      +'</div>'; };
   let h='<h3>'+esc(t('newReq'))+'</h3><div id="formMsg"></div>'
    +'<label class="l" for="otDate">'+esc(t('otDate'))+' <span class="req">*</span></label>'
    +'<input type="date" id="otDate" min="'+esc(today)+'" value="'+esc(FORM.date)+'">'
@@ -239,47 +333,61 @@ function renderForm(){
    +'<input id="otProduct" maxlength="120" placeholder="'+esc(t('productPh'))+'" value="'+esc(FORM.product)+'">'
    +'<label class="l" for="otWork">'+esc(t('work'))+' <span class="req">*</span></label>'
    +'<textarea id="otWork" rows="3" maxlength="1000" placeholder="'+esc(workPh())+'">'+esc(FORM.work)+'</textarea>'
-   +'<label class="l">'+esc(t('time'))+'</label>'
-   +'<div class="row2"><div><span class="muted">'+esc(t('from'))+'</span><input type="time" id="otFrom" value="'+esc(FORM.from)+'"></div>'
-   +'<div><span class="muted">'+esc(t('to'))+'</span><input type="time" id="otTo" value="'+esc(FORM.to)+'"></div></div>'
+   +'<label class="l">'+esc(t('time'))+'</label><div class="muted" style="margin:-3px 0 8px">'+esc(t('timeHint'))+'</div>'
+   +'<div class="shifts">'+planBox('day')+planBox('night')+'</div>'
    +'<label class="l">'+esc(t('staff'))+' <span class="req">*</span></label>'
+   +'<div class="seg" role="group" aria-label="'+esc(t('addTo'))+'"><span class="muted">'+esc(t('addTo'))+'</span>'
+     +SHIFTS.map(sh=>'<button type="button" data-addto="'+sh+'" class="'+(FORM.addTo===sh?'on '+sh:'')+'">'+shiftIcon(sh)+' '+esc(shiftName(sh))+'</button>').join('')+'</div>'
    +'<input id="otSearch" type="search" placeholder="'+esc(t('search'))+'" value="'+esc(SEARCH)+'" style="margin-bottom:6px">'
-   +'<div class="picker">'+order.map(g=>'<div class="grp"><span>'+esc(g)+'</span><button type="button" data-addall="'+esc(g)+'">'+esc(t('addAll'))+'</button></div>'
-       +groups[g].map(s=>'<label><input type="checkbox" data-pick="'+esc(s.emp_no)+'"'+(picked.has(s.emp_no)?' checked':'')+'><span style="flex:1">'+esc(s.name)+'</span><span class="muted mono">'+esc(s.emp_no)+'</span></label>').join('')).join('')+'</div>'
+   +'<div class="picker">'+order.map(g=>'<div class="grp"><span>'+esc(g)+'</span><button type="button" data-addall="'+esc(g)+'">'+esc(t('addAll',{s:shiftName(FORM.addTo)}))+'</button></div>'
+       +groups[g].map(s=>{ const ps=pickedShift.get(s.emp_no);
+         return '<label><input type="checkbox" data-pick="'+esc(s.emp_no)+'"'+(ps?' checked':'')+'><span style="flex:1">'+esc(s.name)+'</span>'
+           +(ps?'<span class="pill '+ps+'">'+shiftIcon(ps)+' '+esc(shiftName(ps))+'</span>':'')+'<span class="muted mono">'+esc(s.emp_no)+'</span></label>'; }).join('')).join('')+'</div>'
    +'<label class="l">'+esc(t('selected',{n:FORM.lines.length}))+'</label>'
-   +(FORM.lines.length? '<div class="sel">'+FORM.lines.map((l,i)=>'<div class="selrow"><div class="nm"><b>'+esc(l.name)+'</b><div class="muted mono">'+esc(l.emp_no)+' · '+hours(l.start,l.end)+' h</div></div>'
-        +'<input type="time" data-lt="start" data-i="'+i+'" value="'+esc(l.start)+'"><input type="time" data-lt="end" data-i="'+i+'" value="'+esc(l.end)+'">'
-        +'<button type="button" class="x" data-unpick="'+esc(l.emp_no)+'" aria-label="remove">✕</button></div>').join('')+'</div>'
-      : '<div class="muted" style="margin:-4px 0 12px">'+esc(t('noneSel'))+'</div>')
-   +'<div class="total"><span>'+esc(fmtDate(FORM.date)||'—')+(areaValue()?' · '+esc(areaValue()):'')+'</span><b>'+esc(t('total',{p:FORM.lines.length,h:Math.round(tot*100)/100}))+'</b></div>'
+   +(FORM.lines.length? selGroup('day')+selGroup('night') : '<div class="muted" style="margin:-4px 0 12px">'+esc(t('noneSel'))+'</div>')
+   +'<div class="total"><span>'+esc(fmtDate(FORM.date)||'—')+(areaValue()?' · '+esc(areaValue()):'')+'</span><b>'+esc(t('total',{p:FORM.lines.length,h:sumH(FORM.lines)}))+'</b></div>'
    +'<button type="button" class="btn-primary" id="submitBtn">'+esc(t('submit'))+'</button>';
   const y=window.scrollY, focusId=document.activeElement&&document.activeElement.id, caret=document.activeElement&&document.activeElement.selectionStart;
   $('formCard').innerHTML=h;
   if(focusId && $(focusId)){ $(focusId).focus(); try{ if(caret!=null) $(focusId).setSelectionRange(caret,caret); }catch(e){} }
   window.scrollTo(0,y);
 }
-function addPerson(s){ if(FORM.lines.some(l=>l.emp_no===s.emp_no)) return; FORM.lines.push({emp_no:s.emp_no, name:s.name, start:FORM.from, end:FORM.to}); }
+function addPerson(s, sh){ sh=sh||FORM.addTo; if(FORM.lines.some(l=>l.emp_no===s.emp_no)) return;
+  const p=FORM.plan[sh]; FORM.lines.push({emp_no:s.emp_no, name:s.name, shift:sh, start:p.from, end:p.to}); }
 document.addEventListener('input', e=>{
-  const id=e.target.id;
+  const id=e.target.id, d=e.target.dataset||{};
   if(id==='otWork') FORM.work=e.target.value;
   if(id==='otProduct') FORM.product=e.target.value;
   if(id==='otAreaOther') FORM.areaOther=e.target.value;
   if(id==='otSearch'){ SEARCH=e.target.value; renderForm(); }
+  if(d.c!=null && CONF){ const row=CONF.rows[d.ci]; if(row){ row[d.c]=e.target.value; if(d.c==='start'||d.c==='end') updConfHours(+d.ci); } }
+  if(id==='confNote' && CONF) CONF.note=e.target.value;
 });
 document.addEventListener('change', e=>{
   const id=e.target.id, d=e.target.dataset||{};
-  if(id==='otDate'){ FORM.date=e.target.value; if(isSunday(FORM.date) && FORM.from==='17:00' && FORM.to==='20:00' && !FORM.lines.length){ FORM.from='08:00'; FORM.to='17:00'; } renderForm(); }
-  if(id==='otFrom'||id==='otTo'){ const old={from:FORM.from,to:FORM.to}; FORM[id==='otFrom'?'from':'to']=e.target.value;
-    FORM.lines.forEach(l=>{ if(l.start===old.from && l.end===old.to){ l.start=FORM.from; l.end=FORM.to; } }); renderForm(); }
+  if(id==='otDate'){ FORM.date=e.target.value;
+    if(isSunday(FORM.date) && FORM.plan.day.from==='17:00' && FORM.plan.day.to==='20:00' && !FORM.lines.length){ FORM.plan.day={from:'08:00', to:'17:00'}; }
+    renderForm(); }
+  if(d.plan){ const p=FORM.plan[d.plan], old={from:p.from,to:p.to}; p[d.k]=e.target.value;
+    FORM.lines.forEach(l=>{ if(l.shift===d.plan && l.start===old.from && l.end===old.to){ l.start=p.from; l.end=p.to; } }); renderForm(); }
   if(d.pick){ const s=(DATA.staff||[]).find(x=>x.emp_no===d.pick); if(e.target.checked && s) addPerson(s); else FORM.lines=FORM.lines.filter(l=>l.emp_no!==d.pick); renderForm(); }
   if(d.lt){ FORM.lines[+d.i][d.lt]=e.target.value; renderForm(); }
 });
 document.addEventListener('click', e=>{
   const a=e.target.closest('[data-area]'); if(a){ FORM.area=a.dataset.area; renderForm(); return; }
-  const all=e.target.closest('[data-addall]'); if(all){ (DATA.staff||[]).filter(s=>(s.department||'—')===all.dataset.addall).forEach(addPerson); renderForm(); return; }
+  const at=e.target.closest('[data-addto]'); if(at){ FORM.addTo=at.dataset.addto; renderForm(); return; }
+  const all=e.target.closest('[data-addall]'); if(all){ (DATA.staff||[]).filter(s=>(s.department||'—')===all.dataset.addall).forEach(s=>addPerson(s)); renderForm(); return; }
   const un=e.target.closest('[data-unpick]'); if(un){ FORM.lines=FORM.lines.filter(l=>l.emp_no!==un.dataset.unpick); renderForm(); return; }
+  const mv=e.target.closest('[data-move]'); if(mv){ const l=FORM.lines[+mv.dataset.move]; if(l){ const from=FORM.plan[l.shift], to=l.shift==='day'?'night':'day';
+      if(l.start===from.from && l.end===from.to){ l.start=FORM.plan[to].from; l.end=FORM.plan[to].to; } l.shift=to; } renderForm(); return; }
   const c=e.target.closest('[data-cancel]'); if(c){ cancelReq(c.dataset.cancel); return; }
-  const r=e.target.closest('[data-resend]'); if(r){ const q=(DATA.requests||[]).find(x=>x.id===r.dataset.resend); if(q){ WA=q; renderWa(); $('waBox').scrollIntoView({behavior:'smooth'}); } return; }
+  const r=e.target.closest('[data-resend]'); if(r){ const q=(DATA.requests||[]).find(x=>x.id===r.dataset.resend); if(q){ WA={kind:'request', r:q}; renderWa(); $('waBox').scrollIntoView({behavior:'smooth'}); } return; }
+  const cf=e.target.closest('[data-confirm]'); if(cf){ openConfirm(cf.dataset.confirm); return; }
+  const ca=e.target.closest('[data-catt]'); if(ca && CONF){ const row=CONF.rows[+ca.dataset.ci]; row.attended=ca.dataset.catt==='yes'; renderConfirm(); return; }
+  const cc=e.target.closest('[data-ccomp]'); if(cc && CONF){ CONF.rows[+cc.dataset.ci].completed=cc.dataset.ccomp; renderConfirm(); return; }
+  if(e.target.id==='confAllPlanned' && CONF){ CONF.rows.forEach(r=>{ r.attended=true; r.start=r.l.start; r.end=r.l.end; }); renderConfirm(); return; }
+  if(e.target.id==='confSave') saveConfirm();
+  if(e.target.id==='confClose'){ CONF=null; renderConfirm(); return; }
   if(e.target.id==='submitBtn') submit();
   if(e.target.id==='waBtn') setTimeout(()=>{ WA=null; renderWa(); }, 500);
 });
@@ -287,6 +395,7 @@ function errText(r){
   const c=r&&r.code||'?';
   if(c==='bad_time') return t('e_bad_time',{n:r.name||''}); if(c==='too_long') return t('e_too_long',{n:r.name||''});
   if(c==='clash') return t('e_clash',{n:r.name||'', r:r.ref||''}); if(c==='dup_staff') return t('e_dup_staff',{n:r.name||''});
+  if(c==='missing') return t('e_missing',{n:r.name||''});
   return TX['e_'+c]? t('e_'+c) : t('e_generic',{c});
 }
 function check(){
@@ -306,13 +415,14 @@ async function submit(){
     for(let i=0;i<2;i++){
       const id='OT-'+Date.now()+String(Math.floor(Math.random()*90)+10);
       const {data,error}=await sb.rpc('ot_request',{p_emp_no:CRED.emp_no,p_password:CRED.password,
-        p:{id, ot_date:FORM.date, area:areaValue(), product:FORM.product.trim(), work:FORM.work.trim(), lines:FORM.lines.map(l=>({emp_no:l.emp_no,start:l.start,end:l.end}))}});
+        p:{id, ot_date:FORM.date, area:areaValue(), product:FORM.product.trim(), work:FORM.work.trim(),
+           lines:FORM.lines.map(l=>({emp_no:l.emp_no, shift:l.shift, start:l.start, end:l.end}))}});
       if(error) throw error; res=data; if(!(res&&res.code==='dup_id')) break;
     }
     if(!res||!res.ok){ showMsg('formMsg','err',errText(res)); $('formCard').scrollIntoView({behavior:'smooth'}); return; }
     const sent={id:res.id, ot_date:FORM.date, area:areaValue(), product:FORM.product.trim(), work:FORM.work.trim(), total_hours:res.total_hours,
-      lines:FORM.lines.map(l=>({name:l.name, emp_no:l.emp_no, start:l.start, end:l.end, hours:hours(l.start,l.end)}))};
-    FORM=blankForm(); SEARCH=''; WA=sent;
+      lines:FORM.lines.map(l=>({name:l.name, emp_no:l.emp_no, shift:l.shift, date:shiftDate(FORM.date,l.shift,l.start), start:l.start, end:l.end, hours:hours(l.start,l.end)}))};
+    FORM=blankForm(); SEARCH=''; WA={kind:'request', r:sent};
     await refresh();
     showMsg('topMsg','ok',t('sent',{p:sent.lines.length,h:res.total_hours}));
     $('waBox').scrollIntoView({behavior:'smooth'});
@@ -326,45 +436,136 @@ async function cancelReq(id){
   }catch(e){ showMsg('topMsg','err',t('offline')); }
 }
 
-/* ------------------------------------------------ WhatsApp to HR (HR head taps nothing — the HOD taps Send) */
-function waText(r){
-  const me=DATA.me||{};
-  const people=(r.lines||[]).map((l,i)=>(i+1)+'. '+l.name+' ('+l.emp_no+') '+l.start+'–'+l.end+' · '+l.hours+'h').join('\n');
-  return 'HE Manufacturing — OVERTIME REQUEST ⏱\nRef: '+r.id+'\n\n👤 Requested by: *'+me.name+'*'+(me.department?' · '+me.department:'')
+/* ------------------------------------------------ HOD confirms the actual overtime worked
+   After the overtime the HOD records who came, the real times and whether the work was done.
+   HR sees these figures pre-filled for the final check in the ERP; payroll pays HR's verified
+   hours. The HOD can correct their confirmation until HR has verified it. */
+const NOW=()=> (DATA&&DATA.now) || new Date(Date.now()+8*3600e3).toISOString().slice(0,16);
+const okLines=r=>(r.lines||[]).filter(l=>l.approved!==false);
+function otStarted(r){ const ls=okLines(r); return ls.length && ls.some(l=>lineStartTs(r,l)<=NOW()); }
+function otFinished(r){ const ls=okLines(r); return ls.length && ls.every(l=>lineEndTs(r,l)<=NOW()); }
+function toConfirm(){ return (DATA.requests||[]).filter(r=>r.status==='approved' && otFinished(r) && !r.hod_confirmed_at); }
+let CONF=null;
+function openConfirm(id){
+  const r=(DATA.requests||[]).find(x=>x.id===id); if(!r) return;
+  CONF={id, r, note:r.hod_note||'', rows:okLines(r).map(l=>({l, emp_no:l.emp_no,
+    attended: l.hod_attended!=null? l.hod_attended!==false : true,
+    start: l.hod_start || l.start, end: l.hod_end || l.end,
+    completed: l.hod_completed || 'yes', remark: l.hod_remark || ''}))};
+  renderConfirm(); $('confirmBox').scrollIntoView({behavior:'smooth'});
+}
+function updConfHours(i){ const r=CONF.rows[i], el=document.querySelector('[data-ch="'+i+'"]'); if(el) el.textContent=r.attended? hours(r.start,r.end)+' h' : '0 h';
+  const tot=$('confTot'); if(tot) tot.textContent=t('total',{p:CONF.rows.filter(x=>x.attended).length, h:Math.round(CONF.rows.reduce((s,x)=>s+(x.attended?hours(x.start,x.end):0),0)*100)/100}); }
+function renderConfirm(){
+  const box=$('confirmBox'); if(!box) return;
+  const due=toConfirm();
+  if(!CONF){
+    box.innerHTML = due.length? '<div class="card confcard"><h3>🕔 '+esc(t('confTitle',{n:due.length}))+'</h3><div class="muted" style="margin:-4px 0 10px">'+esc(t('confLead'))+'</div>'
+      +due.map(r=>'<div class="confreq"><div><b>'+esc(fmtDate(r.ot_date))+' · '+esc(r.area)+'</b><div class="muted">'+esc(okLines(r).length+' · '+r.total_hours+' h')+' '+esc(shiftsSummary(r))+'</div></div>'
+        +'<button type="button" class="btn-primary btn-sm" style="width:auto" data-confirm="'+esc(r.id)+'">'+esc(t('confBtn'))+'</button></div>').join('')+'</div>' : '';
+    return;
+  }
+  const r=CONF.r, comp=[['yes',t('cYes')],['partly',t('cPartly')],['no',t('cNo')]];
+  let h='<div class="card confcard"><h3>'+esc(t('confHead'))+'</h3><div class="muted">'+esc(fmtDate(r.ot_date))+' · '+esc(r.area)+(r.product?' · '+esc(r.product):'')+'<br>'+esc(r.work)+'</div>'
+    +'<div id="confMsg" style="margin-top:10px"></div>'
+    +'<button type="button" class="btn-ghost btn-sm" id="confAllPlanned" style="margin:4px 0 10px">'+esc(t('confAllPlanned'))+'</button>';
+  SHIFTS.forEach(sh=>{ const rows=CONF.rows.map((x,i)=>({x,i})).filter(o=>(o.x.l.shift||'day')===sh); if(!rows.length) return;
+    h+='<div class="selhead '+sh+'" style="border-radius:8px;margin-bottom:6px"><b>'+shiftIcon(sh)+' '+esc(shiftName(sh))+'</b><span>'+esc(fmtDate(lineDate(r,rows[0].x.l)))+'</span></div>';
+    rows.forEach(({x,i})=>{
+      h+='<div class="confrow'+(x.attended?'':' absent')+'"><div class="cfname"><b>'+esc(x.l.name)+'</b><span class="muted mono"> '+esc(x.emp_no)+' · '+esc(t('planned'))+' '+esc(x.l.start)+'–'+esc(x.l.end)+'</span></div>'
+        +'<div class="seg small"><button type="button" data-catt="yes" data-ci="'+i+'" class="'+(x.attended?'on day':'')+'">✓ '+esc(t('came'))+'</button>'
+        +'<button type="button" data-catt="no" data-ci="'+i+'" class="'+(!x.attended?'on absentbtn':'')+'">✕ '+esc(t('didNotCome'))+'</button></div>'
+        +(x.attended? '<div class="seltimes"><input type="time" data-c="start" data-ci="'+i+'" value="'+esc(x.start)+'"><span class="muted">–</span><input type="time" data-c="end" data-ci="'+i+'" value="'+esc(x.end)+'"><b class="mono" data-ch="'+i+'">'+hours(x.start,x.end)+' h</b></div>'
+            +'<div class="seg small">'+comp.map(([v,lab])=>'<button type="button" data-ccomp="'+v+'" data-ci="'+i+'" class="'+(x.completed===v?'on '+(v==='yes'?'day':'warnbtn'):'')+'">'+esc(lab)+'</button>').join('')+'</div>' : '')
+        +'<input data-c="remark" data-ci="'+i+'" maxlength="200" placeholder="'+esc(t('remarkPh'))+'" value="'+esc(x.remark)+'" style="margin:6px 0 0"></div>';
+    });
+  });
+  h+='<label class="l" for="confNote" style="margin-top:12px">'+esc(t('confNote'))+'</label><input id="confNote" maxlength="300" value="'+esc(CONF.note)+'">'
+    +'<div class="total"><span>'+esc(t('actual'))+'</span><b id="confTot"></b></div>'
+    +'<button type="button" class="btn-primary" id="confSave">'+esc(r.hod_confirmed_at? t('confUpdate') : t('confSave'))+'</button>'
+    +'<button type="button" class="btn-ghost" id="confClose" style="width:100%;margin-top:8px">'+esc(t('close'))+'</button></div>';
+  const y=window.scrollY; box.innerHTML=h; window.scrollTo(0,y); updConfHours(0);
+}
+async function saveConfirm(){
+  if(!CONF) return;
+  for(const x of CONF.rows){ if(x.attended){ const h=hours(x.start,x.end); if(!h) return showMsg('confMsg','err',t('e_bad_time',{n:x.l.name})); if(h>16) return showMsg('confMsg','err',t('e_too_long16',{n:x.l.name})); } }
+  const btn=$('confSave'); btn.disabled=true; btn.textContent=t('sending');
+  try{
+    const {data,error}=await sb.rpc('ot_hod_confirm',{p_emp_no:CRED.emp_no,p_password:CRED.password,p_id:CONF.id,
+      p:{note:CONF.note, lines:CONF.rows.map(x=>({emp_no:x.emp_no, attended:x.attended, start:x.start, end:x.end, completed:x.completed, remark:x.remark}))}});
+    if(error) throw error;
+    if(!data||!data.ok){ btn.disabled=false; btn.textContent=t('confSave'); return showMsg('confMsg','err',errText(data)); }
+    const done={r:CONF.r, rows:CONF.rows.map(x=>Object.assign({},x)), note:CONF.note, hours:data.hours, people:data.people};
+    CONF=null; WA={kind:'actual', d:done};
+    await refresh();
+    showMsg('topMsg','ok',t('confDone',{p:done.people,h:done.hours}));
+    $('waBox').scrollIntoView({behavior:'smooth'});
+  }catch(x){ console.error(x); btn.disabled=false; btn.textContent=t('confSave'); showMsg('confMsg','err',t('offline')); }
+}
+
+/* ------------------------------------------------ WhatsApp to HR (the HOD taps Send) */
+function shiftsSummary(r){ const ls=okLines(r); const n=sh=>ls.filter(l=>(l.shift||'day')===sh).length;
+  return SHIFTS.filter(n).map(sh=>shiftIcon(sh)+' '+n(sh)).join('  '); }
+function waText(w){
+  const me=DATA.me||{}, r=w.r||w.d.r;
+  let s;
+  if(w.kind==='actual'){
+    const rows=w.d.rows;
+    s='HE Manufacturing — OVERTIME ACTUAL HOURS ✅\nRef: '+r.id+'\n👤 Confirmed by HOD: *'+me.name+'*\n📅 '+fmtDate(r.ot_date)+' · '+r.area+'\n';
+    SHIFTS.forEach(sh=>{ const rs=rows.filter(x=>(x.l.shift||'day')===sh); if(!rs.length) return;
+      s+='\n'+shiftIcon(sh)+' '+shiftName(sh)+' — '+fmtDate(lineDate(r,rs[0].l))+'\n'
+        +rs.map((x,i)=>(i+1)+'. '+x.l.name+' ('+x.emp_no+') '+(x.attended? x.start+'–'+x.end+' · '+hours(x.start,x.end)+'h'+(x.completed!=='yes'?' · '+(x.completed==='partly'?'partly done':'not done'):'') : 'DID NOT COME')+(x.remark?' — '+x.remark:'')).join('\n')+'\n'; });
+    s+='\n👥 '+w.d.people+' worked · '+w.d.hours+' hours'+(w.d.note?'\n📝 '+w.d.note:'')+'\n\nPlease do the final check in the ERP: HR → Overtime.';
+    return s;
+  }
+  s='HE Manufacturing — OVERTIME REQUEST ⏱\nRef: '+r.id+'\n\n👤 Requested by: *'+me.name+'*'+(me.department?' · '+me.department:'')
     +'\n📅 Date: '+fmtDate(r.ot_date)+(isSunday(r.ot_date)?' (Sunday / rest day)':'')
-    +'\n📍 Where: '+r.area+(r.product?'\n🧴 Product: '+r.product:'')+'\n🛠 Work: '+r.work
-    +'\n\n👥 '+(r.lines||[]).length+' people · '+r.total_hours+' hours\n'+people
-    +'\n\nPlease approve in the ERP: HR → Overtime.';
+    +'\n📍 Where: '+r.area+(r.product?'\n🧴 Product: '+r.product:'')+'\n🛠 Work: '+r.work+'\n';
+  SHIFTS.forEach(sh=>{ const ls=(r.lines||[]).filter(l=>(l.shift||'day')===sh); if(!ls.length) return;
+    s+='\n'+shiftIcon(sh)+' '+shiftName(sh)+' — '+fmtDate(lineDate(r,ls[0]))+' · '+ls.length+' people · '+sumH(ls)+' h\n'
+      +ls.map((l,i)=>(i+1)+'. '+l.name+' ('+l.emp_no+') '+l.start+'–'+l.end+' · '+hours(l.start,l.end)+'h').join('\n')+'\n'; });
+  return s+'\n👥 Total '+(r.lines||[]).length+' people · '+r.total_hours+' hours\n\nPlease approve in the ERP: HR → Overtime.';
 }
 function renderWa(){
   if(!WA){ $('waBox').innerHTML=''; return; }
   const n=String(DATA.hr_phone||'').replace(/\D/g,'');
-  $('waBox').innerHTML='<div class="card wacard"><h3>💬 '+esc(t('waTitle'))+(DATA.hr_name?' ('+esc(DATA.hr_name)+')':'')+'</h3>'
+  $('waBox').innerHTML='<div class="card wacard"><h3>💬 '+esc(t(WA.kind==='actual'?'waTitleActual':'waTitle'))+(DATA.hr_name?' ('+esc(DATA.hr_name)+')':'')+'</h3>'
     +(n? '<a class="btn-wa" id="waBtn" target="_blank" rel="noopener" href="'+esc('https://wa.me/'+n+'?text='+encodeURIComponent(waText(WA)))+'">'+esc(t('waBtn'))+'</a>'
        : '<div class="msg warn">'+esc(t('waNoHr'))+'</div>')+'</div>';
 }
 
 /* ------------------------------------------------ history */
+function histStatus(r){
+  if(r.status==='approved' && r.hod_confirmed_at) return {c:'confirmed', t:t('stConfirmed')};
+  if(r.status==='approved' && otFinished(r)) return {c:'pending', t:t('stToConfirm')};
+  return {c:r.status, t:(TX.st[LANG]||TX.st.en)[r.status]||r.status};
+}
 function renderHistory(){
   const rs=DATA.requests||[];
   $('history').innerHTML = rs.length? rs.map(r=>{
-    const st=(TX.st[LANG]||TX.st.en)[r.status]||r.status;
-    const lines=(r.lines||[]).map(l=>'<li>'+esc(l.name)+' · '+esc(l.start)+'–'+esc(l.end)
-      +(l.approved===false?' — <b style="color:var(--bad)">'+esc(t('notApproved'))+'</b>':'')
-      +(r.status==='verified'? (l.attended===false? ' — '+esc(t('absent')) : l.actual_hours!=null? ' — '+esc(t('worked',{h:l.actual_hours})) : '') : '')+'</li>').join('');
-    return '<div class="hist"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>'+esc(fmtDate(r.ot_date))+' · '+esc(r.area)+'</b><span class="tag '+esc(r.status)+'">'+esc(st)+'</span></div>'
+    const st=histStatus(r), hc=!!r.hod_confirmed_at, ver=r.status==='verified';
+    const lines=SHIFTS.map(sh=>{ const ls=(r.lines||[]).filter(l=>(l.shift||'day')===sh); if(!ls.length) return '';
+      return '<div class="histshift">'+shiftIcon(sh)+' '+esc(shiftName(sh))+' · '+esc(fmtDate(lineDate(r,ls[0])))+'</div><ul>'
+        +ls.map(l=>'<li>'+esc(l.name)+' · '+esc(l.start)+'–'+esc(l.end)
+          +(l.approved===false?' — <b style="color:var(--bad)">'+esc(t('notApproved'))+'</b>':'')
+          +(ver? (l.attended===false? ' — '+esc(t('absent')) : l.actual_hours!=null? ' — '+esc(t('worked',{h:l.actual_hours})) : '')
+             : hc && l.approved!==false? (l.hod_attended===false? ' — '+esc(t('absent')) : ' — '+esc(t('youSaid',{h:l.hod_hours, s:l.hod_start, e:l.hod_end}))) : '')+'</li>').join('')+'</ul>'; }).join('');
+    const canConfirm=r.status==='approved' && otStarted(r);
+    return '<div class="hist"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>'+esc(fmtDate(r.ot_date))+' · '+esc(r.area)+'</b><span class="tag '+esc(st.c)+'">'+esc(st.t)+'</span></div>'
       +'<div class="muted">'+esc(r.work)+(r.product?' · '+esc(r.product):'')+'</div>'
       +'<div class="muted mono">'+esc(r.id)+' · '+(r.lines||[]).length+' people · '+esc(r.total_hours)+' h</div>'
       +(r.hr_comment?'<div style="font-size:13px;margin-top:4px"><b>'+esc(t('hrNote'))+':</b> '+esc(r.hr_comment)+'</div>':'')
-      +'<ul>'+lines+'</ul>'
+      +(hc?'<div class="muted" style="margin-top:2px">'+esc(t('confirmedOn',{d:String(r.hod_confirmed_at).slice(0,16).replace('T',' ')}))+(r.hod_note?' · '+esc(r.hod_note):'')+'</div>':'')
+      +lines
       +(r.status==='pending'? '<div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn-ghost btn-sm" data-resend="'+esc(r.id)+'">'+esc(t('resend'))+'</button>'
           +'<button type="button" class="btn-ghost btn-sm" data-cancel="'+esc(r.id)+'">'+esc(t('cancel'))+'</button></div>' : '')
+      +(canConfirm? '<div style="margin-top:8px"><button type="button" class="btn-ghost btn-sm" data-confirm="'+esc(r.id)+'">'+esc(hc? t('confEdit') : t('confBtn'))+'</button></div>' : '')
       +'</div>'; }).join('') : '<div class="muted">'+esc(t('none'))+'</div>';
 }
 function renderAll(){
   const me=DATA.me||{};
   $('tbName').textContent=me.name||'HE Manufacturing'; $('tbSub').textContent=t('sub')+(me.department?' · '+me.department:'');
-  applyLang(true); renderForm(); renderWa(); renderHistory();
+  applyLang(true); renderConfirm(); renderForm(); renderWa(); renderHistory();
 }
 function applyLang(skip){
   document.documentElement.lang=LANG;
